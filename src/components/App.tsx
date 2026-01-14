@@ -6,6 +6,8 @@ import { ArticleQueue } from './ArticleQueue';
 import { ArticlePreview } from './ArticlePreview';
 import { AddContent } from './AddContent';
 import { FeedManager } from './FeedManager';
+import { Library } from './Library';
+import { LibrarySettings } from './LibrarySettings';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
@@ -13,7 +15,7 @@ import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSetti
 import { fetchFeed } from '../lib/feeds';
 import type { Article, Feed, TokenMode } from '../types';
 
-type View = 'reader' | 'preview' | 'add';
+type View = 'reader' | 'preview' | 'add' | 'library-settings';
 
 // Check if we're in import mode (opened from bookmarklet)
 function getInitialView(): View {
@@ -213,6 +215,10 @@ export function App() {
             onClose={() => setView('reader')}
           />
         )}
+
+        {view === 'library-settings' && (
+          <LibrarySettings onClose={() => setView('reader')} />
+        )}
       </main>
 
       <aside className="app-sidebar">
@@ -231,6 +237,12 @@ export function App() {
           onRefreshFeed={handleRefreshFeed}
           isLoading={isLoadingFeed}
         />
+        {window.library && (
+          <Library
+            onAdd={handleAddArticle}
+            onOpenSettings={() => setView('library-settings')}
+          />
+        )}
       </aside>
     </div>
   );

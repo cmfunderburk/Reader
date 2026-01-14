@@ -1,0 +1,32 @@
+appId: com.speedread.app
+productName: SpeedRead
+directories:
+  output: dist-electron-build
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+
+extraMetadata:
+  main: dist-electron/main.js
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.productivity
+
+win:
+  target:
+    - nsis
+    - portable
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
