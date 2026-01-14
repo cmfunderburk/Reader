@@ -3,6 +3,14 @@ node_modules/
 
 # Build output
 dist/
+dist-electron/
+
+# Electron builder output
+release/
+*.AppImage
+*.deb
+*.dmg
+*.exe
 
 # IDE
 .vscode/
