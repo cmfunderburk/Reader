@@ -80,10 +80,15 @@ export function AddContent({ onAdd, onClose }: AddContentProps) {
   const speedReadUrl = getSpeedReadUrl();
 
   // Bookmarklet opens SpeedRead and sends data via postMessage
+  // Uses smarter extraction to skip junk and preserve paragraph structure
   const bookmarkletCode = `javascript:(function(){
     const title = document.querySelector('h1')?.innerText || document.title;
-    const article = document.querySelector('article') || document.querySelector('main') || document.body;
-    const content = article.innerText;
+    const article = document.querySelector('article') || document.querySelector('[role="article"]') || document.querySelector('main') || document.body;
+    const clone = article.cloneNode(true);
+    ['nav','header','footer','aside','figure','figcaption','button','[role="navigation"]','[role="complementary"]','.share','.social','.related','.comments','.advertisement','.ad','script','style','svg','iframe'].forEach(s=>{clone.querySelectorAll(s).forEach(e=>e.remove())});
+    const paragraphs = [];
+    clone.querySelectorAll('p').forEach(p=>{const t=p.innerText.trim();if(t.length>50)paragraphs.push(t)});
+    const content = paragraphs.length>3 ? paragraphs.join('\\n\\n') : clone.innerText.replace(/\\n{3,}/g,'\\n\\n').trim();
     const source = location.hostname.replace('www.', '');
     const data = {type:'speedread-article', title, content, source, url: location.href};
     const w = window.open('${speedReadUrl}?import=1', 'speedread');

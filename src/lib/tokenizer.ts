@@ -165,9 +165,20 @@ function tokenizeClauseMode(text: string): Chunk[] {
 }
 
 /**
- * Tokenize text into chunks based on the selected mode.
+ * Create a paragraph break marker chunk.
  */
-export function tokenize(text: string, mode: TokenMode): Chunk[] {
+function createBreakChunk(): Chunk {
+  return {
+    text: '· · ·',
+    wordCount: 0, // Zero words = longer pause ratio
+    orpIndex: 2,  // Center dot
+  };
+}
+
+/**
+ * Tokenize a single paragraph based on mode.
+ */
+function tokenizeParagraph(text: string, mode: TokenMode): Chunk[] {
   switch (mode) {
     case 'word':
       return tokenizeWordMode(text);
@@ -176,6 +187,38 @@ export function tokenize(text: string, mode: TokenMode): Chunk[] {
     case 'clause':
       return tokenizeClauseMode(text);
   }
+}
+
+/**
+ * Tokenize text into chunks based on the selected mode.
+ * Respects paragraph breaks and inserts visual markers between them.
+ */
+export function tokenize(text: string, mode: TokenMode): Chunk[] {
+  // Split into paragraphs (double newline or more)
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
+
+  // If no clear paragraph structure, treat as single block
+  if (paragraphs.length <= 1) {
+    return tokenizeParagraph(text, mode);
+  }
+
+  // Tokenize each paragraph and join with break markers
+  const allChunks: Chunk[] = [];
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const paragraphChunks = tokenizeParagraph(paragraphs[i], mode);
+    allChunks.push(...paragraphChunks);
+
+    // Add break marker between paragraphs (not after last)
+    if (i < paragraphs.length - 1) {
+      allChunks.push(createBreakChunk());
+    }
+  }
+
+  return allChunks;
 }
 
 /**

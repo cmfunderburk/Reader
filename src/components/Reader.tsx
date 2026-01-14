@@ -1,4 +1,5 @@
 import type { Chunk } from '../types';
+import { isBreakChunk } from '../lib/rsvp';
 
 interface ReaderProps {
   chunk: Chunk | null;
@@ -11,6 +12,17 @@ export function Reader({ chunk }: ReaderProps) {
       <div className="reader">
         <div className="reader-display">
           <span className="reader-placeholder">No article loaded</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Paragraph break marker - render differently
+  if (isBreakChunk(chunk)) {
+    return (
+      <div className="reader">
+        <div className="reader-display">
+          <span className="reader-break">{chunk.text}</span>
         </div>
       </div>
     );

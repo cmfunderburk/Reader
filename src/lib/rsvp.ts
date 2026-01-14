@@ -1,6 +1,13 @@
 import type { Chunk } from '../types';
 
 /**
+ * Check if a chunk is a paragraph break marker.
+ */
+export function isBreakChunk(chunk: Chunk): boolean {
+  return chunk.wordCount === 0;
+}
+
+/**
  * Calculate display time for a chunk in milliseconds.
  *
  * Formula: display_time = base_time + (word_count * 0.6 * per_word_time)
@@ -8,10 +15,18 @@ import type { Chunk } from '../types';
  *
  * This means multi-word chunks display longer, but not linearly -
  * peripheral vision handles some of the extra words.
+ *
+ * Break chunks (paragraph markers) get 2x base time for a mental pause.
  */
 export function calculateDisplayTime(chunk: Chunk, wpm: number): number {
   const perWordTime = 60000 / wpm;
   const baseTime = perWordTime * 0.4; // 40% of single word time as base
+
+  // Paragraph break markers get longer pause
+  if (isBreakChunk(chunk)) {
+    return perWordTime * 2; // 2x a single word's time
+  }
+
   return baseTime + chunk.wordCount * 0.6 * perWordTime;
 }
 
