@@ -7,6 +7,7 @@ import { updateArticlePosition } from '../lib/storage';
 interface UseRSVPOptions {
   initialWpm?: number;
   initialMode?: TokenMode;
+  initialCustomCharWidth?: number;
   onComplete?: () => void;
 }
 
@@ -17,6 +18,7 @@ interface UseRSVPReturn {
   isPlaying: boolean;
   wpm: number;
   mode: TokenMode;
+  customCharWidth: number;
   article: Article | null;
   play: () => void;
   pause: () => void;
@@ -26,14 +28,16 @@ interface UseRSVPReturn {
   goToIndex: (index: number) => void;
   setWpm: (wpm: number) => void;
   setMode: (mode: TokenMode) => void;
+  setCustomCharWidth: (width: number) => void;
   loadArticle: (article: Article) => void;
   reset: () => void;
 }
 
 export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const {
-    initialWpm = 300,
+    initialWpm = 400,
     initialMode = 'phrase',
+    initialCustomCharWidth = 30,
     onComplete,
   } = options;
 
@@ -43,18 +47,21 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const [isPlaying, setIsPlaying] = useState(false);
   const [wpm, setWpm] = useState(initialWpm);
   const [mode, setMode] = useState<TokenMode>(initialMode);
+  const [customCharWidth, setCustomCharWidthState] = useState(initialCustomCharWidth);
 
   const timerRef = useRef<number | null>(null);
   const chunksRef = useRef<Chunk[]>(chunks);
   const indexRef = useRef(currentChunkIndex);
   const wpmRef = useRef(wpm);
   const articleRef = useRef<Article | null>(article);
+  const customCharWidthRef = useRef(customCharWidth);
 
   // Keep refs in sync with state
   useEffect(() => { chunksRef.current = chunks; }, [chunks]);
   useEffect(() => { indexRef.current = currentChunkIndex; }, [currentChunkIndex]);
   useEffect(() => { wpmRef.current = wpm; }, [wpm]);
   useEffect(() => { articleRef.current = article; }, [article]);
+  useEffect(() => { customCharWidthRef.current = customCharWidth; }, [customCharWidth]);
 
   // Clear timer helper
   const clearTimer = useCallback(() => {
@@ -162,7 +169,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const handleSetMode = useCallback((newMode: TokenMode) => {
     setMode(newMode);
     if (article) {
-      const newChunks = tokenize(article.content, newMode);
+      const charWidth = newMode === 'custom' ? customCharWidthRef.current : undefined;
+      const newChunks = tokenize(article.content, newMode, charWidth);
       // Try to preserve approximate position
       const progress = chunks.length > 0 ? currentChunkIndex / chunks.length : 0;
       const newIndex = Math.floor(progress * newChunks.length);
@@ -171,10 +179,23 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     }
   }, [article, chunks.length, currentChunkIndex]);
 
+  const setCustomCharWidth = useCallback((width: number) => {
+    setCustomCharWidthState(width);
+    if (article && mode === 'custom') {
+      const newChunks = tokenize(article.content, 'custom', width);
+      // Try to preserve approximate position
+      const progress = chunks.length > 0 ? currentChunkIndex / chunks.length : 0;
+      const newIndex = Math.floor(progress * newChunks.length);
+      setChunks(newChunks);
+      setCurrentChunkIndex(Math.min(newIndex, newChunks.length - 1));
+    }
+  }, [article, mode, chunks.length, currentChunkIndex]);
+
   const loadArticle = useCallback((newArticle: Article) => {
     pause();
     setArticle(newArticle);
-    const newChunks = tokenize(newArticle.content, mode);
+    const charWidth = mode === 'custom' ? customCharWidthRef.current : undefined;
+    const newChunks = tokenize(newArticle.content, mode, charWidth);
     setChunks(newChunks);
     // Resume from saved position if available
     const startIndex = newArticle.readPosition || 0;
@@ -193,6 +214,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     isPlaying,
     wpm,
     mode,
+    customCharWidth,
     article,
     play,
     pause,
@@ -202,6 +224,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     goToIndex,
     setWpm,
     setMode: handleSetMode,
+    setCustomCharWidth,
     loadArticle,
     reset,
   };

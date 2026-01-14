@@ -77,25 +77,38 @@ button {
 }
 
 .reader-display {
-  text-align: center;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .reader-text {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   font-size: 3rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-.reader-before,
+.reader-before {
+  color: var(--text-primary);
+  text-align: right;
+  white-space: pre;
+}
+
 .reader-after {
   color: var(--text-primary);
+  text-align: left;
+  white-space: pre;
 }
 
 .reader-orp {
   color: var(--accent);
   font-weight: 700;
+  text-align: center;
+  white-space: pre;
 }
 
 .reader-marker {
@@ -230,6 +243,17 @@ button {
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 0.9rem;
+}
+
+.control-slider {
+  width: 80px;
+  accent-color: var(--accent);
+}
+
+.control-value {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  min-width: 40px;
 }
 
 /* Article Queue */

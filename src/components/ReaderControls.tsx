@@ -1,9 +1,11 @@
 import type { TokenMode } from '../types';
+import { MODE_CHAR_WIDTHS } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
   wpm: number;
   mode: TokenMode;
+  customCharWidth: number;
   onPlay: () => void;
   onPause: () => void;
   onNext: () => void;
@@ -12,12 +14,14 @@ interface ReaderControlsProps {
   onSkipToEnd: () => void;
   onWpmChange: (wpm: number) => void;
   onModeChange: (mode: TokenMode) => void;
+  onCustomCharWidthChange: (width: number) => void;
 }
 
 export function ReaderControls({
   isPlaying,
   wpm,
   mode,
+  customCharWidth,
   onPlay,
   onPause,
   onNext,
@@ -26,6 +30,7 @@ export function ReaderControls({
   onSkipToEnd,
   onWpmChange,
   onModeChange,
+  onCustomCharWidthChange,
 }: ReaderControlsProps) {
   return (
     <div className="reader-controls">
@@ -73,10 +78,26 @@ export function ReaderControls({
             className="control-select"
           >
             <option value="word">Word</option>
-            <option value="phrase">Phrase</option>
-            <option value="clause">Clause</option>
+            <option value="phrase">Phrase (~{MODE_CHAR_WIDTHS.phrase}ch)</option>
+            <option value="clause">Clause (~{MODE_CHAR_WIDTHS.clause}ch)</option>
+            <option value="custom">Custom</option>
           </select>
         </label>
+
+        {mode === 'custom' && (
+          <label className="control-group">
+            <span className="control-label">Width:</span>
+            <input
+              type="range"
+              min="10"
+              max="60"
+              value={customCharWidth}
+              onChange={e => onCustomCharWidthChange(Number(e.target.value))}
+              className="control-slider"
+            />
+            <span className="control-value">{customCharWidth}ch</span>
+          </label>
+        )}
       </div>
     </div>
   );

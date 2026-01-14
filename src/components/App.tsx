@@ -32,6 +32,7 @@ export function App() {
   const rsvp = useRSVP({
     initialWpm: settings.defaultWpm,
     initialMode: settings.defaultMode,
+    initialCustomCharWidth: settings.customCharWidth,
     onComplete: () => {
       // Could auto-advance to next article here
     },
@@ -182,6 +183,7 @@ export function App() {
               isPlaying={rsvp.isPlaying}
               wpm={rsvp.wpm}
               mode={rsvp.mode}
+              customCharWidth={rsvp.customCharWidth}
               onPlay={rsvp.play}
               onPause={rsvp.pause}
               onNext={rsvp.next}
@@ -190,6 +192,7 @@ export function App() {
               onSkipToEnd={() => rsvp.goToIndex(rsvp.chunks.length - 1)}
               onWpmChange={rsvp.setWpm}
               onModeChange={rsvp.setMode}
+              onCustomCharWidthChange={rsvp.setCustomCharWidth}
             />
           </>
         )}

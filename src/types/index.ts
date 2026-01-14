@@ -1,4 +1,11 @@
-export type TokenMode = 'word' | 'phrase' | 'clause';
+export type TokenMode = 'word' | 'phrase' | 'clause' | 'custom';
+
+// Character width targets for each mode
+export const MODE_CHAR_WIDTHS: Record<Exclude<TokenMode, 'word'>, number> = {
+  phrase: 15,
+  clause: 40,
+  custom: 30, // default for custom, overridden by user setting
+};
 
 export interface Chunk {
   text: string;
@@ -31,6 +38,7 @@ export interface ReaderState {
   isPlaying: boolean;
   wpm: number;
   mode: TokenMode;
+  customCharWidth: number;
 }
 
 export interface AppState {
@@ -39,5 +47,6 @@ export interface AppState {
   settings: {
     defaultWpm: number;
     defaultMode: TokenMode;
+    customCharWidth: number;
   };
 }

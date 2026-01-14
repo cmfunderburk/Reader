@@ -38,11 +38,11 @@ export function Reader({ chunk }: ReaderProps) {
   return (
     <div className="reader">
       <div className="reader-display">
-        <span className="reader-text">
+        <div className="reader-text">
           <span className="reader-before">{before}</span>
           <span className="reader-orp">{orpChar}</span>
           <span className="reader-after">{after}</span>
-        </span>
+        </div>
         <div className="reader-marker">▲</div>
       </div>
     </div>

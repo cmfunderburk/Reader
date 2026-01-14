@@ -1,8 +1,9 @@
 import type { Chunk, TokenMode } from '../types';
+import { MODE_CHAR_WIDTHS } from '../types';
 
 // Major punctuation that always ends a chunk
 const MAJOR_PUNCTUATION = /[.!?;]/;
-// Minor punctuation that ends a chunk in phrase/clause mode
+// Minor punctuation that can end a chunk
 const MINOR_PUNCTUATION = /[,:\-—–]/;
 
 /**
@@ -28,10 +29,22 @@ function calculateORP(text: string): number {
 }
 
 /**
+ * Normalize text by ensuring spaces after sentence-ending punctuation.
+ * Handles cases like "word.Next" -> "word. Next"
+ * But preserves abbreviations like "U.S.A." (uppercase before period)
+ */
+function normalizeText(text: string): string {
+  // Only add space when a lowercase letter precedes the punctuation
+  // This catches real sentence endings but not abbreviations like U.S.A.
+  return text.replace(/([a-z])([.!?])([A-Z])/g, '$1$2 $3');
+}
+
+/**
  * Tokenize text into words, splitting on whitespace.
  */
 function tokenizeWords(text: string): string[] {
-  return text.split(/\s+/).filter(w => w.length > 0);
+  const normalized = normalizeText(text);
+  return normalized.split(/\s+/).filter(w => w.length > 0);
 }
 
 /**
@@ -61,33 +74,24 @@ function tokenizeWordMode(text: string): Chunk[] {
 }
 
 /**
- * Tokenize text in Phrase mode - 2-4 words per chunk, respecting punctuation.
- * Target: 3 words
- * Rule: Chunk ends at any punctuation, never crosses major punctuation.
+ * Tokenize text by character width - accumulate words until max chars reached.
+ * Respects punctuation as natural break points.
+ *
+ * @param text - Text to tokenize
+ * @param maxChars - Target maximum character width
  */
-function tokenizePhraseMode(text: string): Chunk[] {
+function tokenizeByCharWidth(text: string, maxChars: number): Chunk[] {
   const words = tokenizeWords(text);
   const chunks: Chunk[] = [];
-  const TARGET = 3;
-  const MAX = 4;
 
   let currentWords: string[] = [];
+  let currentLength = 0;
 
   for (const word of words) {
-    currentWords.push(word);
+    const wouldBeLength = currentLength + (currentWords.length > 0 ? 1 : 0) + word.length;
 
-    const shouldBreak =
-      currentWords.length >= MAX ||
-      endsWithMajorPunctuation(word) ||
-      endsWithMinorPunctuation(word) ||
-      (currentWords.length >= TARGET - 1 && endsWithMinorPunctuation(word));
-
-    // Also break if we've hit target and next word would be a "short" function word
-    // But we don't know the next word yet, so we break at target if current ends with punctuation
-    // or if we've hit the target
-    const atTarget = currentWords.length >= TARGET;
-
-    if (shouldBreak || (atTarget && (endsWithMajorPunctuation(word) || endsWithMinorPunctuation(word)))) {
+    // If adding this word exceeds max and we have content, flush first
+    if (wouldBeLength > maxChars && currentWords.length > 0) {
       const chunkText = currentWords.join(' ');
       chunks.push({
         text: chunkText,
@@ -95,52 +99,20 @@ function tokenizePhraseMode(text: string): Chunk[] {
         orpIndex: calculateORP(chunkText),
       });
       currentWords = [];
-    } else if (currentWords.length >= TARGET) {
-      // Hit target without punctuation - still break to maintain rhythm
-      const chunkText = currentWords.join(' ');
-      chunks.push({
-        text: chunkText,
-        wordCount: currentWords.length,
-        orpIndex: calculateORP(chunkText),
-      });
-      currentWords = [];
+      currentLength = 0;
     }
-  }
 
-  // Flush remaining words
-  if (currentWords.length > 0) {
-    const chunkText = currentWords.join(' ');
-    chunks.push({
-      text: chunkText,
-      wordCount: currentWords.length,
-      orpIndex: calculateORP(chunkText),
-    });
-  }
-
-  return chunks;
-}
-
-/**
- * Tokenize text in Clause mode - 5-8 words per chunk, respecting sentence punctuation.
- * Target: 6 words
- * Rule: Chunk ends at major punctuation only, can cross minor punctuation.
- */
-function tokenizeClauseMode(text: string): Chunk[] {
-  const words = tokenizeWords(text);
-  const chunks: Chunk[] = [];
-  const TARGET = 6;
-  const MAX = 8;
-
-  let currentWords: string[] = [];
-
-  for (const word of words) {
+    // Add word to current chunk
     currentWords.push(word);
+    currentLength = currentWords.join(' ').length;
 
-    const hitMax = currentWords.length >= MAX;
-    const hitMajorPunctuation = endsWithMajorPunctuation(word);
-    const atTargetWithMinorPunct = currentWords.length >= TARGET && endsWithMinorPunctuation(word);
+    // Check for punctuation-based breaks
+    const hitMajorPunct = endsWithMajorPunctuation(word);
+    const hitMinorPunct = endsWithMinorPunctuation(word);
+    const atGoodBreakPoint = currentLength >= maxChars * 0.6; // 60% of target
 
-    if (hitMax || hitMajorPunctuation || atTargetWithMinorPunct) {
+    // Break on major punctuation, or minor punctuation if we're past 60% of target
+    if (hitMajorPunct || (hitMinorPunct && atGoodBreakPoint)) {
       const chunkText = currentWords.join(' ');
       chunks.push({
         text: chunkText,
@@ -148,6 +120,7 @@ function tokenizeClauseMode(text: string): Chunk[] {
         orpIndex: calculateORP(chunkText),
       });
       currentWords = [];
+      currentLength = 0;
     }
   }
 
@@ -178,22 +151,28 @@ function createBreakChunk(): Chunk {
 /**
  * Tokenize a single paragraph based on mode.
  */
-function tokenizeParagraph(text: string, mode: TokenMode): Chunk[] {
+function tokenizeParagraph(text: string, mode: TokenMode, customCharWidth?: number): Chunk[] {
   switch (mode) {
     case 'word':
       return tokenizeWordMode(text);
     case 'phrase':
-      return tokenizePhraseMode(text);
+      return tokenizeByCharWidth(text, MODE_CHAR_WIDTHS.phrase);
     case 'clause':
-      return tokenizeClauseMode(text);
+      return tokenizeByCharWidth(text, MODE_CHAR_WIDTHS.clause);
+    case 'custom':
+      return tokenizeByCharWidth(text, customCharWidth ?? MODE_CHAR_WIDTHS.custom);
   }
 }
 
 /**
  * Tokenize text into chunks based on the selected mode.
  * Respects paragraph breaks and inserts visual markers between them.
+ *
+ * @param text - Text to tokenize
+ * @param mode - Tokenization mode
+ * @param customCharWidth - Custom character width (only used in 'custom' mode)
  */
-export function tokenize(text: string, mode: TokenMode): Chunk[] {
+export function tokenize(text: string, mode: TokenMode, customCharWidth?: number): Chunk[] {
   // Split into paragraphs (double newline or more)
   const paragraphs = text
     .split(/\n\s*\n/)
@@ -202,14 +181,14 @@ export function tokenize(text: string, mode: TokenMode): Chunk[] {
 
   // If no clear paragraph structure, treat as single block
   if (paragraphs.length <= 1) {
-    return tokenizeParagraph(text, mode);
+    return tokenizeParagraph(text, mode, customCharWidth);
   }
 
   // Tokenize each paragraph and join with break markers
   const allChunks: Chunk[] = [];
 
   for (let i = 0; i < paragraphs.length; i++) {
-    const paragraphChunks = tokenizeParagraph(paragraphs[i], mode);
+    const paragraphChunks = tokenizeParagraph(paragraphs[i], mode, customCharWidth);
     allChunks.push(...paragraphChunks);
 
     // Add break marker between paragraphs (not after last)

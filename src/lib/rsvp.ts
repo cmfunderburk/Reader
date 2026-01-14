@@ -7,27 +7,35 @@ export function isBreakChunk(chunk: Chunk): boolean {
   return chunk.wordCount === 0;
 }
 
+// Average English word length in characters (not including space)
+const AVG_WORD_LENGTH = 4.8;
+// Average word length including trailing space
+const AVG_WORD_LENGTH_WITH_SPACE = 5.8;
+
 /**
  * Calculate display time for a chunk in milliseconds.
  *
- * Formula: display_time = base_time + (word_count * 0.6 * per_word_time)
- * Where per_word_time = 60000 / WPM
+ * Formula: display_time = effective_chars / chars_per_ms
+ * Where chars_per_ms = (WPM * AVG_WORD_LENGTH_WITH_SPACE) / 60000
  *
- * This means multi-word chunks display longer, but not linearly -
- * peripheral vision handles some of the extra words.
+ * Uses 5.8 chars/word (4.8 letters + 1 space) for consistent WPM across
+ * all chunk sizes. This accounts for inter-word spaces that may not be
+ * present in single-word chunks.
  *
- * Break chunks (paragraph markers) get 2x base time for a mental pause.
+ * For multi-word chunks, we add (wordCount - 1) to account for spaces
+ * between words that ARE in the text. Single-word chunks get +1 for the
+ * implicit trailing space.
  */
 export function calculateDisplayTime(chunk: Chunk, wpm: number): number {
-  const perWordTime = 60000 / wpm;
-  const baseTime = perWordTime * 0.4; // 40% of single word time as base
+  const charsPerMinute = wpm * AVG_WORD_LENGTH_WITH_SPACE;
+  const msPerChar = 60000 / charsPerMinute;
 
-  // Paragraph break markers get longer pause
-  if (isBreakChunk(chunk)) {
-    return perWordTime * 2; // 2x a single word's time
-  }
+  // Calculate effective character count including implicit spaces
+  // Single words: add 1 for trailing space
+  // Multi-word: spaces are already in text, add 1 for final trailing space
+  const effectiveChars = chunk.text.length + 1;
 
-  return baseTime + chunk.wordCount * 0.6 * perWordTime;
+  return effectiveChars * msPerChar;
 }
 
 /**

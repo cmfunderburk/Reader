@@ -9,11 +9,13 @@ const STORAGE_KEYS = {
 interface Settings {
   defaultWpm: number;
   defaultMode: TokenMode;
+  customCharWidth: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
-  defaultWpm: 300,
+  defaultWpm: 400,
   defaultMode: 'phrase',
+  customCharWidth: 30,
 };
 
 /**
