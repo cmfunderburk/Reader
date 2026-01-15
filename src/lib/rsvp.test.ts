@@ -12,10 +12,12 @@ const CHARS_PER_MINUTE = DEFAULT_WPM * AVG_WORD_LENGTH_WITH_SPACE; // 2320
 const MS_PER_CHAR = 60000 / CHARS_PER_MINUTE; // ~25.86
 
 function createChunk(text: string): Chunk {
+  const isMultiWord = text.includes(' ');
   return {
     text,
     wordCount: text.split(/\s+/).filter(w => w.length > 0).length,
-    orpIndex: Math.floor(text.length * 0.35),
+    // Single word: 35% OVP, multi-word: center
+    orpIndex: isMultiWord ? Math.floor(text.length / 2) : Math.floor(text.length * 0.35),
   };
 }
 

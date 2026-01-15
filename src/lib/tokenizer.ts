@@ -8,7 +8,10 @@ const MINOR_PUNCTUATION = /[,:\-—–]/;
 
 /**
  * Calculate the Optimal Reading Point (ORP) index within a chunk.
- * ORP is approximately 35% into the chunk, biased toward the start of longer words.
+ *
+ * For single words: uses 35% position (well-validated OVP research).
+ * For multi-word chunks: uses center position, since the 35% OVP research
+ * was conducted on single words and doesn't directly apply to phrases.
  */
 function calculateORP(text: string): number {
   const trimmed = text.trim();
@@ -16,8 +19,13 @@ function calculateORP(text: string): number {
   if (trimmed.length <= 1) return 0;
   if (trimmed.length <= 3) return 1;
 
-  // For multi-word chunks, find the ORP at ~35% of total length
-  const orpPosition = Math.floor(trimmed.length * 0.35);
+  const isMultiWord = trimmed.includes(' ');
+
+  // Single word: use 35% OVP (research-backed)
+  // Multi-word: use center (heuristic, since OVP doesn't apply to phrases)
+  const orpPosition = isMultiWord
+    ? Math.floor(trimmed.length / 2)
+    : Math.floor(trimmed.length * 0.35);
 
   // Adjust to avoid landing on whitespace
   let adjusted = orpPosition;

@@ -11,7 +11,7 @@ export interface LibrarySource {
 export interface LibraryItem {
   name: string
   path: string
-  type: 'pdf' | 'epub'
+  type: 'pdf' | 'epub' | 'txt'
   size: number
   modifiedAt: number
   parentDir?: string       // Immediate parent directory name (for grouping)
@@ -82,7 +82,7 @@ export async function scanDirectory(dirPath: string): Promise<LibraryItem[]> {
           await scanRecursive(fullPath)
         } else if (entry.isFile()) {
           const ext = path.extname(entry.name).toLowerCase()
-          if (ext === '.pdf' || ext === '.epub') {
+          if (ext === '.pdf' || ext === '.epub' || ext === '.txt') {
             try {
               const stats = fs.statSync(fullPath)
 
@@ -96,7 +96,7 @@ export async function scanDirectory(dirPath: string): Promise<LibraryItem[]> {
               items.push({
                 name: entry.name,
                 path: fullPath,
-                type: ext === '.pdf' ? 'pdf' : 'epub',
+                type: ext === '.pdf' ? 'pdf' : ext === '.epub' ? 'epub' : 'txt',
                 size: stats.size,
                 modifiedAt: stats.mtimeMs,
                 parentDir: hasParentDir ? parentDir : undefined,

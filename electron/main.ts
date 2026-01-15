@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { getConfiguredSources, scanDirectory, addSource, removeSource, loadSources, saveSources, LibrarySource } from './lib/library'
 import { extractPdfText } from './lib/pdf'
@@ -42,16 +43,11 @@ app.whenReady().then(() => {
   if (sources.length === 0) {
     // Library path is relative to app root (one level up from dist-electron/)
     const libraryRoot = path.join(__dirname, '..', 'library')
-    const unprocessedRoot = path.join(libraryRoot, 'unprocessed')
     const defaultSources: LibrarySource[] = [
-      // Processed content (empty initially, filled as we preprocess)
+      // Processed content only - unprocessed/ is for preprocessing workflow
       { name: 'Classics', path: path.join(libraryRoot, 'classics') },
       { name: 'Articles', path: path.join(libraryRoot, 'articles') },
       { name: 'References', path: path.join(libraryRoot, 'references') },
-      // Unprocessed/raw content
-      { name: 'Raw Classics', path: path.join(unprocessedRoot, 'classics') },
-      { name: 'Raw Articles', path: path.join(unprocessedRoot, 'articles') },
-      { name: 'Raw References', path: path.join(unprocessedRoot, 'references') },
     ]
     saveSources(defaultSources)
   }
@@ -92,6 +88,12 @@ ipcMain.handle('library:openBook', async (_, filePath: string) => {
       const result = await extractEpubText(filePath)
       console.log(`EPUB extracted: ${result.title}, ${result.content.length} chars`)
       return result
+    } else if (ext === '.txt') {
+      // Pre-processed text files - read directly
+      const content = fs.readFileSync(filePath, 'utf-8')
+      const title = path.basename(filePath, '.txt').replace(/-/g, ' ')
+      console.log(`TXT loaded: ${title}, ${content.length} chars`)
+      return { title, content }
     }
     throw new Error(`Unsupported file type: ${ext}`)
   } catch (err) {
