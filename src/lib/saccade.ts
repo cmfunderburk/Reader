@@ -1,14 +1,17 @@
-import type { Chunk, SaccadePage, TokenMode } from '../types';
+import type { Chunk, SaccadePage, SaccadeLine, TokenMode } from '../types';
 import { MODE_CHAR_WIDTHS } from '../types';
 import { calculateORP } from './tokenizer';
 
-export const SACCADE_LINE_WIDTH = 95;
+export const SACCADE_LINE_WIDTH = 80;
 export const SACCADE_LINES_PER_PAGE = 10;
 
 // Major punctuation that always ends a chunk
 const MAJOR_PUNCTUATION = /[.!?;]/;
 // Minor punctuation that can end a chunk
 const MINOR_PUNCTUATION = /[,:\-—–]/;
+
+// Markdown heading pattern: # Heading, ## Heading, etc.
+const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
 
 /**
  * Normalize text by ensuring spaces after sentence-ending punctuation.
@@ -18,57 +21,95 @@ function normalizeText(text: string): string {
 }
 
 /**
- * Flow text into fixed-width lines using word wrapping.
- * Respects paragraph breaks (double newlines become blank lines).
+ * Detect if a line is a markdown heading.
  */
-export function flowTextIntoLines(text: string, lineWidth: number): string[] {
+function detectHeading(line: string): { isHeading: boolean; level: number; text: string } {
+  const match = line.match(HEADING_PATTERN);
+  if (match) {
+    return { isHeading: true, level: match[1].length, text: match[2] };
+  }
+  return { isHeading: false, level: 0, text: line };
+}
+
+/**
+ * Word-wrap a paragraph into lines of specified width.
+ */
+function wrapParagraph(text: string, lineWidth: number): SaccadeLine[] {
+  const words = text.split(/\s+/).filter(w => w.length > 0);
+  const lines: SaccadeLine[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const wouldBe = currentLine.length === 0 ? word : currentLine + ' ' + word;
+
+    if (wouldBe.length <= lineWidth) {
+      currentLine = wouldBe;
+    } else {
+      if (currentLine.length > 0) {
+        lines.push({ text: currentLine, type: 'body' });
+      }
+      if (word.length > lineWidth) {
+        lines.push({ text: word, type: 'body' });
+        currentLine = '';
+      } else {
+        currentLine = word;
+      }
+    }
+  }
+
+  if (currentLine.length > 0) {
+    lines.push({ text: currentLine, type: 'body' });
+  }
+
+  return lines;
+}
+
+/**
+ * Flow text into fixed-width lines using word wrapping.
+ * Respects paragraph breaks and markdown headings.
+ */
+export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[] {
   const normalized = normalizeText(text);
 
-  // Split into paragraphs
-  const paragraphs = normalized
+  // Split into blocks (paragraphs/headings separated by blank lines)
+  const blocks = normalized
     .split(/\n\s*\n/)
-    .map(p => p.replace(/\n/g, ' ').trim())
-    .filter(p => p.length > 0);
+    .map(b => b.trim())
+    .filter(b => b.length > 0);
 
-  const lines: string[] = [];
+  const lines: SaccadeLine[] = [];
 
-  for (let i = 0; i < paragraphs.length; i++) {
-    const paragraph = paragraphs[i];
-    const words = paragraph.split(/\s+/).filter(w => w.length > 0);
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
 
-    let currentLine = '';
+    // Check if block is a heading (single line starting with #)
+    const blockLines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-    for (const word of words) {
-      const wouldBe = currentLine.length === 0
-        ? word
-        : currentLine + ' ' + word;
+    for (const blockLine of blockLines) {
+      const heading = detectHeading(blockLine);
 
-      if (wouldBe.length <= lineWidth) {
-        currentLine = wouldBe;
+      if (heading.isHeading) {
+        // Add blank line before heading (if not first)
+        if (lines.length > 0 && lines[lines.length - 1].type !== 'blank') {
+          lines.push({ text: '', type: 'blank' });
+        }
+        // Add the heading
+        lines.push({ text: heading.text, type: 'heading', level: heading.level });
+        // Add blank line after heading
+        lines.push({ text: '', type: 'blank' });
       } else {
-        // Line is full, push it and start new line
-        if (currentLine.length > 0) {
-          lines.push(currentLine);
-        }
-        // Handle words longer than line width
-        if (word.length > lineWidth) {
-          // Just put it on its own line (rare edge case)
-          lines.push(word);
-          currentLine = '';
-        } else {
-          currentLine = word;
-        }
+        // Regular paragraph - word wrap it
+        const wrappedLines = wrapParagraph(blockLine, lineWidth);
+        lines.push(...wrappedLines);
       }
     }
 
-    // Push remaining content
-    if (currentLine.length > 0) {
-      lines.push(currentLine);
-    }
-
-    // Add blank line between paragraphs (not after last)
-    if (i < paragraphs.length - 1) {
-      lines.push('');
+    // Add blank line between blocks (not after last)
+    if (i < blocks.length - 1) {
+      // Only add if last line isn't already blank
+      if (lines.length > 0 && lines[lines.length - 1].type !== 'blank') {
+        lines.push({ text: '', type: 'blank' });
+      }
     }
   }
 
@@ -78,7 +119,7 @@ export function flowTextIntoLines(text: string, lineWidth: number): string[] {
 /**
  * Group lines into pages.
  */
-export function groupIntoPages(lines: string[], linesPerPage: number): SaccadePage[] {
+export function groupIntoPages(lines: SaccadeLine[], linesPerPage: number): SaccadePage[] {
   const pages: SaccadePage[] = [];
 
   for (let i = 0; i < lines.length; i += linesPerPage) {
@@ -299,7 +340,7 @@ export function tokenizeSaccade(
 
     for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
       const line = page.lines[lineIndex];
-      const lineChunks = tokenizeLine(line, lineIndex, pageIndex, chunkMode, customCharWidth);
+      const lineChunks = tokenizeLine(line.text, lineIndex, pageIndex, chunkMode, customCharWidth);
       allChunks.push(...lineChunks);
     }
   }

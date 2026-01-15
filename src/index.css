@@ -145,7 +145,7 @@ button {
   font-size: 1rem;
   line-height: 1.7;
   text-align: left;
-  max-width: 60ch;
+  max-width: 50ch;
 }
 
 .saccade-line {
@@ -165,6 +165,27 @@ button {
 }
 
 .saccade-orp {
+  color: var(--accent);
+  font-weight: 700;
+  opacity: 1;
+}
+
+/* Saccade headings */
+.saccade-line-heading {
+  text-align: center;
+}
+
+.saccade-heading-dimmed {
+  font-weight: 600;
+  opacity: 0.35;
+}
+
+.saccade-heading-chunk {
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.saccade-heading-orp {
   color: var(--accent);
   font-weight: 700;
   opacity: 1;

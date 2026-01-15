@@ -11,8 +11,16 @@ export const MODE_CHAR_WIDTHS: Record<Exclude<TokenMode, 'word'>, number> = {
   custom: 30, // default for custom, overridden by user setting
 };
 
+export type SaccadeLineType = 'body' | 'heading' | 'blank';
+
+export interface SaccadeLine {
+  text: string;
+  type: SaccadeLineType;
+  level?: number;  // 1-6 for headings
+}
+
 export interface SaccadePage {
-  lines: string[];
+  lines: SaccadeLine[];
 }
 
 export interface SaccadePosition {

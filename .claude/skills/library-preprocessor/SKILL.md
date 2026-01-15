@@ -197,3 +197,63 @@ Optimized content for the speed reader should:
 - Remove content that breaks immersion (lengthy footnotes, bibliographies)
 
 The goal is text that reads naturally when presented word-by-word or phrase-by-phrase at speed.
+
+## Saccade Mode Optimization
+
+The app supports **saccade mode** - a full-page display where a sliding highlight moves through the text. This mode benefits from specific formatting:
+
+### Markdown Headings
+
+Saccade mode detects and renders markdown-style headings with special formatting (centered, with blank lines above/below). When preprocessing, use markdown heading syntax:
+
+```
+# Chapter Title
+## Section Heading
+### Subsection
+```
+
+Headings are included in the reading sequence as chunks, providing natural pause points and context.
+
+### Line Width
+
+Saccade mode uses **80-character line width** (terminal/book standard). When preprocessing content for saccade mode, you can pre-wrap text at 80 characters. The app handles this automatically during display, but pre-formatting can help with content that has specific line break requirements.
+
+### Line Breaks and RSVP
+
+RSVP mode ignores line breaks and treats text as continuous (whitespace is collapsed). This means:
+- Content formatted for saccade mode (with 80-char line breaks) works fine in RSVP
+- Single line breaks within paragraphs become spaces
+- Paragraph breaks (blank lines) create pause markers in RSVP
+
+### Heading Format Examples
+
+**Input (raw chapter):**
+```
+CHAPTER V
+THE GRAND INQUISITOR
+
+"Even so," Ivan laughed again...
+```
+
+**Output (formatted for saccade):**
+```
+# Chapter V: The Grand Inquisitor
+
+"Even so," Ivan laughed again...
+```
+
+**Input (textbook section):**
+```
+5.2 Nash Equilibrium
+
+A Nash equilibrium is a strategy profile...
+```
+
+**Output (formatted for saccade):**
+```
+## Nash Equilibrium
+
+A Nash equilibrium is a strategy profile...
+```
+
+Remove redundant numbering when converting to markdown headings - the heading level itself provides hierarchy.
