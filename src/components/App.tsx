@@ -167,6 +167,8 @@ export function App() {
             <Reader
               chunk={rsvp.currentChunk}
               isPlaying={rsvp.isPlaying}
+              displayMode={rsvp.displayMode}
+              saccadePage={rsvp.currentSaccadePage}
             />
 
             <ProgressBar progress={progress} onChange={handleProgressChange} />
@@ -188,6 +190,7 @@ export function App() {
               isPlaying={rsvp.isPlaying}
               wpm={rsvp.wpm}
               mode={rsvp.mode}
+              displayMode={rsvp.displayMode}
               customCharWidth={rsvp.customCharWidth}
               onPlay={rsvp.play}
               onPause={rsvp.pause}
@@ -197,6 +200,7 @@ export function App() {
               onSkipToEnd={() => rsvp.goToIndex(rsvp.chunks.length - 1)}
               onWpmChange={rsvp.setWpm}
               onModeChange={rsvp.setMode}
+              onDisplayModeChange={rsvp.setDisplayMode}
               onCustomCharWidthChange={rsvp.setCustomCharWidth}
             />
           </>

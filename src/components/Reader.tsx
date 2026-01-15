@@ -1,12 +1,19 @@
-import type { Chunk } from '../types';
+import type { Chunk, DisplayMode, SaccadePage } from '../types';
 import { isBreakChunk } from '../lib/rsvp';
+import { SaccadeReader } from './SaccadeReader';
 
 interface ReaderProps {
   chunk: Chunk | null;
   isPlaying: boolean;
+  displayMode: DisplayMode;
+  saccadePage?: SaccadePage | null;
 }
 
-export function Reader({ chunk }: ReaderProps) {
+export function Reader({ chunk, displayMode, saccadePage }: ReaderProps) {
+  // Saccade mode uses its own reader component
+  if (displayMode === 'saccade') {
+    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} />;
+  }
   // No article loaded
   if (!chunk) {
     return (

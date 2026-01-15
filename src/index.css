@@ -133,6 +133,43 @@ button {
   letter-spacing: 0.5em;
 }
 
+/* Saccade Mode */
+.saccade-reader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.saccade-page {
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Source Code Pro', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 1rem;
+  line-height: 1.7;
+  text-align: left;
+  max-width: 60ch;
+}
+
+.saccade-line {
+  display: block;
+  min-height: 1.7em;
+  white-space: pre-wrap;
+}
+
+.saccade-dimmed {
+  color: var(--text-primary);
+  opacity: 0.35;
+}
+
+.saccade-chunk {
+  color: var(--text-primary);
+  opacity: 0.85;
+}
+
+.saccade-orp {
+  color: var(--accent);
+  font-weight: 700;
+  opacity: 1;
+}
+
 /* Progress Bar */
 .progress-bar {
   padding: 0.5rem 0;

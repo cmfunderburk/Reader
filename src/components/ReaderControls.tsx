@@ -1,10 +1,11 @@
-import type { TokenMode } from '../types';
+import type { TokenMode, DisplayMode } from '../types';
 import { MODE_CHAR_WIDTHS } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
   wpm: number;
   mode: TokenMode;
+  displayMode: DisplayMode;
   customCharWidth: number;
   onPlay: () => void;
   onPause: () => void;
@@ -14,6 +15,7 @@ interface ReaderControlsProps {
   onSkipToEnd: () => void;
   onWpmChange: (wpm: number) => void;
   onModeChange: (mode: TokenMode) => void;
+  onDisplayModeChange: (displayMode: DisplayMode) => void;
   onCustomCharWidthChange: (width: number) => void;
 }
 
@@ -21,6 +23,7 @@ export function ReaderControls({
   isPlaying,
   wpm,
   mode,
+  displayMode,
   customCharWidth,
   onPlay,
   onPause,
@@ -30,6 +33,7 @@ export function ReaderControls({
   onSkipToEnd,
   onWpmChange,
   onModeChange,
+  onDisplayModeChange,
   onCustomCharWidthChange,
 }: ReaderControlsProps) {
   return (
@@ -71,7 +75,19 @@ export function ReaderControls({
         </label>
 
         <label className="control-group">
-          <span className="control-label">Mode:</span>
+          <span className="control-label">Display:</span>
+          <select
+            value={displayMode}
+            onChange={e => onDisplayModeChange(e.target.value as DisplayMode)}
+            className="control-select"
+          >
+            <option value="rsvp">RSVP</option>
+            <option value="saccade">Saccade</option>
+          </select>
+        </label>
+
+        <label className="control-group">
+          <span className="control-label">Chunks:</span>
           <select
             value={mode}
             onChange={e => onModeChange(e.target.value as TokenMode)}

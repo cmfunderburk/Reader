@@ -1,16 +1,32 @@
+// Display mode: how text is presented
+export type DisplayMode = 'rsvp' | 'saccade';
+
+// Token/chunk mode: how text is chunked
 export type TokenMode = 'word' | 'phrase' | 'clause' | 'custom';
 
-// Character width targets for each mode
+// Character width targets for each mode (excludes word which shows one word at a time)
 export const MODE_CHAR_WIDTHS: Record<Exclude<TokenMode, 'word'>, number> = {
   phrase: 10,
   clause: 40,
   custom: 30, // default for custom, overridden by user setting
 };
 
+export interface SaccadePage {
+  lines: string[];
+}
+
+export interface SaccadePosition {
+  pageIndex: number;
+  lineIndex: number;
+  startChar: number;
+  endChar: number;
+}
+
 export interface Chunk {
   text: string;
   wordCount: number;
   orpIndex: number; // character index of the ORP within the chunk
+  saccade?: SaccadePosition; // present only in saccade mode
 }
 
 export interface Article {

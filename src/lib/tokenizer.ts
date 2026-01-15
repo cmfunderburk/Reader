@@ -13,7 +13,7 @@ const MINOR_PUNCTUATION = /[,:\-—–]/;
  * For multi-word chunks: uses center position, since the 35% OVP research
  * was conducted on single words and doesn't directly apply to phrases.
  */
-function calculateORP(text: string): number {
+export function calculateORP(text: string): number {
   const trimmed = text.trim();
   if (trimmed.length === 0) return 0;
   if (trimmed.length <= 1) return 0;
