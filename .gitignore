@@ -30,3 +30,5 @@ npm-debug.log*
 
 # Claude local files
 .claude/
+# Library content (PDFs, EPUBs) - not tracked in git
+library/

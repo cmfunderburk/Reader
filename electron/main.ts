@@ -40,10 +40,12 @@ app.whenReady().then(() => {
   // Initialize default library sources on first run
   const sources = loadSources()
   if (sources.length === 0) {
+    // Library path is relative to app root (one level up from dist-electron/)
+    const libraryRoot = path.join(__dirname, '..', 'library')
     const defaultSources: LibrarySource[] = [
-      { name: 'Classics', path: '/home/cmf/Dropbox/Apps/KnOS/knos/reader/classics' },
-      { name: 'Articles', path: '/home/cmf/Dropbox/Apps/KnOS/knos/reader/articles' },
-      { name: 'References', path: '/home/cmf/Dropbox/Apps/deep-study/WORKING/references' },
+      { name: 'Classics', path: path.join(libraryRoot, 'classics') },
+      { name: 'Articles', path: path.join(libraryRoot, 'articles') },
+      { name: 'References', path: path.join(libraryRoot, 'references') },
     ]
     saveSources(defaultSources)
   }
