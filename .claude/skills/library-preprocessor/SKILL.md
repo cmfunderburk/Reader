@@ -7,21 +7,36 @@ description: This skill should be used when the user asks to "preprocess library
 
 This skill assists with preprocessing and optimizing library content for the SpeedRead application. Since library content varies significantly (Gutenberg EPUBs, web pages saved as PDFs, academic papers, scanned book chapters), automated cleanup often needs LLM-assisted finishing touches.
 
-## Content Sources and Their Challenges
+## Library Structure
 
-The `library/` directory contains three collections:
+The `library/` directory uses a processing pipeline:
 
-### Classics (`library/classics/`)
+```
+library/
+├── unprocessed/          # Raw content awaiting cleanup
+│   ├── classics/         # Gutenberg EPUBs, public domain texts
+│   ├── articles/         # Academic papers, web PDFs, short works
+│   └── references/       # Textbook chapters by book
+├── classics/             # Processed classics (ready for reading)
+├── articles/             # Processed articles
+└── references/           # Processed reference materials
+```
+
+**Workflow**: Content starts in `unprocessed/`, gets cleaned via this skill, then moves to the appropriate processed directory.
+
+## Content Types and Their Challenges
+
+### Classics (`unprocessed/classics/`)
 - **Source**: Project Gutenberg EPUBs, public domain texts
 - **Issues**: Gutenberg headers/footers, transcriber notes, inconsistent formatting
 - **Example**: `brothers-karamazov.epub`, `nicomachean-ethics.epub`
 
-### Articles (`library/articles/`)
+### Articles (`unprocessed/articles/`)
 - **Source**: Academic papers, web pages saved as PDF, short works
 - **Issues**: Web print artifacts (timestamps, URLs), paper metadata (author blocks, abstracts), reference sections
 - **Example**: `attention.pdf` (academic), `wittgenstein-lecture-on-ethics.pdf` (web-saved)
 
-### References (`library/references/`)
+### References (`unprocessed/references/`)
 - **Source**: Textbook chapters split into individual PDFs
 - **Issues**: Running headers/footers, page numbers, cross-references, frontmatter files
 - **Structure**: Organized by book (e.g., `kreps-micro-foundations-i/`, `osborne-rubinstein-game-theory/`)

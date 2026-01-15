@@ -42,10 +42,16 @@ app.whenReady().then(() => {
   if (sources.length === 0) {
     // Library path is relative to app root (one level up from dist-electron/)
     const libraryRoot = path.join(__dirname, '..', 'library')
+    const unprocessedRoot = path.join(libraryRoot, 'unprocessed')
     const defaultSources: LibrarySource[] = [
+      // Processed content (empty initially, filled as we preprocess)
       { name: 'Classics', path: path.join(libraryRoot, 'classics') },
       { name: 'Articles', path: path.join(libraryRoot, 'articles') },
       { name: 'References', path: path.join(libraryRoot, 'references') },
+      // Unprocessed/raw content
+      { name: 'Raw Classics', path: path.join(unprocessedRoot, 'classics') },
+      { name: 'Raw Articles', path: path.join(unprocessedRoot, 'articles') },
+      { name: 'Raw References', path: path.join(unprocessedRoot, 'references') },
     ]
     saveSources(defaultSources)
   }
