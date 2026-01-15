@@ -58,6 +58,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  overflow: hidden;
 }
 
 .app-sidebar {
@@ -76,6 +77,7 @@ button {
   align-items: center;
   justify-content: center;
   min-height: 200px;
+  overflow: hidden;
 }
 
 .reader-display {
@@ -221,6 +223,16 @@ button {
 .control-btn-primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
+}
+
+.control-btn-icon {
+  font-size: 1.25rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.control-btn-active {
+  background: var(--accent);
+  border-color: var(--accent);
 }
 
 .controls-settings {

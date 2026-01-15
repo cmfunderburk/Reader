@@ -164,7 +164,10 @@ export function App() {
       <main className="app-main">
         {view === 'reader' && (
           <>
-            <Reader chunk={rsvp.currentChunk} isPlaying={rsvp.isPlaying} />
+            <Reader
+              chunk={rsvp.currentChunk}
+              isPlaying={rsvp.isPlaying}
+            />
 
             <ProgressBar progress={progress} onChange={handleProgressChange} />
 

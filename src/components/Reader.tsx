@@ -7,6 +7,7 @@ interface ReaderProps {
 }
 
 export function Reader({ chunk }: ReaderProps) {
+  // No article loaded
   if (!chunk) {
     return (
       <div className="reader">
@@ -17,7 +18,7 @@ export function Reader({ chunk }: ReaderProps) {
     );
   }
 
-  // Paragraph break marker - render differently
+  // Paragraph break marker
   if (isBreakChunk(chunk)) {
     return (
       <div className="reader">
@@ -29,19 +30,17 @@ export function Reader({ chunk }: ReaderProps) {
   }
 
   const { text, orpIndex } = chunk;
-
-  // Split text around ORP for highlighting
-  const before = text.slice(0, orpIndex);
+  const beforeOrp = text.slice(0, orpIndex);
   const orpChar = text[orpIndex] || '';
-  const after = text.slice(orpIndex + 1);
+  const afterOrp = text.slice(orpIndex + 1);
 
   return (
     <div className="reader">
       <div className="reader-display">
         <div className="reader-text">
-          <span className="reader-before">{before}</span>
+          <span className="reader-before">{beforeOrp}</span>
           <span className="reader-orp">{orpChar}</span>
-          <span className="reader-after">{after}</span>
+          <span className="reader-after">{afterOrp}</span>
         </div>
         <div className="reader-marker">▲</div>
       </div>
