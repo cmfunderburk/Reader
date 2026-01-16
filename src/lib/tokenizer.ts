@@ -1,6 +1,33 @@
 import type { Chunk, TokenMode } from '../types';
 import { MODE_CHAR_WIDTHS } from '../types';
 
+/**
+ * Strip markdown formatting for clean reading display.
+ * Converts headings, bold, italic, links to plain text.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    // Headings: # Title → Title (preserve as paragraph break)
+    .replace(/^(#{1,6})\s+(.+)$/gm, '\n$2\n')
+    // Bold: **text** or __text__ → text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    // Italic: *text* or _text_ → text (but not mid-word underscores)
+    .replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '$1')
+    .replace(/(?<!\w)_([^_]+)_(?!\w)/g, '$1')
+    // Links: [text](url) → text
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Images: ![alt](url) → (remove entirely)
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')
+    // Inline code: `code` → code
+    .replace(/`([^`]+)`/g, '$1')
+    // Horizontal rules: --- or *** → paragraph break
+    .replace(/^[-*]{3,}$/gm, '\n')
+    // Clean up excess whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Major punctuation that always ends a chunk
 const MAJOR_PUNCTUATION = /[.!?;]/;
 // Minor punctuation that can end a chunk
@@ -175,21 +202,25 @@ function tokenizeParagraph(text: string, mode: TokenMode, customCharWidth?: numb
 /**
  * Tokenize text into chunks based on the selected mode.
  * Respects paragraph breaks and inserts visual markers between them.
+ * Strips markdown formatting for clean reading display.
  *
  * @param text - Text to tokenize
  * @param mode - Tokenization mode
  * @param customCharWidth - Custom character width (only used in 'custom' mode)
  */
 export function tokenize(text: string, mode: TokenMode, customCharWidth?: number): Chunk[] {
+  // Strip markdown formatting for clean display
+  const cleanText = stripMarkdown(text);
+
   // Split into paragraphs (double newline or more)
-  const paragraphs = text
+  const paragraphs = cleanText
     .split(/\n\s*\n/)
     .map(p => p.trim())
     .filter(p => p.length > 0);
 
   // If no clear paragraph structure, treat as single block
   if (paragraphs.length <= 1) {
-    return tokenizeParagraph(text, mode, customCharWidth);
+    return tokenizeParagraph(cleanText, mode, customCharWidth);
   }
 
   // Tokenize each paragraph and join with break markers
