@@ -67,6 +67,16 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const displayModeRef = useRef(displayMode);
   const modeRef = useRef(mode);
 
+  // Debug timing refs
+  const debugStartTimeRef = useRef<number | null>(null);
+  const debugStartIndexRef = useRef<number>(0);
+  const debugWordCountRef = useRef<number>(0);
+
+  // Drift-correcting timer refs
+  const expectedTimeRef = useRef<number>(0);  // When current chunk SHOULD end
+  const playStartTimeRef = useRef<number>(0); // When playback started
+  const isFirstScheduleRef = useRef<boolean>(false); // Track first schedule after play
+
   // Keep refs in sync with state
   useEffect(() => { chunksRef.current = chunks; }, [chunks]);
   useEffect(() => { indexRef.current = currentChunkIndex; }, [currentChunkIndex]);
@@ -109,10 +119,31 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     const currentIndex = indexRef.current;
 
     if (currentIndex >= chunks.length - 1) {
-      // Reached the end
+      // Reached the end - log final stats
+      if (debugStartTimeRef.current !== null) {
+        const elapsed = performance.now() - debugStartTimeRef.current;
+        const elapsedMinutes = elapsed / 60000;
+        const effectiveWPM = debugWordCountRef.current / elapsedMinutes;
+        console.log(`[WPM Debug] Final: ${debugWordCountRef.current} words in ${(elapsed/1000).toFixed(1)}s = ${effectiveWPM.toFixed(1)} WPM (target: ${wpmRef.current})`);
+        debugStartTimeRef.current = null;
+      }
       setIsPlaying(false);
       onComplete?.();
       return;
+    }
+
+    // Track words for debug
+    const chunk = chunks[currentIndex];
+    if (chunk) {
+      debugWordCountRef.current += chunk.wordCount;
+    }
+
+    // Log every 100 chunks
+    if (debugStartTimeRef.current !== null && (currentIndex - debugStartIndexRef.current) % 100 === 0 && currentIndex > debugStartIndexRef.current) {
+      const elapsed = performance.now() - debugStartTimeRef.current;
+      const elapsedMinutes = elapsed / 60000;
+      const effectiveWPM = debugWordCountRef.current / elapsedMinutes;
+      console.log(`[WPM Debug] ${debugWordCountRef.current} words in ${(elapsed/1000).toFixed(1)}s = ${effectiveWPM.toFixed(1)} WPM (target: ${wpmRef.current})`);
     }
 
     // Move to next chunk
@@ -125,8 +156,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     }
   }, [onComplete]);
 
-  // Schedule next chunk display
-  const scheduleNext = useCallback(() => {
+  // Schedule next chunk display with drift correction
+  const scheduleNext = useCallback((isFirstChunk: boolean = false) => {
     clearTimer();
 
     const chunks = chunksRef.current;
@@ -144,7 +175,23 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       return;
     }
 
-    const delay = calculateDisplayTime(chunk, currentWpm);
+    const chunkDuration = calculateDisplayTime(chunk, currentWpm);
+    const now = performance.now();
+
+    if (isFirstChunk) {
+      // First chunk: set expected end time
+      playStartTimeRef.current = now;
+      expectedTimeRef.current = now + chunkDuration;
+    } else {
+      // Subsequent chunks: add duration to expected time
+      expectedTimeRef.current += chunkDuration;
+    }
+
+    // Calculate actual delay, compensating for drift
+    // If we're behind schedule, delay will be smaller, but cap speedup at 33%
+    // (minimum delay is 75% of normal chunk duration to avoid jarring skips)
+    const minDelay = chunkDuration * 0.75;
+    const delay = Math.max(minDelay, expectedTimeRef.current - now);
 
     timerRef.current = window.setTimeout(() => {
       advanceToNext();
@@ -154,7 +201,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   // Handle playback state changes
   useEffect(() => {
     if (isPlaying && chunks.length > 0) {
-      scheduleNext();
+      const isFirst = isFirstScheduleRef.current;
+      isFirstScheduleRef.current = false;
+      scheduleNext(isFirst);
     } else {
       clearTimer();
     }
@@ -162,11 +211,25 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
 
   const play = useCallback(() => {
     if (chunks.length > 0 && currentChunkIndex < chunks.length) {
+      // Initialize debug timing
+      debugStartTimeRef.current = performance.now();
+      debugStartIndexRef.current = currentChunkIndex;
+      debugWordCountRef.current = 0;
+      // Mark that next schedule is the first one (for drift correction init)
+      isFirstScheduleRef.current = true;
+      console.log(`[WPM Debug] Starting playback at ${wpm} WPM, chunk ${currentChunkIndex}`);
       setIsPlaying(true);
     }
-  }, [chunks.length, currentChunkIndex]);
+  }, [chunks.length, currentChunkIndex, wpm]);
 
   const pause = useCallback(() => {
+    // Log debug stats on pause
+    if (debugStartTimeRef.current !== null && debugWordCountRef.current > 0) {
+      const elapsed = performance.now() - debugStartTimeRef.current;
+      const elapsedMinutes = elapsed / 60000;
+      const effectiveWPM = debugWordCountRef.current / elapsedMinutes;
+      console.log(`[WPM Debug] Paused: ${debugWordCountRef.current} words in ${(elapsed/1000).toFixed(1)}s = ${effectiveWPM.toFixed(1)} WPM (target: ${wpmRef.current})`);
+    }
     setIsPlaying(false);
     clearTimer();
     // Persist position on pause

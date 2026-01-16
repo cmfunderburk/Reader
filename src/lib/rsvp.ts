@@ -13,27 +13,22 @@ const AVG_WORD_LENGTH_WITH_SPACE = 5.8;
 /**
  * Calculate display time for a chunk in milliseconds.
  *
- * Formula: display_time = effective_chars / chars_per_ms
- * Where chars_per_ms = (WPM * AVG_WORD_LENGTH_WITH_SPACE) / 60000
+ * Uses word count for accurate WPM timing. At 400 WPM, each word
+ * gets 150ms (60000/400). A 3-word chunk displays for 450ms.
  *
- * Uses 5.8 chars/word (4.8 letters + 1 space) for consistent WPM across
- * all chunk sizes. This accounts for inter-word spaces that may not be
- * present in single-word chunks.
- *
- * For multi-word chunks, we add (wordCount - 1) to account for spaces
- * between words that ARE in the text. Single-word chunks get +1 for the
- * implicit trailing space.
+ * Break chunks (wordCount=0) use character-based timing for their pause.
  */
 export function calculateDisplayTime(chunk: Chunk, wpm: number): number {
-  const charsPerMinute = wpm * AVG_WORD_LENGTH_WITH_SPACE;
-  const msPerChar = 60000 / charsPerMinute;
+  const msPerWord = 60000 / wpm;
 
-  // Calculate effective character count including implicit spaces
-  // Single words: add 1 for trailing space
-  // Multi-word: spaces are already in text, add 1 for final trailing space
-  const effectiveChars = chunk.text.length + 1;
+  // Break chunks (paragraph markers) use character-based pause
+  if (chunk.wordCount === 0) {
+    const charsPerMinute = wpm * AVG_WORD_LENGTH_WITH_SPACE;
+    const msPerChar = 60000 / charsPerMinute;
+    return (chunk.text.length + 1) * msPerChar;
+  }
 
-  return effectiveChars * msPerChar;
+  return chunk.wordCount * msPerWord;
 }
 
 /**

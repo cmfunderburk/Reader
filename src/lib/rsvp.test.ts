@@ -6,17 +6,17 @@ import type { Chunk } from '../types';
 // Constants matching rsvp.ts
 const AVG_WORD_LENGTH_WITH_SPACE = 5.8;
 const DEFAULT_WPM = 400;
+const MS_PER_WORD = 60000 / DEFAULT_WPM; // 150ms at 400 WPM
 
-// Derived values
-const CHARS_PER_MINUTE = DEFAULT_WPM * AVG_WORD_LENGTH_WITH_SPACE; // 2320
-const MS_PER_CHAR = 60000 / CHARS_PER_MINUTE; // ~25.86
+// For break chunks (character-based)
+const CHARS_PER_MINUTE = DEFAULT_WPM * AVG_WORD_LENGTH_WITH_SPACE;
+const MS_PER_CHAR = 60000 / CHARS_PER_MINUTE;
 
 function createChunk(text: string): Chunk {
   const isMultiWord = text.includes(' ');
   return {
     text,
     wordCount: text.split(/\s+/).filter(w => w.length > 0).length,
-    // Single word: 35% OVP, multi-word: center
     orpIndex: isMultiWord ? Math.floor(text.length / 2) : Math.floor(text.length * 0.35),
   };
 }
@@ -30,25 +30,28 @@ function createBreakChunk(): Chunk {
 }
 
 describe('calculateDisplayTime', () => {
-  describe('formula verification', () => {
-    it('uses formula: (charCount + 1) * msPerChar', () => {
-      const chunk = createChunk('test'); // 4 chars
+  describe('word-based timing', () => {
+    it('single word takes msPerWord time', () => {
+      const chunk = createChunk('test'); // 1 word
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      // (4 + 1) * 25.86... = 129.31...
-      const expected = (4 + 1) * MS_PER_CHAR;
-      expect(time).toBeCloseTo(expected, 5);
+      expect(time).toBeCloseTo(MS_PER_WORD, 5);
     });
 
-    it('adds 1 char for implicit trailing space', () => {
-      const chunk1 = createChunk('a'); // 1 char
-      const chunk2 = createChunk('ab'); // 2 chars
+    it('multi-word chunk takes wordCount * msPerWord', () => {
+      const chunk = createChunk('the quick brown'); // 3 words
+      const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      const time1 = calculateDisplayTime(chunk1, DEFAULT_WPM);
-      const time2 = calculateDisplayTime(chunk2, DEFAULT_WPM);
+      expect(time).toBeCloseTo(3 * MS_PER_WORD, 5);
+    });
 
-      // Difference should be exactly 1 char's worth of time
-      expect(time2 - time1).toBeCloseTo(MS_PER_CHAR, 5);
+    it('400 words at 400 WPM takes exactly 60 seconds', () => {
+      // Create a chunk with 400 words
+      const words = Array(400).fill('word').join(' ');
+      const chunk = createChunk(words);
+      const time = calculateDisplayTime(chunk, DEFAULT_WPM);
+
+      expect(time).toBeCloseTo(60000, 0);
     });
   });
 
@@ -73,7 +76,7 @@ describe('calculateDisplayTime', () => {
   });
 
   describe('break chunks', () => {
-    it('break chunks use same formula as regular chunks', () => {
+    it('break chunks use character-based timing', () => {
       const breakChunk = createBreakChunk(); // '· · ·' = 5 chars
       const time = calculateDisplayTime(breakChunk, DEFAULT_WPM);
 
@@ -89,22 +92,16 @@ describe('calculateDisplayTime', () => {
 });
 
 describe('exact WPM pacing at 400 WPM', () => {
-  it('2320 characters (400 words * 5.8) takes exactly 60 seconds', () => {
-    // 400 WPM * 5.8 chars/word = 2320 chars/minute
-    // But we need to account for +1 per chunk
-    // Single chunk of 2319 chars + 1 = 2320 effective chars
-    const chunk = createChunk('x'.repeat(2319));
+  it('1 word = 150ms', () => {
+    const chunk = createChunk('hello');
     const time = calculateDisplayTime(chunk, DEFAULT_WPM);
-
-    expect(time).toBeCloseTo(60000, 0); // within 1ms
+    expect(time).toBe(150);
   });
 
-  it('ms per effective char is exactly 60000/2320 at 400 WPM', () => {
-    const chunk = createChunk('test'); // 4 chars + 1 = 5 effective
+  it('10 words = 1.5 seconds', () => {
+    const chunk = createChunk('one two three four five six seven eight nine ten');
     const time = calculateDisplayTime(chunk, DEFAULT_WPM);
-
-    const msPerEffectiveChar = time / 5;
-    expect(msPerEffectiveChar).toBeCloseTo(MS_PER_CHAR, 5);
+    expect(time).toBe(1500);
   });
 });
 
@@ -126,13 +123,12 @@ describe('consistent WPM across chunk modes', () => {
       sum + calculateDisplayTime(c, DEFAULT_WPM), 0
     );
 
-    // All modes should be within 50ms of each other
-    expect(Math.abs(wordTime - phraseTime)).toBeLessThan(50);
-    expect(Math.abs(wordTime - clauseTime)).toBeLessThan(50);
-    expect(Math.abs(phraseTime - clauseTime)).toBeLessThan(50);
+    // With word-based timing, all modes should be exactly equal
+    expect(wordTime).toBe(phraseTime);
+    expect(wordTime).toBe(clauseTime);
   });
 
-  it('fewer chunks = slightly faster (fewer +1 overhead)', () => {
+  it('different chunk sizes produce same total time', () => {
     const text = `This is a test of the chunking system with multiple words.`;
 
     const wordChunks = tokenize(text, 'word');
@@ -145,10 +141,8 @@ describe('consistent WPM across chunk modes', () => {
       sum + calculateDisplayTime(c, DEFAULT_WPM), 0
     );
 
-    // Clause mode has fewer chunks, so less +1 overhead = faster
-    // But the difference should be small
-    expect(clauseTime).toBeLessThanOrEqual(wordTime);
-    expect(wordTime - clauseTime).toBeLessThan(wordChunks.length * MS_PER_CHAR);
+    // Should be exactly equal now
+    expect(wordTime).toBe(clauseTime);
   });
 });
 

@@ -66,7 +66,8 @@ function wrapParagraph(text: string, lineWidth: number): SaccadeLine[] {
 
 /**
  * Flow text into fixed-width lines using word wrapping.
- * Respects paragraph breaks and markdown headings.
+ * Respects paragraph breaks (double newlines) and markdown headings.
+ * Collapses single newlines into spaces to reflow ragged PDF extractions.
  */
 export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[] {
   const normalized = normalizeText(text);
@@ -82,26 +83,31 @@ export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
 
-    // Check if block is a heading (single line starting with #)
-    const blockLines = block.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    // Check if first line is a heading
+    const firstLine = block.split('\n')[0].trim();
+    const heading = detectHeading(firstLine);
 
-    for (const blockLine of blockLines) {
-      const heading = detectHeading(blockLine);
-
-      if (heading.isHeading) {
-        // Add blank line before heading (if not first)
-        if (lines.length > 0 && lines[lines.length - 1].type !== 'blank') {
-          lines.push({ text: '', type: 'blank' });
-        }
-        // Add the heading
-        lines.push({ text: heading.text, type: 'heading', level: heading.level });
-        // Add blank line after heading
+    if (heading.isHeading) {
+      // Add blank line before heading (if not first)
+      if (lines.length > 0 && lines[lines.length - 1].type !== 'blank') {
         lines.push({ text: '', type: 'blank' });
-      } else {
-        // Regular paragraph - word wrap it
-        const wrappedLines = wrapParagraph(blockLine, lineWidth);
+      }
+      // Add the heading
+      lines.push({ text: heading.text, type: 'heading', level: heading.level });
+      // Add blank line after heading
+      lines.push({ text: '', type: 'blank' });
+
+      // If there's more content after the heading line, process it as a paragraph
+      const restOfBlock = block.split('\n').slice(1).join(' ').trim();
+      if (restOfBlock.length > 0) {
+        const wrappedLines = wrapParagraph(restOfBlock, lineWidth);
         lines.push(...wrappedLines);
       }
+    } else {
+      // Regular paragraph - collapse newlines into spaces and word wrap
+      const paragraph = block.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      const wrappedLines = wrapParagraph(paragraph, lineWidth);
+      lines.push(...wrappedLines);
     }
 
     // Add blank line between blocks (not after last)
