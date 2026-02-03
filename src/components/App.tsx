@@ -8,6 +8,8 @@ import { AddContent } from './AddContent';
 import { FeedManager } from './FeedManager';
 import { Library } from './Library';
 import { LibrarySettings } from './LibrarySettings';
+import { PredictionReader } from './PredictionReader';
+import { PredictionStats } from './PredictionStats';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
@@ -42,7 +44,7 @@ export function App() {
 
   // Keyboard shortcuts
   useKeyboard({
-    onSpace: rsvp.toggle,
+    onSpace: rsvp.displayMode === 'prediction' ? undefined : rsvp.toggle,
     onLeft: rsvp.prev,
     onRight: rsvp.next,
     onBracketLeft: () => rsvp.setWpm(Math.max(100, rsvp.wpm - 50)),
@@ -164,21 +166,45 @@ export function App() {
       <main className="app-main">
         {view === 'reader' && (
           <>
-            <Reader
-              chunk={rsvp.currentChunk}
-              isPlaying={rsvp.isPlaying}
-              displayMode={rsvp.displayMode}
-              saccadePage={rsvp.currentSaccadePage}
-            />
+            {rsvp.displayMode === 'prediction' ? (
+              <div className="prediction-container">
+                <PredictionStats stats={rsvp.predictionStats} />
+                <PredictionReader
+                  chunks={rsvp.chunks}
+                  currentChunkIndex={rsvp.currentChunkIndex}
+                  onAdvance={rsvp.next}
+                  onPredictionResult={rsvp.handlePredictionResult}
+                  onReset={rsvp.resetPredictionStats}
+                  onClose={() => rsvp.setDisplayMode('rsvp')}
+                  stats={rsvp.predictionStats}
+                  wpm={rsvp.wpm}
+                  goToIndex={rsvp.goToIndex}
+                />
+              </div>
+            ) : (
+              <Reader
+                chunk={rsvp.currentChunk}
+                isPlaying={rsvp.isPlaying}
+                displayMode={rsvp.displayMode}
+                saccadePage={rsvp.currentSaccadePage}
+                showPacer={rsvp.showPacer}
+              />
+            )}
 
-            <ProgressBar progress={progress} onChange={handleProgressChange} />
+            {rsvp.displayMode !== 'prediction' && (
+              <ProgressBar progress={progress} onChange={handleProgressChange} />
+            )}
 
             <div className="article-info">
               {rsvp.article ? (
                 <>
                   <span className="article-title">{rsvp.article.title}</span>
                   <span className="article-meta">
-                    {rsvp.article.source} • {remainingTime} remaining • {rsvp.wpm} WPM
+                    {rsvp.displayMode === 'prediction' ? (
+                      `${rsvp.article.source} • ${rsvp.currentChunkIndex} / ${rsvp.chunks.length} words`
+                    ) : (
+                      `${rsvp.article.source} • ${remainingTime} remaining • ${rsvp.wpm} WPM`
+                    )}
                   </span>
                 </>
               ) : (
@@ -192,6 +218,9 @@ export function App() {
               mode={rsvp.mode}
               displayMode={rsvp.displayMode}
               customCharWidth={rsvp.customCharWidth}
+              showPacer={rsvp.showPacer}
+              currentPageIndex={rsvp.currentSaccadePageIndex}
+              totalPages={rsvp.saccadePages.length}
               onPlay={rsvp.play}
               onPause={rsvp.pause}
               onNext={rsvp.next}
@@ -202,6 +231,9 @@ export function App() {
               onModeChange={rsvp.setMode}
               onDisplayModeChange={rsvp.setDisplayMode}
               onCustomCharWidthChange={rsvp.setCustomCharWidth}
+              onShowPacerChange={rsvp.setShowPacer}
+              onNextPage={rsvp.nextPage}
+              onPrevPage={rsvp.prevPage}
             />
           </>
         )}

@@ -1226,3 +1226,210 @@ button {
   border-color: var(--accent);
   color: var(--text-primary);
 }
+
+/* Prediction Mode */
+.prediction-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 65ch;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.prediction-stats-bar {
+  display: flex;
+  gap: 2rem;
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.prediction-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.prediction-stat-value {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
+
+.prediction-stat-label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.prediction-reader {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.prediction-text-area {
+  flex: 1;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+  font-size: 1.25rem;
+  line-height: 1.8;
+  padding: 1rem;
+}
+
+.prediction-text {
+  color: var(--text-primary);
+}
+
+.prediction-input-container {
+  display: inline;
+  position: relative;
+}
+
+.prediction-hint-letter {
+  color: var(--text-primary);
+  opacity: 0.15;
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+}
+
+.prediction-input-inline {
+  display: inline;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--text-primary);
+  min-width: 1ch;
+  width: auto;
+  outline: none;
+  padding: 0;
+  caret-color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+
+.prediction-input-inline:focus {
+  outline: none;
+}
+
+.prediction-revealed {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.prediction-feedback {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+
+.loss-meter {
+  margin-bottom: 0.5rem;
+}
+
+.loss-bar {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.loss-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.loss-label {
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+}
+
+.prediction-comparison {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  margin: 0.5rem 0;
+}
+
+.prediction-you-said {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.prediction-actual {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.prediction-arrow {
+  color: var(--text-muted);
+}
+
+.prediction-continue-hint {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+  margin-top: 0.5rem;
+}
+
+.prediction-paragraph-break {
+  display: block;
+  height: 1em;
+}
+
+.prediction-complete {
+  text-align: center;
+  padding: 2rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.prediction-complete h2 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.prediction-complete-stats {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.prediction-complete-actions {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+/* Prediction Preview Mode */
+.prediction-preview-word {
+  opacity: 0.4;
+}
+
+.prediction-preview-current {
+  font-weight: 500;
+}
+
+.prediction-preview-orp {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.prediction-preview-badge {
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  text-align: center;
+  margin-top: 0.5rem;
+}
