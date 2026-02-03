@@ -7,6 +7,9 @@ interface ReaderControlsProps {
   mode: TokenMode;
   displayMode: DisplayMode;
   customCharWidth: number;
+  showPacer: boolean;
+  currentPageIndex: number;
+  totalPages: number;
   onPlay: () => void;
   onPause: () => void;
   onNext: () => void;
@@ -17,6 +20,9 @@ interface ReaderControlsProps {
   onModeChange: (mode: TokenMode) => void;
   onDisplayModeChange: (displayMode: DisplayMode) => void;
   onCustomCharWidthChange: (width: number) => void;
+  onShowPacerChange: (show: boolean) => void;
+  onNextPage: () => void;
+  onPrevPage: () => void;
 }
 
 export function ReaderControls({
@@ -25,6 +31,9 @@ export function ReaderControls({
   mode,
   displayMode,
   customCharWidth,
+  showPacer,
+  currentPageIndex,
+  totalPages,
   onPlay,
   onPause,
   onNext,
@@ -35,44 +44,55 @@ export function ReaderControls({
   onModeChange,
   onDisplayModeChange,
   onCustomCharWidthChange,
+  onShowPacerChange,
+  onNextPage,
+  onPrevPage,
 }: ReaderControlsProps) {
+  const isPrediction = displayMode === 'prediction';
+
   return (
     <div className="reader-controls">
-      <div className="controls-transport">
-        <button onClick={onReset} title="Skip to start" className="control-btn">
-          ⏮
-        </button>
-        <button onClick={onPrev} title="Previous chunk (←)" className="control-btn">
-          ⏪
-        </button>
-        <button
-          onClick={isPlaying ? onPause : onPlay}
-          title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-          className="control-btn control-btn-primary"
-        >
-          {isPlaying ? '⏸ PAUSE' : '▶ PLAY'}
-        </button>
-        <button onClick={onNext} title="Next chunk (→)" className="control-btn">
-          ⏩
-        </button>
-        <button onClick={onSkipToEnd} title="Skip to end" className="control-btn">
-          ⏭
-        </button>
-      </div>
+      {/* Hide transport controls in prediction mode (user controls pace via typing) */}
+      {!isPrediction && (
+        <div className="controls-transport">
+          <button onClick={onReset} title="Skip to start" className="control-btn">
+            ⏮
+          </button>
+          <button onClick={onPrev} title="Previous chunk (←)" className="control-btn">
+            ⏪
+          </button>
+          <button
+            onClick={isPlaying ? onPause : onPlay}
+            title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+            className="control-btn control-btn-primary"
+          >
+            {isPlaying ? '⏸ PAUSE' : '▶ PLAY'}
+          </button>
+          <button onClick={onNext} title="Next chunk (→)" className="control-btn">
+            ⏩
+          </button>
+          <button onClick={onSkipToEnd} title="Skip to end" className="control-btn">
+            ⏭
+          </button>
+        </div>
+      )}
 
       <div className="controls-settings">
-        <label className="control-group">
-          <span className="control-label">Speed:</span>
-          <select
-            value={wpm}
-            onChange={e => onWpmChange(Number(e.target.value))}
-            className="control-select"
-          >
-            {[100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800].map(v => (
-              <option key={v} value={v}>{v} WPM</option>
-            ))}
-          </select>
-        </label>
+        {/* Hide WPM in prediction mode (user controls pace via typing) */}
+        {!isPrediction && (
+          <label className="control-group">
+            <span className="control-label">Speed:</span>
+            <select
+              value={wpm}
+              onChange={e => onWpmChange(Number(e.target.value))}
+              className="control-select"
+            >
+              {[100, 150, 200, 250, 300, 350, 400, 450, 500, 600, 700, 800].map(v => (
+                <option key={v} value={v}>{v} WPM</option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="control-group">
           <span className="control-label">Display:</span>
@@ -83,24 +103,28 @@ export function ReaderControls({
           >
             <option value="rsvp">RSVP</option>
             <option value="saccade">Saccade</option>
+            <option value="prediction">Prediction</option>
           </select>
         </label>
 
-        <label className="control-group">
-          <span className="control-label">Chunks:</span>
-          <select
-            value={mode}
-            onChange={e => onModeChange(e.target.value as TokenMode)}
-            className="control-select"
-          >
-            <option value="word">Word</option>
-            <option value="phrase">Phrase (~{MODE_CHAR_WIDTHS.phrase}ch)</option>
-            <option value="clause">Clause (~{MODE_CHAR_WIDTHS.clause}ch)</option>
-            <option value="custom">Custom</option>
-          </select>
-        </label>
+        {/* Hide chunk mode in prediction mode (forced to word) */}
+        {!isPrediction && (
+          <label className="control-group">
+            <span className="control-label">Chunks:</span>
+            <select
+              value={mode}
+              onChange={e => onModeChange(e.target.value as TokenMode)}
+              className="control-select"
+            >
+              <option value="word">Word</option>
+              <option value="phrase">Phrase (~{MODE_CHAR_WIDTHS.phrase}ch)</option>
+              <option value="clause">Clause (~{MODE_CHAR_WIDTHS.clause}ch)</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+        )}
 
-        {mode === 'custom' && (
+        {mode === 'custom' && !isPrediction && (
           <label className="control-group">
             <span className="control-label">Width:</span>
             <input
@@ -114,7 +138,42 @@ export function ReaderControls({
             <span className="control-value">{customCharWidth}ch</span>
           </label>
         )}
+
+        {displayMode === 'saccade' && (
+          <label className="control-group control-checkbox">
+            <input
+              type="checkbox"
+              checked={showPacer}
+              onChange={e => onShowPacerChange(e.target.checked)}
+            />
+            <span className="control-label">Pacer</span>
+          </label>
+        )}
       </div>
+
+      {displayMode === 'saccade' && !showPacer && (
+        <div className="controls-page-nav">
+          <button
+            onClick={onPrevPage}
+            disabled={currentPageIndex <= 0}
+            className="control-btn"
+            title="Previous page"
+          >
+            ◀ Prev
+          </button>
+          <span className="page-indicator">
+            Page {currentPageIndex + 1} / {totalPages}
+          </span>
+          <button
+            onClick={onNextPage}
+            disabled={currentPageIndex >= totalPages - 1}
+            className="control-btn"
+            title="Next page"
+          >
+            Next ▶
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 // Display mode: how text is presented
-export type DisplayMode = 'rsvp' | 'saccade';
+export type DisplayMode = 'rsvp' | 'saccade' | 'prediction';
 
 // Token/chunk mode: how text is chunked
 export type TokenMode = 'word' | 'phrase' | 'clause' | 'custom';
@@ -21,6 +21,7 @@ export interface SaccadeLine {
 
 export interface SaccadePage {
   lines: SaccadeLine[];
+  lineChunks: Chunk[][];  // lineChunks[lineIndex] = chunks for that line
 }
 
 export interface SaccadePosition {
@@ -44,8 +45,24 @@ export interface Article {
   source: string;
   url?: string;
   addedAt: number;
-  readPosition: number; // chunk index
+  readPosition: number; // chunk index for RSVP/saccade
+  predictionPosition?: number; // word index for prediction mode
   isRead: boolean;
+}
+
+export interface PredictionResult {
+  predicted: string;      // what user typed
+  actual: string;         // correct word
+  loss: number;           // 0-1 normalized Levenshtein
+  timestamp: number;      // for pacing analysis
+  wordIndex: number;      // position in text
+}
+
+export interface PredictionStats {
+  totalWords: number;
+  exactMatches: number;
+  averageLoss: number;
+  history: PredictionResult[];  // full history for review/analysis
 }
 
 export interface Feed {

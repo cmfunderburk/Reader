@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { Chunk, TokenMode, Article, SaccadePage, DisplayMode } from '../types';
+import type { Chunk, TokenMode, Article, SaccadePage, DisplayMode, PredictionStats, PredictionResult } from '../types';
 import { tokenize } from '../lib/tokenizer';
 import { tokenizeSaccade } from '../lib/saccade';
 import { calculateDisplayTime } from '../lib/rsvp';
-import { updateArticlePosition } from '../lib/storage';
+import { updateArticlePosition, updateArticlePredictionPosition } from '../lib/storage';
+import { isExactMatch } from '../lib/levenshtein';
 
 interface UseRSVPOptions {
   initialWpm?: number;
@@ -25,6 +26,9 @@ interface UseRSVPReturn {
   article: Article | null;
   saccadePages: SaccadePage[];
   currentSaccadePage: SaccadePage | null;
+  currentSaccadePageIndex: number;
+  showPacer: boolean;
+  predictionStats: PredictionStats;
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -35,8 +39,13 @@ interface UseRSVPReturn {
   setMode: (mode: TokenMode) => void;
   setDisplayMode: (displayMode: DisplayMode) => void;
   setCustomCharWidth: (width: number) => void;
+  setShowPacer: (show: boolean) => void;
+  nextPage: () => void;
+  prevPage: () => void;
   loadArticle: (article: Article) => void;
   reset: () => void;
+  handlePredictionResult: (result: PredictionResult) => void;
+  resetPredictionStats: () => void;
 }
 
 export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
@@ -57,6 +66,13 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const [displayMode, setDisplayModeState] = useState<DisplayMode>(initialDisplayMode);
   const [customCharWidth, setCustomCharWidthState] = useState(initialCustomCharWidth);
   const [saccadePages, setSaccadePages] = useState<SaccadePage[]>([]);
+  const [showPacer, setShowPacer] = useState(true);
+  const [predictionStats, setPredictionStats] = useState<PredictionStats>({
+    totalWords: 0,
+    exactMatches: 0,
+    averageLoss: 0,
+    history: [],
+  });
 
   const timerRef = useRef<number | null>(null);
   const chunksRef = useRef<Chunk[]>(chunks);
@@ -66,6 +82,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const customCharWidthRef = useRef(customCharWidth);
   const displayModeRef = useRef(displayMode);
   const modeRef = useRef(mode);
+  const showPacerRef = useRef(showPacer);
 
   // Debug timing refs
   const debugStartTimeRef = useRef<number | null>(null);
@@ -77,6 +94,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const playStartTimeRef = useRef<number>(0); // When playback started
   const isFirstScheduleRef = useRef<boolean>(false); // Track first schedule after play
 
+  // Prediction mode position tracking (word index, separate from RSVP/saccade)
+  const predictionWordIndexRef = useRef<number>(0);
+
   // Keep refs in sync with state
   useEffect(() => { chunksRef.current = chunks; }, [chunks]);
   useEffect(() => { indexRef.current = currentChunkIndex; }, [currentChunkIndex]);
@@ -85,6 +105,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   useEffect(() => { customCharWidthRef.current = customCharWidth; }, [customCharWidth]);
   useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  useEffect(() => { showPacerRef.current = showPacer; }, [showPacer]);
 
   // Clear timer helper
   const clearTimer = useCallback(() => {
@@ -107,6 +128,10 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     if (dm === 'saccade') {
       const result = tokenizeSaccade(content, tm, tm === 'custom' ? charWidth : undefined);
       return { chunks: result.chunks, pages: result.pages };
+    } else if (dm === 'prediction') {
+      // Prediction mode always uses word tokenization
+      const newChunks = tokenize(content, 'word');
+      return { chunks: newChunks, pages: [] };
     } else {
       const newChunks = tokenize(content, tm, tm === 'custom' ? charWidth : undefined);
       return { chunks: newChunks, pages: [] };
@@ -199,15 +224,17 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   }, [clearTimer, advanceToNext]);
 
   // Handle playback state changes
+  // In saccade mode, timer only runs if pacer is on; in RSVP mode, always run
   useEffect(() => {
-    if (isPlaying && chunks.length > 0) {
+    const shouldRunTimer = isPlaying && chunks.length > 0 && (displayMode !== 'saccade' || showPacer);
+    if (shouldRunTimer) {
       const isFirst = isFirstScheduleRef.current;
       isFirstScheduleRef.current = false;
       scheduleNext(isFirst);
     } else {
       clearTimer();
     }
-  }, [isPlaying, currentChunkIndex, chunks.length, scheduleNext, clearTimer]);
+  }, [isPlaying, currentChunkIndex, chunks.length, scheduleNext, clearTimer, displayMode, showPacer]);
 
   const play = useCallback(() => {
     if (chunks.length > 0 && currentChunkIndex < chunks.length) {
@@ -258,6 +285,35 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setCurrentChunkIndex(Math.max(0, Math.min(index, chunks.length - 1)));
   }, [chunks.length]);
 
+  // Page navigation for saccade mode (manual navigation when pacer is off)
+  const nextPage = useCallback(() => {
+    if (displayMode !== 'saccade' || saccadePages.length === 0) return;
+
+    const currentPageIndex = chunks[currentChunkIndex]?.saccade?.pageIndex ?? 0;
+    if (currentPageIndex >= saccadePages.length - 1) return;
+
+    // Find first chunk of next page
+    const nextPageIndex = currentPageIndex + 1;
+    const firstChunkOfNextPage = chunks.findIndex(c => c.saccade?.pageIndex === nextPageIndex);
+    if (firstChunkOfNextPage !== -1) {
+      setCurrentChunkIndex(firstChunkOfNextPage);
+    }
+  }, [displayMode, saccadePages.length, chunks, currentChunkIndex]);
+
+  const prevPage = useCallback(() => {
+    if (displayMode !== 'saccade' || saccadePages.length === 0) return;
+
+    const currentPageIndex = chunks[currentChunkIndex]?.saccade?.pageIndex ?? 0;
+    if (currentPageIndex <= 0) return;
+
+    // Find first chunk of previous page
+    const prevPageIndex = currentPageIndex - 1;
+    const firstChunkOfPrevPage = chunks.findIndex(c => c.saccade?.pageIndex === prevPageIndex);
+    if (firstChunkOfPrevPage !== -1) {
+      setCurrentChunkIndex(firstChunkOfPrevPage);
+    }
+  }, [displayMode, saccadePages.length, chunks, currentChunkIndex]);
+
   const handleSetMode = useCallback((newMode: TokenMode) => {
     setMode(newMode);
     if (article) {
@@ -278,21 +334,47 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   }, [article, displayMode, chunks.length, currentChunkIndex, retokenize]);
 
   const handleSetDisplayMode = useCallback((newDisplayMode: DisplayMode) => {
+    const prevDisplayMode = displayModeRef.current;
     setDisplayModeState(newDisplayMode);
+
     if (article) {
+      // Save prediction position when leaving prediction mode
+      if (prevDisplayMode === 'prediction') {
+        predictionWordIndexRef.current = indexRef.current;
+        updateArticlePredictionPosition(article.id, indexRef.current);
+      }
+
+      // Prediction mode forces word tokenization
+      const effectiveMode = newDisplayMode === 'prediction' ? 'word' : mode;
+
       const { chunks: newChunks, pages } = retokenize(
         article.content,
         newDisplayMode,
-        mode,
+        effectiveMode,
         customCharWidthRef.current
       );
       setSaccadePages(pages);
 
-      // Try to preserve approximate position
-      const progress = chunks.length > 0 ? currentChunkIndex / chunks.length : 0;
-      const newIndex = Math.floor(progress * newChunks.length);
+      if (newDisplayMode === 'prediction') {
+        // Entering prediction: load word index (from ref or localStorage)
+        const savedIndex = predictionWordIndexRef.current ||
+                           article.predictionPosition || 0;
+        setCurrentChunkIndex(Math.min(savedIndex, newChunks.length - 1));
+        // Reset stats when entering prediction mode
+        setPredictionStats({
+          totalWords: 0,
+          exactMatches: 0,
+          averageLoss: 0,
+          history: [],
+        });
+      } else {
+        // Entering RSVP/Saccade: use ratio-based mapping
+        const progress = chunks.length > 0 ? currentChunkIndex / chunks.length : 0;
+        const newIndex = Math.floor(progress * newChunks.length);
+        setCurrentChunkIndex(Math.min(newIndex, newChunks.length - 1));
+      }
+
       setChunks(newChunks);
-      setCurrentChunkIndex(Math.min(newIndex, newChunks.length - 1));
     }
   }, [article, mode, chunks.length, currentChunkIndex, retokenize]);
 
@@ -338,12 +420,45 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setCurrentChunkIndex(0);
   }, [pause]);
 
+  // Prediction mode handlers
+  const handlePredictionResult = useCallback((result: PredictionResult) => {
+    setPredictionStats(prev => {
+      const newHistory = [...prev.history, result];
+      const totalWords = prev.totalWords + 1;
+      const correct = isExactMatch(result.predicted, result.actual);
+      const exactMatches = prev.exactMatches + (correct ? 1 : 0);
+      const totalLoss = prev.averageLoss * prev.totalWords + result.loss;
+
+      return {
+        totalWords,
+        exactMatches,
+        averageLoss: totalWords > 0 ? totalLoss / totalWords : 0,
+        history: newHistory,
+      };
+    });
+  }, []);
+
+  const resetPredictionStats = useCallback(() => {
+    setPredictionStats({
+      totalWords: 0,
+      exactMatches: 0,
+      averageLoss: 0,
+      history: [],
+    });
+    setCurrentChunkIndex(0);
+  }, []);
+
   // Compute current saccade page
   const currentChunk = chunks[currentChunkIndex] ?? null;
+  const currentSaccadePageIndex = useMemo(() => {
+    if (displayMode !== 'saccade' || !currentChunk?.saccade) return 0;
+    return currentChunk.saccade.pageIndex;
+  }, [displayMode, currentChunk]);
+
   const currentSaccadePage = useMemo(() => {
-    if (displayMode !== 'saccade' || !currentChunk?.saccade) return null;
-    return saccadePages[currentChunk.saccade.pageIndex] ?? null;
-  }, [displayMode, saccadePages, currentChunk]);
+    if (displayMode !== 'saccade') return null;
+    return saccadePages[currentSaccadePageIndex] ?? null;
+  }, [displayMode, saccadePages, currentSaccadePageIndex]);
 
   return {
     chunks,
@@ -357,6 +472,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     article,
     saccadePages,
     currentSaccadePage,
+    currentSaccadePageIndex,
+    showPacer,
+    predictionStats,
     play,
     pause,
     toggle,
@@ -367,7 +485,12 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setMode: handleSetMode,
     setDisplayMode: handleSetDisplayMode,
     setCustomCharWidth,
+    setShowPacer,
+    nextPage,
+    prevPage,
     loadArticle,
     reset,
+    handlePredictionResult,
+    resetPredictionStats,
   };
 }

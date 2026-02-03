@@ -14,7 +14,7 @@ interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   defaultWpm: 400,
-  defaultMode: 'phrase',
+  defaultMode: 'word',
   customCharWidth: 30,
 };
 
@@ -83,6 +83,18 @@ export function updateArticlePosition(articleId: string, position: number): void
   const index = articles.findIndex(a => a.id === articleId);
   if (index !== -1) {
     articles[index].readPosition = position;
+    saveArticles(articles);
+  }
+}
+
+/**
+ * Update prediction position for an article (separate from RSVP/saccade position).
+ */
+export function updateArticlePredictionPosition(articleId: string, position: number): void {
+  const articles = loadArticles();
+  const index = articles.findIndex(a => a.id === articleId);
+  if (index !== -1) {
+    articles[index].predictionPosition = position;
     saveArticles(articles);
   }
 }
