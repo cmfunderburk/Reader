@@ -126,7 +126,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     charWidth: number
   ): { chunks: Chunk[]; pages: SaccadePage[] } => {
     if (dm === 'saccade') {
-      const result = tokenizeSaccade(content, tm, tm === 'custom' ? charWidth : undefined);
+      const result = tokenizeSaccade(content);
       return { chunks: result.chunks, pages: result.pages };
     } else if (dm === 'prediction') {
       // Prediction mode always uses word tokenization

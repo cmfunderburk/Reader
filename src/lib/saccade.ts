@@ -1,14 +1,7 @@
-import type { Chunk, SaccadePage, SaccadeLine, TokenMode } from '../types';
-import { MODE_CHAR_WIDTHS } from '../types';
-import { calculateORP } from './tokenizer';
+import type { Chunk, SaccadePage, SaccadeLine } from '../types';
 
 export const SACCADE_LINE_WIDTH = 80;
 export const SACCADE_LINES_PER_PAGE = 10;
-
-// Major punctuation that always ends a chunk
-const MAJOR_PUNCTUATION = /[.!?;]/;
-// Minor punctuation that can end a chunk
-const MINOR_PUNCTUATION = /[,:\-—–]/;
 
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
@@ -123,10 +116,10 @@ export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[
 }
 
 /**
- * Group lines into pages.
+ * Group lines into raw pages.
  */
-export function groupIntoPages(lines: SaccadeLine[], linesPerPage: number): SaccadePage[] {
-  const pages: SaccadePage[] = [];
+function groupIntoPages(lines: SaccadeLine[], linesPerPage: number): { lines: SaccadeLine[] }[] {
+  const pages: { lines: SaccadeLine[] }[] = [];
 
   for (let i = 0; i < lines.length; i += linesPerPage) {
     pages.push({
@@ -138,217 +131,61 @@ export function groupIntoPages(lines: SaccadeLine[], linesPerPage: number): Sacc
 }
 
 /**
- * Check if a word ends with major punctuation.
+ * Count words in a string.
  */
-function endsWithMajorPunctuation(word: string): boolean {
-  return MAJOR_PUNCTUATION.test(word[word.length - 1]);
-}
-
-/**
- * Check if a word ends with minor punctuation.
- */
-function endsWithMinorPunctuation(word: string): boolean {
-  return MINOR_PUNCTUATION.test(word[word.length - 1]);
-}
-
-/**
- * Tokenize a single line into word-by-word chunks.
- */
-function tokenizeLineWordMode(
-  line: string,
-  lineIndex: number,
-  pageIndex: number
-): Chunk[] {
-  if (line.trim().length === 0) {
-    return [];
-  }
-
-  const chunks: Chunk[] = [];
-
-  // Match words with their positions
-  const wordRegex = /\S+/g;
-  let match;
-
-  while ((match = wordRegex.exec(line)) !== null) {
-    const word = match[0];
-    const startChar = match.index;
-    const endChar = startChar + word.length;
-
-    chunks.push({
-      text: word,
-      wordCount: 1,
-      orpIndex: calculateORP(word),
-      saccade: {
-        pageIndex,
-        lineIndex,
-        startChar,
-        endChar,
-      },
-    });
-  }
-
-  return chunks;
-}
-
-/**
- * Tokenize a single line into chunks with position metadata.
- */
-function tokenizeLineByCharWidth(
-  line: string,
-  lineIndex: number,
-  pageIndex: number,
-  charWidth: number
-): Chunk[] {
-  // Skip empty lines (paragraph breaks)
-  if (line.trim().length === 0) {
-    return [];
-  }
-
-  const words = line.split(/\s+/).filter(w => w.length > 0);
-  const chunks: Chunk[] = [];
-
-  let currentWords: string[] = [];
-  let currentStartChar = 0;
-  let currentLength = 0;
-
-  // Track position within the original line
-  let linePos = 0;
-
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i];
-
-    // Find where this word starts in the original line
-    const wordStart = line.indexOf(word, linePos);
-    if (i === 0) {
-      currentStartChar = wordStart;
-    }
-
-    const wouldBeLength = currentLength + (currentWords.length > 0 ? 1 : 0) + word.length;
-
-    // If adding this word exceeds max and we have content, flush first
-    if (wouldBeLength > charWidth && currentWords.length > 0) {
-      const chunkText = currentWords.join(' ');
-      const endChar = currentStartChar + chunkText.length;
-
-      chunks.push({
-        text: chunkText,
-        wordCount: currentWords.length,
-        orpIndex: calculateORP(chunkText),
-        saccade: {
-          pageIndex,
-          lineIndex,
-          startChar: currentStartChar,
-          endChar,
-        },
-      });
-
-      currentWords = [];
-      currentLength = 0;
-      currentStartChar = wordStart;
-    }
-
-    // Add word to current chunk
-    currentWords.push(word);
-    currentLength = currentWords.join(' ').length;
-    linePos = wordStart + word.length;
-
-    // Check for punctuation-based breaks
-    const hitMajorPunct = endsWithMajorPunctuation(word);
-    const hitMinorPunct = endsWithMinorPunctuation(word);
-    const atGoodBreakPoint = currentLength >= charWidth * 0.6;
-
-    // Break on major punctuation, or minor punctuation if past 60% of target
-    if (hitMajorPunct || (hitMinorPunct && atGoodBreakPoint)) {
-      const chunkText = currentWords.join(' ');
-      const endChar = currentStartChar + chunkText.length;
-
-      chunks.push({
-        text: chunkText,
-        wordCount: currentWords.length,
-        orpIndex: calculateORP(chunkText),
-        saccade: {
-          pageIndex,
-          lineIndex,
-          startChar: currentStartChar,
-          endChar,
-        },
-      });
-
-      currentWords = [];
-      currentLength = 0;
-      // Next chunk starts after the space following this word
-      currentStartChar = linePos + 1;
-    }
-  }
-
-  // Flush remaining words
-  if (currentWords.length > 0) {
-    const chunkText = currentWords.join(' ');
-    const endChar = currentStartChar + chunkText.length;
-
-    chunks.push({
-      text: chunkText,
-      wordCount: currentWords.length,
-      orpIndex: calculateORP(chunkText),
-      saccade: {
-        pageIndex,
-        lineIndex,
-        startChar: currentStartChar,
-        endChar,
-      },
-    });
-  }
-
-  return chunks;
-}
-
-/**
- * Tokenize a line based on mode.
- */
-function tokenizeLine(
-  line: string,
-  lineIndex: number,
-  pageIndex: number,
-  mode: TokenMode,
-  customCharWidth?: number
-): Chunk[] {
-  if (mode === 'word') {
-    return tokenizeLineWordMode(line, lineIndex, pageIndex);
-  }
-
-  const charWidth = mode === 'custom'
-    ? (customCharWidth ?? MODE_CHAR_WIDTHS.custom)
-    : MODE_CHAR_WIDTHS[mode];
-
-  return tokenizeLineByCharWidth(line, lineIndex, pageIndex, charWidth);
+function countWords(text: string): number {
+  return text.split(/\s+/).filter(w => w.length > 0).length;
 }
 
 /**
  * Tokenize text for saccade mode.
- * Returns both the pages (for display) and a flat array of chunks (for playback).
+ * Returns pages (for display) and a flat array of chunks (for playback timer).
  *
- * @param text - The article content
- * @param chunkMode - Token mode for chunking (word/phrase/clause/custom)
- * @param customCharWidth - Custom character width (only used when chunkMode is 'custom')
+ * Each non-blank line produces exactly one chunk. The timer advances line-by-line,
+ * and the sweep animation duration is derived from each chunk's display time.
  */
 export function tokenizeSaccade(
-  text: string,
-  chunkMode: TokenMode = 'phrase',
-  customCharWidth?: number
+  text: string
 ): { pages: SaccadePage[]; chunks: Chunk[] } {
   const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
-  const pages = groupIntoPages(lines, SACCADE_LINES_PER_PAGE);
+  const rawPages = groupIntoPages(lines, SACCADE_LINES_PER_PAGE);
 
   const allChunks: Chunk[] = [];
+  const pages: SaccadePage[] = [];
 
-  for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-    const page = pages[pageIndex];
+  for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
+    const rawPage = rawPages[pageIndex];
+    const pageLineChunks: Chunk[][] = [];
 
-    for (let lineIndex = 0; lineIndex < page.lines.length; lineIndex++) {
-      const line = page.lines[lineIndex];
-      const lineChunks = tokenizeLine(line.text, lineIndex, pageIndex, chunkMode, customCharWidth);
-      allChunks.push(...lineChunks);
+    for (let lineIndex = 0; lineIndex < rawPage.lines.length; lineIndex++) {
+      const line = rawPage.lines[lineIndex];
+
+      // Blank lines produce no chunks
+      if (line.type === 'blank' || line.text.trim().length === 0) {
+        pageLineChunks.push([]);
+        continue;
+      }
+
+      const chunk: Chunk = {
+        text: line.text,
+        wordCount: countWords(line.text),
+        orpIndex: 0,
+        saccade: {
+          pageIndex,
+          lineIndex,
+          startChar: 0,
+          endChar: line.text.length,
+        },
+      };
+
+      pageLineChunks.push([chunk]);
+      allChunks.push(chunk);
     }
+
+    pages.push({
+      lines: rawPage.lines,
+      lineChunks: pageLineChunks,
+    });
   }
 
   return { pages, chunks: allChunks };
