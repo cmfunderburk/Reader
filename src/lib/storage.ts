@@ -1,4 +1,4 @@
-import type { Article, Feed, TokenMode } from '../types';
+import type { Article, Feed, TokenMode, PredictionLineWidth } from '../types';
 
 const STORAGE_KEYS = {
   articles: 'speedread_articles',
@@ -6,16 +6,24 @@ const STORAGE_KEYS = {
   settings: 'speedread_settings',
 } as const;
 
-interface Settings {
+export interface Settings {
   defaultWpm: number;
   defaultMode: TokenMode;
   customCharWidth: number;
+  rsvpFontSize: number;
+  saccadeFontSize: number;
+  predictionFontSize: number;
+  predictionLineWidth: PredictionLineWidth;
 }
 
 const DEFAULT_SETTINGS: Settings = {
   defaultWpm: 400,
   defaultMode: 'word',
   customCharWidth: 30,
+  rsvpFontSize: 2.5,
+  saccadeFontSize: 1.0,
+  predictionFontSize: 1.25,
+  predictionLineWidth: 'medium',
 };
 
 /**

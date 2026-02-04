@@ -8,16 +8,19 @@ import { AddContent } from './AddContent';
 import { FeedManager } from './FeedManager';
 import { Library } from './Library';
 import { LibrarySettings } from './LibrarySettings';
+import { SettingsPanel } from './SettingsPanel';
 import { PredictionReader } from './PredictionReader';
 import { PredictionStats } from './PredictionStats';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
-import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings } from '../lib/storage';
+import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings, saveSettings } from '../lib/storage';
+import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
 import type { Article, Feed, TokenMode } from '../types';
+import { PREDICTION_LINE_WIDTHS } from '../types';
 
-type View = 'reader' | 'preview' | 'add' | 'library-settings';
+type View = 'reader' | 'preview' | 'add' | 'library-settings' | 'settings';
 
 // Check if we're in import mode (opened from bookmarklet)
 function getInitialView(): View {
@@ -26,7 +29,8 @@ function getInitialView(): View {
 }
 
 export function App() {
-  const settings = loadSettings();
+  const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
+  const settings = displaySettings;
   const [articles, setArticles] = useState<Article[]>(() => loadArticles());
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
   const [view, setView] = useState<View>(getInitialView);
@@ -146,6 +150,11 @@ export function App() {
     }
   }, [feeds, articles]);
 
+  const handleSettingsChange = useCallback((newSettings: Settings) => {
+    setDisplaySettings(newSettings);
+    saveSettings(newSettings);
+  }, []);
+
   const handleProgressChange = useCallback((progress: number) => {
     const newIndex = Math.floor((progress / 100) * rsvp.chunks.length);
     rsvp.goToIndex(newIndex);
@@ -158,9 +167,15 @@ export function App() {
   const progress = calculateProgress(rsvp.currentChunkIndex, rsvp.chunks.length);
 
   return (
-    <div className="app">
+    <div className="app" style={{
+      '--rsvp-font-size': `${displaySettings.rsvpFontSize}rem`,
+      '--saccade-font-size': `${displaySettings.saccadeFontSize}rem`,
+      '--prediction-font-size': `${displaySettings.predictionFontSize}rem`,
+      '--prediction-line-width': `${PREDICTION_LINE_WIDTHS[displaySettings.predictionLineWidth]}ch`,
+    } as React.CSSProperties}>
       <header className="app-header">
         <h1>SpeedRead</h1>
+        <button className="settings-gear-btn" onClick={() => setView('settings')} title="Display settings">&#9881;</button>
       </header>
 
       <main className="app-main">
@@ -257,6 +272,14 @@ export function App() {
 
         {view === 'library-settings' && (
           <LibrarySettings onClose={() => setView('reader')} />
+        )}
+
+        {view === 'settings' && (
+          <SettingsPanel
+            settings={displaySettings}
+            onSettingsChange={handleSettingsChange}
+            onClose={() => setView('reader')}
+          />
         )}
       </main>
 

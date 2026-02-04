@@ -11,6 +11,14 @@ export const MODE_CHAR_WIDTHS: Record<Exclude<TokenMode, 'word'>, number> = {
   custom: 30, // default for custom, overridden by user setting
 };
 
+export type PredictionLineWidth = 'narrow' | 'medium' | 'wide';
+
+export const PREDICTION_LINE_WIDTHS: Record<PredictionLineWidth, number> = {
+  narrow: 50,
+  medium: 65,
+  wide: 85,
+};
+
 export type SaccadeLineType = 'body' | 'heading' | 'blank';
 
 export interface SaccadeLine {
