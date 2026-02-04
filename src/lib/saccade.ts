@@ -1,7 +1,7 @@
 import type { Chunk, SaccadePage, SaccadeLine } from '../types';
 
 export const SACCADE_LINE_WIDTH = 80;
-export const SACCADE_LINES_PER_PAGE = 10;
+export const SACCADE_LINES_PER_PAGE = 15;
 
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
@@ -145,10 +145,11 @@ function countWords(text: string): number {
  * and the sweep animation duration is derived from each chunk's display time.
  */
 export function tokenizeSaccade(
-  text: string
+  text: string,
+  linesPerPage: number = SACCADE_LINES_PER_PAGE
 ): { pages: SaccadePage[]; chunks: Chunk[] } {
   const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
-  const rawPages = groupIntoPages(lines, SACCADE_LINES_PER_PAGE);
+  const rawPages = groupIntoPages(lines, linesPerPage);
 
   const allChunks: Chunk[] = [];
   const pages: SaccadePage[] = [];
@@ -197,10 +198,11 @@ export function tokenizeSaccade(
  * so the user can type each word individually.
  */
 export function tokenizeRecall(
-  text: string
+  text: string,
+  linesPerPage: number = SACCADE_LINES_PER_PAGE
 ): { pages: SaccadePage[]; chunks: Chunk[] } {
   const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
-  const rawPages = groupIntoPages(lines, SACCADE_LINES_PER_PAGE);
+  const rawPages = groupIntoPages(lines, linesPerPage);
 
   const allChunks: Chunk[] = [];
   const pages: SaccadePage[] = [];

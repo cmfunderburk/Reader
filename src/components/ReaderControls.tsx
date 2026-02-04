@@ -8,6 +8,7 @@ interface ReaderControlsProps {
   displayMode: DisplayMode;
   customCharWidth: number;
   showPacer: boolean;
+  linesPerPage: number;
   currentPageIndex: number;
   totalPages: number;
   onPlay: () => void;
@@ -21,6 +22,7 @@ interface ReaderControlsProps {
   onDisplayModeChange: (displayMode: DisplayMode) => void;
   onCustomCharWidthChange: (width: number) => void;
   onShowPacerChange: (show: boolean) => void;
+  onLinesPerPageChange: (lines: number) => void;
   onNextPage: () => void;
   onPrevPage: () => void;
 }
@@ -32,6 +34,7 @@ export function ReaderControls({
   displayMode,
   customCharWidth,
   showPacer,
+  linesPerPage,
   currentPageIndex,
   totalPages,
   onPlay,
@@ -45,6 +48,7 @@ export function ReaderControls({
   onDisplayModeChange,
   onCustomCharWidthChange,
   onShowPacerChange,
+  onLinesPerPageChange,
   onNextPage,
   onPrevPage,
 }: ReaderControlsProps) {
@@ -150,6 +154,22 @@ export function ReaderControls({
               onChange={e => onShowPacerChange(e.target.checked)}
             />
             <span className="control-label">Pacer</span>
+          </label>
+        )}
+
+        {(displayMode === 'saccade' || displayMode === 'recall') && (
+          <label className="control-group">
+            <span className="control-label">Lines:</span>
+            <input
+              type="range"
+              min="5"
+              max="30"
+              step="1"
+              value={linesPerPage}
+              onChange={e => onLinesPerPageChange(Number(e.target.value))}
+              className="control-slider"
+            />
+            <span className="control-value">{linesPerPage}</span>
           </label>
         )}
       </div>

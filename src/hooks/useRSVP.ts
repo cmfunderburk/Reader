@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Chunk, TokenMode, Article, SaccadePage, DisplayMode, PredictionStats, PredictionResult } from '../types';
 import { tokenize } from '../lib/tokenizer';
-import { tokenizeSaccade, tokenizeRecall } from '../lib/saccade';
+import { tokenizeSaccade, tokenizeRecall, SACCADE_LINES_PER_PAGE } from '../lib/saccade';
 import { calculateDisplayTime } from '../lib/rsvp';
 import { updateArticlePosition, updateArticlePredictionPosition } from '../lib/storage';
 import { isExactMatch } from '../lib/levenshtein';
@@ -28,6 +28,7 @@ interface UseRSVPReturn {
   currentSaccadePage: SaccadePage | null;
   currentSaccadePageIndex: number;
   showPacer: boolean;
+  linesPerPage: number;
   predictionStats: PredictionStats;
   play: () => void;
   pause: () => void;
@@ -40,6 +41,7 @@ interface UseRSVPReturn {
   setDisplayMode: (displayMode: DisplayMode) => void;
   setCustomCharWidth: (width: number) => void;
   setShowPacer: (show: boolean) => void;
+  setLinesPerPage: (lines: number) => void;
   nextPage: () => void;
   prevPage: () => void;
   loadArticle: (article: Article) => void;
@@ -67,6 +69,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const [customCharWidth, setCustomCharWidthState] = useState(initialCustomCharWidth);
   const [saccadePages, setSaccadePages] = useState<SaccadePage[]>([]);
   const [showPacer, setShowPacer] = useState(true);
+  const [linesPerPage, setLinesPerPageState] = useState(SACCADE_LINES_PER_PAGE);
   const [predictionStats, setPredictionStats] = useState<PredictionStats>({
     totalWords: 0,
     exactMatches: 0,
@@ -83,6 +86,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const displayModeRef = useRef(displayMode);
   const modeRef = useRef(mode);
   const showPacerRef = useRef(showPacer);
+  const linesPerPageRef = useRef(linesPerPage);
 
   // Debug timing refs
   const debugStartTimeRef = useRef<number | null>(null);
@@ -106,6 +110,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   useEffect(() => { displayModeRef.current = displayMode; }, [displayMode]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   useEffect(() => { showPacerRef.current = showPacer; }, [showPacer]);
+  useEffect(() => { linesPerPageRef.current = linesPerPage; }, [linesPerPage]);
 
   // Clear timer helper
   const clearTimer = useCallback(() => {
@@ -123,13 +128,14 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     content: string,
     dm: DisplayMode,
     tm: TokenMode,
-    charWidth: number
+    charWidth: number,
+    pageLines: number = SACCADE_LINES_PER_PAGE
   ): { chunks: Chunk[]; pages: SaccadePage[] } => {
     if (dm === 'saccade') {
-      const result = tokenizeSaccade(content);
+      const result = tokenizeSaccade(content, pageLines);
       return { chunks: result.chunks, pages: result.pages };
     } else if (dm === 'recall') {
-      const result = tokenizeRecall(content);
+      const result = tokenizeRecall(content, pageLines);
       return { chunks: result.chunks, pages: result.pages };
     } else if (dm === 'prediction') {
       // Prediction mode always uses word tokenization
@@ -325,7 +331,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
         article.content,
         displayMode,
         newMode,
-        customCharWidthRef.current
+        customCharWidthRef.current,
+        linesPerPageRef.current
       );
       setSaccadePages(pages);
 
@@ -355,7 +362,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
         article.content,
         newDisplayMode,
         effectiveMode,
-        customCharWidthRef.current
+        customCharWidthRef.current,
+        linesPerPageRef.current
       );
       setSaccadePages(pages);
 
@@ -398,7 +406,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
         article.content,
         displayMode,
         'custom',
-        width
+        width,
+        linesPerPageRef.current
       );
       setSaccadePages(pages);
 
@@ -410,6 +419,25 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     }
   }, [article, mode, displayMode, chunks.length, currentChunkIndex, retokenize]);
 
+  const setLinesPerPage = useCallback((lines: number) => {
+    setLinesPerPageState(lines);
+    if (article && (displayMode === 'saccade' || displayMode === 'recall')) {
+      const { chunks: newChunks, pages } = retokenize(
+        article.content,
+        displayMode,
+        mode,
+        customCharWidthRef.current,
+        lines
+      );
+      setSaccadePages(pages);
+
+      const progress = chunks.length > 0 ? currentChunkIndex / chunks.length : 0;
+      const newIndex = Math.floor(progress * newChunks.length);
+      setChunks(newChunks);
+      setCurrentChunkIndex(Math.min(newIndex, newChunks.length - 1));
+    }
+  }, [article, displayMode, mode, chunks.length, currentChunkIndex, retokenize]);
+
   const loadArticle = useCallback((newArticle: Article) => {
     pause();
     setArticle(newArticle);
@@ -418,7 +446,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       newArticle.content,
       displayModeRef.current,
       modeRef.current,
-      customCharWidthRef.current
+      customCharWidthRef.current,
+      linesPerPageRef.current
     );
     setSaccadePages(pages);
     setChunks(newChunks);
@@ -487,6 +516,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     currentSaccadePage,
     currentSaccadePageIndex,
     showPacer,
+    linesPerPage,
     predictionStats,
     play,
     pause,
@@ -499,6 +529,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setDisplayMode: handleSetDisplayMode,
     setCustomCharWidth,
     setShowPacer,
+    setLinesPerPage,
     nextPage,
     prevPage,
     loadArticle,

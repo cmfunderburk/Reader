@@ -252,6 +252,7 @@ export function App() {
               displayMode={rsvp.displayMode}
               customCharWidth={rsvp.customCharWidth}
               showPacer={rsvp.showPacer}
+              linesPerPage={rsvp.linesPerPage}
               currentPageIndex={rsvp.currentSaccadePageIndex}
               totalPages={rsvp.saccadePages.length}
               onPlay={rsvp.play}
@@ -265,6 +266,7 @@ export function App() {
               onDisplayModeChange={rsvp.setDisplayMode}
               onCustomCharWidthChange={rsvp.setCustomCharWidth}
               onShowPacerChange={rsvp.setShowPacer}
+              onLinesPerPageChange={rsvp.setLinesPerPage}
               onNextPage={rsvp.nextPage}
               onPrevPage={rsvp.prevPage}
             />
