@@ -173,7 +173,7 @@ button {
 .saccade-line {
   display: block;
   min-height: 1.7em;
-  white-space: pre-wrap;
+  white-space: pre;
 }
 
 /* Saccade headings */
@@ -1551,8 +1551,9 @@ button {
 }
 
 .recall-scaffold-rest {
-  color: var(--text-muted);
-  opacity: 0.4;
+  color: transparent;
+  text-decoration: underline dotted rgba(255, 255, 255, 0.15);
+  text-underline-offset: 0.15em;
 }
 
 .recall-correct {
@@ -1566,6 +1567,7 @@ button {
 .recall-input-word {
   display: inline-block;
   position: relative;
+  vertical-align: baseline;
 }
 
 .recall-input-word .recall-scaffold-first,
@@ -1578,14 +1580,17 @@ button {
   left: 0;
   top: 0;
   width: 100%;
-  background: transparent;
+  height: 100%;
+  box-sizing: border-box;
+  background: rgba(233, 69, 96, 0.08);
   border: none;
-  border-bottom: 2px solid var(--accent);
   font-family: inherit;
   font-size: inherit;
+  line-height: inherit;
   color: var(--text-primary);
   outline: none;
   padding: 0;
+  margin: 0;
   caret-color: var(--accent);
 }
 

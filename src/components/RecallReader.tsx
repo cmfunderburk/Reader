@@ -302,11 +302,10 @@ function RecallLine({
       const word = chunk.text;
       const firstLetter = word[0] || '';
       const rest = word.slice(1);
-      const scaffold = rest.replace(/[^\s]/g, '\u00B7');
       elements.push(
         <span key={`word-${i}`} ref={inputContainerRef} className="recall-input-word">
           <span className="recall-scaffold-first">{firstLetter}</span>
-          <span className="recall-scaffold-rest">{scaffold}</span>
+          <span className="recall-scaffold-rest">{rest}</span>
           <input
             ref={inputRef}
             type="text"
@@ -323,16 +322,15 @@ function RecallLine({
         </span>
       );
     } else {
-      // Scaffold: first letter + dim placeholders
+      // Scaffold: first letter visible + rest transparent (preserves exact char widths)
       const word = chunk.text;
       const firstLetter = word[0] || '';
       const rest = word.slice(1);
-      const scaffold = rest.replace(/[^\s]/g, '\u00B7');
       const cls = isHeading ? 'saccade-heading' : '';
       elements.push(
         <span key={`word-${i}`} className={cls}>
           <span className="recall-scaffold-first">{firstLetter}</span>
-          <span className="recall-scaffold-rest">{scaffold}</span>
+          <span className="recall-scaffold-rest">{rest}</span>
         </span>
       );
     }
