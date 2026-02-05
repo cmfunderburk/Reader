@@ -1,5 +1,5 @@
 import type { Article } from '../types';
-import { tokenize, estimateReadingTime } from '../lib/tokenizer';
+import { estimateReadingTimeFromCharCount } from '../lib/rsvp';
 
 interface ArticleQueueProps {
   articles: Article[];
@@ -37,8 +37,9 @@ export function ArticleQueue({
           </div>
         ) : (
           articles.map(article => {
-            const chunks = tokenize(article.content, 'phrase');
-            const readTime = estimateReadingTime(chunks, wpm);
+            const fallbackCharCount = article.content ? article.content.replace(/\s/g, '').length : 0;
+            const charCount = article.charCount ?? fallbackCharCount;
+            const readTime = estimateReadingTimeFromCharCount(charCount, wpm);
             const isCurrent = article.id === currentArticleId;
 
             return (

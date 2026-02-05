@@ -1,5 +1,6 @@
 import type { Feed, Article } from '../types';
 import { generateId } from './storage';
+import { measureTextMetrics } from './textMetrics';
 
 interface FeedItem {
   title: string;
@@ -119,16 +120,21 @@ export async function fetchFeed(url: string): Promise<{ feed: Feed; articles: Ar
 
   const source = new URL(url).hostname.replace('www.', '');
 
-  const articles: Article[] = parsed.items.map(item => ({
-    id: generateId(),
-    title: item.title,
-    content: stripHtml(item.content),
-    source,
-    url: item.link,
-    addedAt: item.pubDate ? new Date(item.pubDate).getTime() : Date.now(),
-    readPosition: 0,
-    isRead: false,
-  }));
+  const articles: Article[] = parsed.items.map(item => {
+    const content = stripHtml(item.content);
+    const metrics = measureTextMetrics(content);
+    return {
+      id: generateId(),
+      title: item.title,
+      content,
+      source,
+      url: item.link,
+      addedAt: item.pubDate ? new Date(item.pubDate).getTime() : Date.now(),
+      readPosition: 0,
+      isRead: false,
+      ...metrics,
+    };
+  });
 
   return { feed, articles };
 }

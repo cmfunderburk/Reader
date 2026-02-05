@@ -56,6 +56,8 @@ export interface Article {
   readPosition: number; // chunk index for RSVP/saccade
   predictionPosition?: number; // word index for prediction mode
   isRead: boolean;
+  charCount?: number;
+  wordCount?: number;
 }
 
 export interface PredictionResult {
@@ -70,7 +72,6 @@ export interface PredictionStats {
   totalWords: number;
   exactMatches: number;
   averageLoss: number;
-  history: PredictionResult[];  // full history for review/analysis
 }
 
 export interface Feed {

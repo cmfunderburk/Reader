@@ -1,10 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { calculateDisplayTime, calculateRemainingTime, isBreakChunk, AVG_WORD_LENGTH } from './rsvp';
+import { calculateDisplayTime, calculateRemainingTime, isBreakChunk } from './rsvp';
 import type { Chunk } from '../types';
 
 const DEFAULT_WPM = 400;
-const CHARS_PER_MINUTE = DEFAULT_WPM * AVG_WORD_LENGTH; // 1920
-const MS_PER_CHAR = 60000 / CHARS_PER_MINUTE; // ~31.25ms
+const MS_PER_WORD = 60000 / DEFAULT_WPM; // 150ms
 
 function createChunk(text: string): Chunk {
   const isMultiWord = text.includes(' ');
@@ -23,45 +22,42 @@ function createBreakChunk(): Chunk {
   };
 }
 
-function nonSpaceChars(text: string): number {
-  return text.replace(/\s/g, '').length;
-}
-
 describe('calculateDisplayTime', () => {
-  describe('character-based timing', () => {
-    it('scales with character count, not word count', () => {
-      const shortWord = createChunk('I');              // 1 char
-      const longWord = createChunk('responsibilities'); // 16 chars
-
-      const shortTime = calculateDisplayTime(shortWord, DEFAULT_WPM);
-      const longTime = calculateDisplayTime(longWord, DEFAULT_WPM);
-
-      expect(longTime).toBeGreaterThan(shortTime);
-      expect(longTime).toBeCloseTo(16 * MS_PER_CHAR, 1);
-    });
-
-    it('average-length word (~5 chars) takes ~156ms at 400 WPM', () => {
-      const chunk = createChunk('hello'); // 5 chars
+  describe('word-based cadence', () => {
+    it('uses ms-per-word as the baseline for single words', () => {
+      const chunk = createChunk('river');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(5 * MS_PER_CHAR, 1);
+      expect(time).toBeCloseTo(MS_PER_WORD, 1);
     });
 
-    it('multi-word chunk uses total non-space character count', () => {
-      const chunk = createChunk('the quick brown'); // 13 non-space chars
-      const time = calculateDisplayTime(chunk, DEFAULT_WPM);
+    it('longer words take more time than very short words', () => {
+      const short = createChunk('go');
+      const medium = createChunk('running');
+      const long = createChunk('extraordinary');
 
-      expect(time).toBeCloseTo(nonSpaceChars('the quick brown') * MS_PER_CHAR, 1);
+      const shortTime = calculateDisplayTime(short, DEFAULT_WPM);
+      const mediumTime = calculateDisplayTime(medium, DEFAULT_WPM);
+      const longTime = calculateDisplayTime(long, DEFAULT_WPM);
+
+      expect(mediumTime).toBeGreaterThan(shortTime);
+      expect(longTime).toBeGreaterThan(mediumTime);
+      expect(longTime / shortTime).toBeGreaterThan(1.2);
     });
 
-    it('spaces do not contribute to display time', () => {
-      // Both have the same non-space chars but different spacing
-      const a = createChunk('ab cd');
-      const b = createChunk('abcd');
-      // b has wordCount 1, a has wordCount 2, but timing should be same
-      // (both 4 non-space chars, neither ends with punctuation)
-      expect(calculateDisplayTime(a, DEFAULT_WPM))
-        .toBeCloseTo(calculateDisplayTime(b, DEFAULT_WPM), 1);
+    it('phrase chunks land between single-word and sequential timing', () => {
+      const single = createChunk('alpha');
+      const twoWord = createChunk('alpha beta');
+      const threeWord = createChunk('alpha beta gamma');
+
+      const singleTime = calculateDisplayTime(single, DEFAULT_WPM);
+      const doubleTime = calculateDisplayTime(twoWord, DEFAULT_WPM);
+      const tripleTime = calculateDisplayTime(threeWord, DEFAULT_WPM);
+
+      expect(doubleTime).toBeGreaterThan(singleTime);
+      expect(doubleTime).toBeLessThan(singleTime * 2);
+      expect(tripleTime).toBeGreaterThan(doubleTime);
+      expect(tripleTime).toBeLessThan(singleTime * 3);
     });
   });
 
@@ -70,35 +66,40 @@ describe('calculateDisplayTime', () => {
       const chunk = createChunk('world.');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(nonSpaceChars('world.') * MS_PER_CHAR * 1.5, 1);
+      const base = calculateDisplayTime(createChunk('world'), DEFAULT_WPM);
+      expect(time / base).toBeCloseTo(1.5, 1);
     });
 
     it('adds 50% for question marks', () => {
       const chunk = createChunk('why?');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(nonSpaceChars('why?') * MS_PER_CHAR * 1.5, 1);
+      const base = calculateDisplayTime(createChunk('why'), DEFAULT_WPM);
+      expect(time / base).toBeCloseTo(1.5, 1);
     });
 
     it('adds 50% for exclamation marks', () => {
       const chunk = createChunk('wow!');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(nonSpaceChars('wow!') * MS_PER_CHAR * 1.5, 1);
+      const base = calculateDisplayTime(createChunk('wow'), DEFAULT_WPM);
+      expect(time / base).toBeCloseTo(1.5, 1);
     });
 
     it('adds 25% for comma', () => {
       const chunk = createChunk('however,');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(nonSpaceChars('however,') * MS_PER_CHAR * 1.25, 1);
+      const base = calculateDisplayTime(createChunk('however'), DEFAULT_WPM);
+      expect(time / base).toBeCloseTo(1.25, 1);
     });
 
     it('adds 25% for semicolon', () => {
       const chunk = createChunk('done;');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
-      expect(time).toBeCloseTo(nonSpaceChars('done;') * MS_PER_CHAR * 1.25, 1);
+      const base = calculateDisplayTime(createChunk('done'), DEFAULT_WPM);
+      expect(time / base).toBeCloseTo(1.25, 1);
     });
 
     it('no bonus for mid-chunk punctuation', () => {
@@ -106,24 +107,25 @@ describe('calculateDisplayTime', () => {
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
       // Apostrophe doesn't match end-of-chunk punctuation patterns
-      expect(time).toBeCloseTo(nonSpaceChars("don't stop") * MS_PER_CHAR, 1);
+      const base = calculateDisplayTime(createChunk("dont stop"), DEFAULT_WPM);
+      expect(time).toBeCloseTo(base, 1);
     });
   });
 
   describe('minimum display time', () => {
     it('enforces 80ms minimum for very short chunks', () => {
-      const chunk = createChunk('I'); // 1 char → ~31ms unclamped
-      const time = calculateDisplayTime(chunk, DEFAULT_WPM);
+      const chunk = createChunk('I');
+      const time = calculateDisplayTime(chunk, 2000); // extremely fast WPM to hit clamp
 
       expect(time).toBe(80);
     });
 
     it('does not clamp longer chunks', () => {
-      const chunk = createChunk('hello'); // 5 chars → ~156ms
+      const chunk = createChunk('hello');
       const time = calculateDisplayTime(chunk, DEFAULT_WPM);
 
       expect(time).toBeGreaterThan(80);
-      expect(time).toBeCloseTo(5 * MS_PER_CHAR, 1);
+      expect(time).toBeCloseTo(MS_PER_WORD, 1);
     });
   });
 
@@ -184,8 +186,7 @@ describe('pacing proportionality', () => {
     const midTime = calculateDisplayTime(midSentence, DEFAULT_WPM);
     const endTime = calculateDisplayTime(endSentence, DEFAULT_WPM);
 
-    // "end." (4 chars * 1.5x) should be much longer than "the" (3 chars * 1x)
-    expect(endTime / midTime).toBeGreaterThan(1.5);
+    expect(endTime / midTime).toBeCloseTo(1.5, 1);
   });
 });
 
