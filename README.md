@@ -1,173 +1,111 @@
-# SpeedRead
+# Reader
 
-An RSVP (Rapid Serial Visual Presentation) speed reading application. Read articles, PDFs, and EPUBs at 400+ words per minute by displaying text one word or phrase at a time.
+A reading training application. Load articles, books, and feeds, then practice with four modes designed to build different reading skills — from raw speed to deep comprehension and recall.
 
-## Features
+## Reading Modes
 
-- **RSVP Reader**: Display text word-by-word or phrase-by-phrase at configurable speeds (100-1000 WPM)
-- **Multiple Input Sources**:
-  - Paste text or URLs directly
-  - Add RSS feeds for article queues
-  - Load local PDFs and EPUBs (Electron app)
-- **Reading Modes**: Single word, short phrases (~15 chars), or longer phrases (~25 chars)
-- **Smart Chunking**: Respects sentence boundaries and punctuation for natural reading flow
-- **Progress Tracking**: Visual progress bar and chunk counter
-- **Keyboard Controls**: Full keyboard navigation for hands-free reading
+### RSVP
 
-## Installation
+Rapid Serial Visual Presentation. Words or short phrases are displayed one at a time at the center of the screen, with the optimal recognition point (ORP) highlighted. This trains fast intake by eliminating eye movement overhead.
 
-```bash
-npm install
-```
+- **Chunking modes**: single word, phrase (~10 chars), clause (~40 chars), or custom width
+- Respects sentence boundaries and punctuation
+- Configurable WPM (100-800)
 
-## Usage
+### Saccade
 
-### Web Version
+Full-page reading with a sweep pacer. Text is laid out in fixed-width lines (80 chars) across configurable pages. A visual sweep animates across each line at your target WPM, training your eyes to move at a steady pace through natural text.
 
-```bash
-npm run dev
-```
+- Toggle the pacer on/off (manual page turning when off)
+- Preserves headings and paragraph structure
+- Configurable lines per page (5-30)
 
-Opens at http://localhost:5173. Supports URL fetching, RSS feeds, and pasted text.
+### Prediction
 
-### Electron Version (Local Files)
+Next-word prediction training. You see the text accumulated so far and type what you think comes next. Correct guesses advance instantly (flow state); misses pause and show the actual word with a loss score.
 
-```bash
-npm run electron:dev
-```
+- First-letter hint for the current word
+- Levenshtein-based scoring (0 = exact match, 1 = completely wrong)
+- Tab to preview ahead at your selected WPM, then resume predicting
+- Session stats: words attempted, exact match %, average loss
 
-Adds support for reading local PDF and EPUB files from configured library directories.
+### Recall
 
-## Controls
+First-letter scaffold reconstruction. Each word shows only its first letter with the rest replaced by a dotted underline showing character positions. You type to reconstruct each word from memory and context.
 
-| Key | Action |
-|-----|--------|
-| Space | Play/Pause |
-| Left Arrow | Previous chunk |
-| Right Arrow | Next chunk |
-| Up Arrow | Increase speed |
-| Down Arrow | Decrease speed |
-
-## Building
-
-```bash
-# Web build
-npm run build
-
-# Electron build (creates distributable)
-npm run electron:build
-```
-
-## Library Configuration (Electron)
-
-Click the gear icon next to "Library" to add or remove library directories. The app scans directories recursively for PDF and EPUB files.
-
-Default directories on first run:
-- Classics (EPUBs)
-- Articles (PDFs)
-- References (PDFs)
-
-## Architecture
-
-```
-src/                    # React frontend
-  components/
-    App.tsx             # Main application
-    RSVPReader.tsx      # Speed reading display
-    ArticleQueue.tsx    # Reading queue management
-    Library.tsx         # Local file browser (Electron)
-  lib/
-    chunker.ts          # Text chunking algorithms
-
-electron/               # Electron main process
-  main.ts               # Window management, IPC handlers
-  preload.ts            # Context bridge for renderer
-  lib/
-    pdf.ts              # PDF text extraction
-    epub.ts             # EPUB text extraction
-    library.ts          # Directory scanning
-```
-
-## Tech Stack
-
-- React 18
-- TypeScript
-- Vite
-- Electron (optional, for local file access)
-- pdf-parse (PDF extraction)
-- epub (EPUB extraction)
-- Mozilla Readability (web article extraction)
-
----
-
-# User's Guide
-
-## Getting Started
-
-1. **Launch the app** with `npm run electron:dev` (for local files) or `npm run dev` (web only)
-2. **Add content** using one of the methods below
-3. **Click Play** or press Space to start reading
-4. **Adjust speed** with the dropdown or arrow keys
+- Words validate as you type and advance automatically
+- Correct words appear in green, misses in red
+- Uses saccade page layout for stable line positioning
+- Session stats tracked the same as prediction mode
 
 ## Adding Content
 
-### From the Library (Electron only)
+**From a URL** — Click "+ Add URL" and paste an article link. The app extracts readable content automatically using Mozilla Readability.
 
-1. Select a library source tab (Classics, Articles, References)
-2. Click any PDF or EPUB file to load it
-3. The file appears in your Reading Queue
+**Paste text** — In the same dialog, paste plain text directly.
 
-### From a URL
+**RSS/Atom feeds** — Add feed URLs in the Feeds panel. Articles appear in the feed list; click to add them to your reading queue.
 
-1. Click "+ Add URL" in the Reading Queue
-2. Paste an article URL
-3. The app extracts readable content automatically
+**Local files (Electron only)** — Configure library directories in Library Settings. The app scans recursively for PDF and EPUB files.
 
-### From RSS Feeds
+## Controls
 
-1. Click "+ Add Feed" in RSS Feeds
-2. Enter an RSS feed URL
-3. Articles appear in the feed list - click to add to queue
+### Playback (RSVP / Saccade)
 
-### Paste Text
+| Key | Action |
+|-----|--------|
+| Space | Play / Pause |
+| Left Arrow | Previous chunk |
+| Right Arrow | Next chunk |
+| `[` | Decrease WPM by 10 |
+| `]` | Increase WPM by 10 |
+| Escape | Pause / exit current view |
 
-1. Click "+ Add URL"
-2. Paste plain text directly instead of a URL
+### Prediction Mode
 
-## Reading
+| Key | Action |
+|-----|--------|
+| Space / Enter | Submit prediction |
+| Tab | Toggle preview (when input focused or previewing) |
+| `` ` `` | Reset to beginning |
 
-### Display Modes
+### Recall Mode
 
-- **Word**: Shows one word at a time. Best for maximum speed.
-- **Phrase (~15ch)**: Shows 2-3 words. Balances speed and context.
-- **Phrase (~25ch)**: Shows 3-5 words. More natural reading rhythm.
+Type to fill in each word. Words auto-advance on correct input.
 
-### Speed Settings
+## Settings
 
-- Start at 300-400 WPM if you're new to RSVP
-- Work up gradually - 600+ WPM is achievable with practice
-- Use arrow keys to adjust on the fly
+Click the gear icon in the header to configure:
 
-### Navigation
+- **Font sizes** for RSVP, saccade, and prediction modes (independent sliders)
+- **Prediction line width** — narrow (50ch), medium (65ch), or wide (85ch)
 
-- **Space**: Play/Pause at any time
-- **Left/Right arrows**: Step through manually when paused
-- **Progress bar**: Shows position in the article
+Reader controls at the bottom of the main view provide:
 
-## Tips for Effective Speed Reading
+- **WPM slider** (100-800)
+- **Display mode** selector (RSVP / Saccade / Prediction / Recall)
+- **Chunking mode** selector (Word / Phrase / Clause / Custom)
+- **Lines per page** for saccade and recall modes
+- **Pacer toggle** for saccade mode
 
-1. **Minimize subvocalization**: Try not to "say" words in your head
-2. **Trust your brain**: You're absorbing more than you think
-3. **Take breaks**: RSVP is intense - rest your eyes periodically
-4. **Start with familiar content**: Practice with easy material first
-5. **Use phrase mode**: It's often faster than single words despite showing more text
+## Running
 
-## Managing Your Library (Electron)
+```bash
+# Install dependencies
+npm install
 
-Click the gear icon (settings) next to "Library" to:
+# Web version (localhost:5173)
+npm run dev
 
-- **Add directories**: Click "Add Directory" and select a folder
-- **Remove directories**: Click the X next to any source
-- **Rename sources**: Sources use the folder name by default
+# Electron version (adds local PDF/EPUB support)
+npm run electron:dev
 
-The app scans recursively, so subdirectories are included automatically.
+# Run tests
+npm test
+
+# Production build (web)
+npm run build
+
+# Production build (Electron distributable)
+npm run electron:build
+```

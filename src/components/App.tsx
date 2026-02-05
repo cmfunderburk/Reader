@@ -203,7 +203,7 @@ export function App() {
       '--prediction-line-width': `${PREDICTION_LINE_WIDTHS[displaySettings.predictionLineWidth]}ch`,
     } as React.CSSProperties}>
       <header className="app-header">
-        <h1>SpeedRead</h1>
+        <h1>Reader</h1>
         <button className="settings-gear-btn" onClick={() => setView('settings')} title="Display settings">&#9881;</button>
       </header>
 

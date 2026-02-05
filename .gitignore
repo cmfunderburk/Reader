@@ -31,5 +31,15 @@ npm-debug.log*
 # Claude local files (except skills which are repo-specific)
 .claude/*
 !.claude/skills/
+
 # Library content (PDFs, EPUBs) - not tracked in git
 library/
+
+# Scratchpad / session notes
+PLAN-*.md
+SESSION-REPORT-*.md
+CONTINUE-FROM-HERE.txt
+*.scratchpad
+prediction-training-read.txt
+extract_htrab.py
+2026-01-26-plan-*.txt
