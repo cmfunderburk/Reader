@@ -131,7 +131,7 @@ export function SettingsPanel({ settings, onSettingsChange, onClose }: SettingsP
               className="settings-slider"
               type="range"
               min="5"
-              max="120"
+              max="240"
               step="5"
               value={settings.rampInterval}
               onChange={e => update({ rampInterval: parseInt(e.target.value) })}
