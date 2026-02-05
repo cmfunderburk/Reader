@@ -9,6 +9,8 @@
   --accent-hover: #ff6b6b;
   --border: #2a2a4a;
   --success: #4ade80;
+  --text-color-a: #8ec8a0;
+  --text-color-b: #d4b078;
 }
 
 * {
@@ -142,6 +144,25 @@ button {
 
 .reader-word-space {
   color: var(--text-primary);
+}
+
+/* Alternating color phases for RSVP chunk tracking */
+.reader-color-a .reader-before,
+.reader-color-a .reader-after,
+.reader-color-a .reader-word,
+.reader-color-a .reader-word-before,
+.reader-color-a .reader-word-after,
+.reader-color-a .reader-word-space {
+  color: var(--text-color-a);
+}
+
+.reader-color-b .reader-before,
+.reader-color-b .reader-after,
+.reader-color-b .reader-word,
+.reader-color-b .reader-word-before,
+.reader-color-b .reader-word-after,
+.reader-color-b .reader-word-space {
+  color: var(--text-color-b);
 }
 
 .reader-placeholder {

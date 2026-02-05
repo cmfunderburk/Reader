@@ -95,6 +95,20 @@ export function SettingsPanel({ settings, onSettingsChange, onClose }: SettingsP
             </div>
           </div>
 
+          <div className="settings-row">
+            <span className="settings-label">Start</span>
+            <input
+              className="settings-slider"
+              type="range"
+              min="10"
+              max="90"
+              step="5"
+              value={settings.rampStartPercent}
+              onChange={e => update({ rampStartPercent: parseInt(e.target.value) })}
+            />
+            <span className="settings-value">{settings.rampStartPercent}%</span>
+          </div>
+
           {settings.rampCurve === 'linear' && (
             <div className="settings-row">
               <span className="settings-label">Rate</span>

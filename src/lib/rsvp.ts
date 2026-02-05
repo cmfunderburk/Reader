@@ -133,7 +133,7 @@ export function indexFromProgress(progress: number, totalChunks: number): number
 }
 
 /**
- * Compute effective WPM during ramp-up from 50% of target.
+ * Compute effective WPM during ramp-up from a configurable start %.
  *
  * Linear: increases by rampRate WPM every rampInterval seconds.
  * Logarithmic: rampInterval is the half-life — every N seconds the
@@ -144,9 +144,10 @@ export function getEffectiveWpm(
   elapsedMs: number,
   rampRate: number,
   rampInterval: number,
-  curve: 'linear' | 'logarithmic' = 'linear'
+  curve: 'linear' | 'logarithmic' = 'linear',
+  startPercent: number = 50
 ): number {
-  const startWpm = targetWpm * 0.5;
+  const startWpm = targetWpm * (startPercent / 100);
   const elapsedSeconds = elapsedMs / 1000;
 
   if (curve === 'logarithmic') {

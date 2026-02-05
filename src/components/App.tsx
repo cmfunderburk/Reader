@@ -61,6 +61,7 @@ export function App() {
     initialCustomCharWidth: settings.customCharWidth,
     initialRampEnabled: settings.rampEnabled,
     rampCurve: settings.rampCurve,
+    rampStartPercent: settings.rampStartPercent,
     rampRate: settings.rampRate,
     rampInterval: settings.rampInterval,
     onComplete: () => {
@@ -188,6 +189,14 @@ export function App() {
     });
   }, [rsvp]);
 
+  const handleAlternateColorsChange = useCallback((enabled: boolean) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, rsvpAlternateColors: enabled };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleProgressChange = useCallback((progress: number) => {
     const newIndex = Math.floor((progress / 100) * rsvp.chunks.length);
     rsvp.goToIndex(newIndex);
@@ -263,6 +272,7 @@ export function App() {
                 saccadePage={rsvp.currentSaccadePage}
                 showPacer={rsvp.showPacer}
                 wpm={rsvp.effectiveWpm}
+                colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
               />
             )}
 
@@ -314,6 +324,8 @@ export function App() {
               rampEnabled={rsvp.rampEnabled}
               effectiveWpm={rsvp.effectiveWpm}
               onRampEnabledChange={handleRampEnabledChange}
+              alternateColors={displaySettings.rsvpAlternateColors}
+              onAlternateColorsChange={handleAlternateColorsChange}
             />
           </>
         )}

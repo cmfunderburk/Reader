@@ -14,6 +14,7 @@ interface UseRSVPOptions {
   initialCustomCharWidth?: number;
   initialRampEnabled?: boolean;
   rampCurve?: RampCurve;
+  rampStartPercent?: number;
   rampRate?: number;
   rampInterval?: number;
   onComplete?: () => void;
@@ -67,6 +68,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     initialCustomCharWidth = 30,
     initialRampEnabled = false,
     rampCurve = 'linear',
+    rampStartPercent = 50,
     rampRate = 25,
     rampInterval = 30,
     onComplete,
@@ -104,6 +106,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
 
   const rampEnabledRef = useRef(rampEnabled);
   const rampCurveRef = useRef(rampCurve);
+  const rampStartPercentRef = useRef(rampStartPercent);
   const rampRateRef = useRef(rampRate);
   const rampIntervalRef = useRef(rampInterval);
   const playStartTimeRef = useRef<number | null>(null);
@@ -139,7 +142,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
         getElapsedPlayTimeMs(),
         rampRateRef.current,
         rampIntervalRef.current,
-        rampCurveRef.current
+        rampCurveRef.current,
+        rampStartPercentRef.current
       );
     }
 
@@ -158,6 +162,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   useEffect(() => { linesPerPageRef.current = linesPerPage; }, [linesPerPage]);
   useEffect(() => { rampEnabledRef.current = rampEnabled; }, [rampEnabled]);
   useEffect(() => { rampCurveRef.current = rampCurve; }, [rampCurve]);
+  useEffect(() => { rampStartPercentRef.current = rampStartPercent; }, [rampStartPercent]);
   useEffect(() => { rampRateRef.current = rampRate; }, [rampRate]);
   useEffect(() => { rampIntervalRef.current = rampInterval; }, [rampInterval]);
 
@@ -473,8 +478,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   // Compute effective WPM (recomputes each tick via currentChunkIndex dep)
   const effectiveWpm = useMemo(() => {
     if (!rampEnabled) return wpm;
-    return getEffectiveWpm(wpm, getElapsedPlayTimeMs(), rampRate, rampInterval, rampCurve);
-  }, [rampEnabled, rampCurve, wpm, rampRate, rampInterval, currentChunkIndex, getElapsedPlayTimeMs]);
+    return getEffectiveWpm(wpm, getElapsedPlayTimeMs(), rampRate, rampInterval, rampCurve, rampStartPercent);
+  }, [rampEnabled, rampCurve, rampStartPercent, wpm, rampRate, rampInterval, currentChunkIndex, getElapsedPlayTimeMs]);
 
   // Compute current saccade page
   const currentChunk = chunks[currentChunkIndex] ?? null;

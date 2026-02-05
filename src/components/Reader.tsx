@@ -10,6 +10,7 @@ interface ReaderProps {
   saccadePage?: SaccadePage | null;
   showPacer?: boolean;
   wpm: number;
+  colorPhase?: 'a' | 'b';
 }
 
 /**
@@ -39,7 +40,7 @@ function WordWithOVP({ word }: { word: string }) {
   );
 }
 
-export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm }: ReaderProps) {
+export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
     return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} />;
@@ -75,7 +76,7 @@ export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true
     const showOVP = mode === 'word';
     return (
       <div className="reader">
-        <div className="reader-display">
+        <div className={`reader-display${colorPhase ? ` reader-color-${colorPhase}` : ''}`}>
           <div className="reader-text-multiword">
             {words.map((word, i) => (
               <span key={i}>
@@ -97,7 +98,7 @@ export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true
 
   return (
     <div className="reader">
-      <div className="reader-display">
+      <div className={`reader-display${colorPhase ? ` reader-color-${colorPhase}` : ''}`}>
         <div className="reader-text">
           <span className="reader-before">{beforeOrp}</span>
           <span className={showOVP ? 'reader-orp' : 'reader-before'}>{orpChar}</span>

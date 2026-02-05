@@ -28,6 +28,8 @@ interface ReaderControlsProps {
   rampEnabled: boolean;
   effectiveWpm: number;
   onRampEnabledChange: (enabled: boolean) => void;
+  alternateColors: boolean;
+  onAlternateColorsChange: (enabled: boolean) => void;
 }
 
 export function ReaderControls({
@@ -57,6 +59,8 @@ export function ReaderControls({
   rampEnabled,
   effectiveWpm,
   onRampEnabledChange,
+  alternateColors,
+  onAlternateColorsChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall';
   const showChunks = !isSelfPaced && displayMode !== 'saccade';
@@ -116,6 +120,17 @@ export function ReaderControls({
               <span className="control-label">Ramp</span>
             </label>
           </>
+        )}
+
+        {displayMode === 'rsvp' && (
+          <label className="control-group control-checkbox">
+            <input
+              type="checkbox"
+              checked={alternateColors}
+              onChange={e => onAlternateColorsChange(e.target.checked)}
+            />
+            <span className="control-label">Alt colors</span>
+          </label>
         )}
 
         <label className="control-group">

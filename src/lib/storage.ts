@@ -16,8 +16,10 @@ export interface Settings {
   predictionLineWidth: PredictionLineWidth;
   rampEnabled: boolean;
   rampCurve: RampCurve;
+  rampStartPercent: number;
   rampRate: number;
   rampInterval: number;
+  rsvpAlternateColors: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -30,8 +32,10 @@ const DEFAULT_SETTINGS: Settings = {
   predictionLineWidth: 'medium',
   rampEnabled: false,
   rampCurve: 'linear',
+  rampStartPercent: 50,
   rampRate: 25,
   rampInterval: 30,
+  rsvpAlternateColors: false,
 };
 
 /**
