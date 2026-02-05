@@ -160,6 +160,14 @@ export function getEffectiveWpm(
   return Math.min(targetWpm, Math.round(startWpm + ratePerSecond * elapsedSeconds));
 }
 
+/**
+ * Format seconds as a short read-time string (e.g. "5 min").
+ */
+export function formatReadTime(seconds: number): string {
+  const minutes = Math.ceil(seconds / 60);
+  return `${minutes} min`;
+}
+
 export function estimateReadingTimeFromCharCount(charCount: number, wpm: number): number {
   if (charCount <= 0 || wpm <= 0) return 0;
   const charsPerMinute = wpm * AVG_WORD_LENGTH;

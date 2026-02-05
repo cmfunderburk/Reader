@@ -123,8 +123,7 @@ export function AddContent({ onAdd, onClose }: AddContentProps) {
             setError('Could not extract article content. Try pasting text manually.');
             setTab('paste');
           }
-        } catch (err) {
-          console.error('Readability extraction failed:', err);
+        } catch {
           setError('Failed to process article. Try pasting text manually.');
           setTab('paste');
         }

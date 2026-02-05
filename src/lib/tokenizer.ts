@@ -1,5 +1,6 @@
 import type { Chunk, TokenMode } from '../types';
 import { MODE_CHAR_WIDTHS } from '../types';
+import { AVG_WORD_LENGTH } from './rsvp';
 
 /**
  * Strip markdown formatting for clean reading display.
@@ -68,7 +69,7 @@ export function calculateORP(text: string): number {
  * Handles cases like "word.Next" -> "word. Next"
  * But preserves abbreviations like "U.S.A." (uppercase before period)
  */
-function normalizeText(text: string): string {
+export function normalizeText(text: string): string {
   // Only add space when a lowercase letter precedes the punctuation
   // This catches real sentence endings but not abbreviations like U.S.A.
   return text.replace(/([a-z])([.!?])([A-Z])/g, '$1$2 $3');
@@ -248,7 +249,6 @@ export function tokenize(text: string, mode: TokenMode, customCharWidth?: number
  * the character-based RSVP pacing.
  */
 export function estimateReadingTime(chunks: Chunk[], wpm: number): number {
-  const AVG_WORD_LENGTH = 4.8;
   const totalChars = chunks.reduce((sum, chunk) =>
     sum + chunk.text.replace(/\s/g, '').length, 0
   );

@@ -475,7 +475,8 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     });
   }, []);
 
-  // Compute effective WPM (recomputes each tick via currentChunkIndex dep)
+  // Compute effective WPM — currentChunkIndex is an intentional dep: it triggers
+  // recomputation on each advance so the displayed ramp WPM stays current.
   const effectiveWpm = useMemo(() => {
     if (!rampEnabled) return wpm;
     return getEffectiveWpm(wpm, getElapsedPlayTimeMs(), rampRate, rampInterval, rampCurve, rampStartPercent);

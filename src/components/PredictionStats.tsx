@@ -1,4 +1,5 @@
 import type { PredictionStats as Stats } from '../types';
+import { predictionScorePercents } from '../lib/levenshtein';
 
 interface PredictionStatsProps {
   stats: Stats;
@@ -8,13 +9,7 @@ interface PredictionStatsProps {
  * Stats bar showing prediction progress and accuracy.
  */
 export function PredictionStats({ stats }: PredictionStatsProps) {
-  const exactPercent = stats.totalWords > 0
-    ? Math.round((stats.exactMatches / stats.totalWords) * 100)
-    : 0;
-
-  const avgScore = stats.totalWords > 0
-    ? Math.round((1 - stats.averageLoss) * 100)
-    : 100;
+  const { exactPercent, avgScore } = predictionScorePercents(stats);
 
   return (
     <div className="prediction-stats-bar">

@@ -1,17 +1,11 @@
 import type { Chunk, SaccadePage, SaccadeLine } from '../types';
+import { normalizeText } from './tokenizer';
 
 export const SACCADE_LINE_WIDTH = 80;
 export const SACCADE_LINES_PER_PAGE = 15;
 
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
-
-/**
- * Normalize text by ensuring spaces after sentence-ending punctuation.
- */
-function normalizeText(text: string): string {
-  return text.replace(/([a-z])([.!?])([A-Z])/g, '$1$2 $3');
-}
 
 /**
  * Detect if a line is a markdown heading.
@@ -62,7 +56,7 @@ function wrapParagraph(text: string, lineWidth: number): SaccadeLine[] {
  * Respects paragraph breaks (double newlines) and markdown headings.
  * Collapses single newlines into spaces to reflow ragged PDF extractions.
  */
-export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[] {
+function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[] {
   const normalized = normalizeText(text);
 
   // Split into blocks (paragraphs/headings separated by blank lines)

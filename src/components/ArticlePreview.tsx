@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Article, TokenMode } from '../types';
 import { tokenize, estimateReadingTime } from '../lib/tokenizer';
+import { formatReadTime } from '../lib/rsvp';
 
 interface ArticlePreviewProps {
   article: Article;
@@ -8,11 +9,6 @@ interface ArticlePreviewProps {
   initialMode: TokenMode;
   onStart: (article: Article, wpm: number, mode: TokenMode) => void;
   onClose: () => void;
-}
-
-function formatReadTime(seconds: number): string {
-  const minutes = Math.ceil(seconds / 60);
-  return `${minutes} min read`;
 }
 
 export function ArticlePreview({

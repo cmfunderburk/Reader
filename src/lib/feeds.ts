@@ -138,11 +138,3 @@ export async function fetchFeed(url: string): Promise<{ feed: Feed; articles: Ar
 
   return { feed, articles };
 }
-
-/**
- * Refresh articles from an existing feed.
- */
-export async function refreshFeed(feed: Feed): Promise<Article[]> {
-  const { articles } = await fetchFeed(feed.url);
-  return articles;
-}

@@ -1,5 +1,6 @@
 import type { Chunk, DisplayMode, SaccadePage, TokenMode } from '../types';
 import { isBreakChunk } from '../lib/rsvp';
+import { calculateORP } from '../lib/tokenizer';
 import { SaccadeReader } from './SaccadeReader';
 
 interface ReaderProps {
@@ -15,19 +16,10 @@ interface ReaderProps {
 }
 
 /**
- * Calculate OVP index for a single word (35% position).
- */
-function calculateWordOVP(word: string): number {
-  if (word.length <= 1) return 0;
-  if (word.length <= 3) return 1;
-  return Math.floor(word.length * 0.35);
-}
-
-/**
  * Render a single word with its OVP highlighted.
  */
 function WordWithOVP({ word, showORP = true }: { word: string; showORP?: boolean }) {
-  const ovpIndex = calculateWordOVP(word);
+  const ovpIndex = calculateORP(word);
   const before = word.slice(0, ovpIndex);
   const ovpChar = word[ovpIndex] || '';
   const after = word.slice(ovpIndex + 1);

@@ -72,8 +72,6 @@ export function usePlaybackTimer({
     return clearTimer
   }, [isPlaying, enabled, watch, scheduleNext, clearTimer])
 
-  useEffect(() => clearTimer, [clearTimer])
-
   const play = useCallback(() => {
     if (!isPlaying) {
       isFirstScheduleRef.current = true

@@ -1,5 +1,5 @@
 import type { Article } from '../types';
-import { estimateReadingTimeFromCharCount } from '../lib/rsvp';
+import { estimateReadingTimeFromCharCount, formatReadTime } from '../lib/rsvp';
 
 interface ArticleQueueProps {
   articles: Article[];
@@ -8,11 +8,6 @@ interface ArticleQueueProps {
   onRemove: (id: string) => void;
   onAddClick: () => void;
   wpm: number;
-}
-
-function formatReadTime(seconds: number): string {
-  const minutes = Math.ceil(seconds / 60);
-  return `${minutes}m`;
 }
 
 export function ArticleQueue({

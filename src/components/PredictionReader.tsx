@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
 import type { Chunk, PredictionResult, PredictionStats } from '../types';
 import { normalizedLoss, isExactMatch } from '../lib/levenshtein';
+import { calculateORP } from '../lib/tokenizer';
 import { LossMeter } from './LossMeter';
 import { PredictionComplete } from './PredictionComplete';
 
@@ -15,16 +16,6 @@ interface PredictionReaderProps {
   wpm: number;
   goToIndex: (index: number) => void;
   onWpmChange: (wpm: number) => void;
-}
-
-/**
- * Core component for prediction mode reading experience.
- * Displays accumulated text with inline input for next-word prediction.
- */
-function calculateWordOVP(word: string): number {
-  if (word.length <= 1) return 0;
-  if (word.length <= 3) return 1;
-  return Math.floor(word.length * 0.35);
 }
 
 export function PredictionReader({
@@ -269,7 +260,7 @@ export function PredictionReader({
   const previewChunk = isPreviewing ? chunks[previewIndex] : null;
 
   const renderPreviewWord = (word: string) => {
-    const ovpIndex = calculateWordOVP(word);
+    const ovpIndex = calculateORP(word);
     const before = word.slice(0, ovpIndex);
     const ovpChar = word[ovpIndex] || '';
     const after = word.slice(ovpIndex + 1);

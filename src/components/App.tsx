@@ -132,8 +132,8 @@ export function App() {
       saveFeeds(updatedFeeds);
 
       // Add articles (avoid duplicates by URL)
-      const existingUrls = new Set(articles.map(a => a.url));
-      const newArticles = feedArticles.filter(a => !existingUrls.has(a.url));
+      const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
+      const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
       if (newArticles.length > 0) {
         const updatedArticles = [...articles, ...newArticles];
         setArticles(updatedArticles);
@@ -156,8 +156,8 @@ export function App() {
       const { articles: feedArticles } = await fetchFeed(feed.url);
 
       // Add new articles (avoid duplicates)
-      const existingUrls = new Set(articles.map(a => a.url));
-      const newArticles = feedArticles.filter(a => !existingUrls.has(a.url));
+      const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
+      const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
       if (newArticles.length > 0) {
         const updatedArticles = [...articles, ...newArticles];
         setArticles(updatedArticles);

@@ -58,3 +58,19 @@ export function normalizedLoss(predicted: string, actual: string): number {
 export function isExactMatch(predicted: string, actual: string): boolean {
   return normalizeWord(predicted) === normalizeWord(actual);
 }
+
+/**
+ * Derive display percentages from prediction stats.
+ */
+export function predictionScorePercents(stats: { totalWords: number; exactMatches: number; averageLoss: number }): {
+  exactPercent: number;
+  avgScore: number;
+} {
+  const exactPercent = stats.totalWords > 0
+    ? Math.round((stats.exactMatches / stats.totalWords) * 100)
+    : 0;
+  const avgScore = stats.totalWords > 0
+    ? Math.round((1 - stats.averageLoss) * 100)
+    : 100;
+  return { exactPercent, avgScore };
+}

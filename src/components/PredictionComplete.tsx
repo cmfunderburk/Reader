@@ -1,4 +1,5 @@
 import type { PredictionStats } from '../types';
+import { predictionScorePercents } from '../lib/levenshtein';
 
 interface PredictionCompleteProps {
   stats: PredictionStats;
@@ -10,13 +11,7 @@ interface PredictionCompleteProps {
  * Completion summary shown at end of article in prediction mode.
  */
 export function PredictionComplete({ stats, onReadAgain, onClose }: PredictionCompleteProps) {
-  const exactPercent = stats.totalWords > 0
-    ? Math.round((stats.exactMatches / stats.totalWords) * 100)
-    : 0;
-
-  const avgScore = stats.totalWords > 0
-    ? Math.round((1 - stats.averageLoss) * 100)
-    : 100;
+  const { exactPercent, avgScore } = predictionScorePercents(stats);
 
   return (
     <div className="prediction-complete">

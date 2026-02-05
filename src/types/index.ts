@@ -82,23 +82,3 @@ export interface Feed {
   title: string;
   lastFetched: number;
 }
-
-export interface ReaderState {
-  currentArticle: Article | null;
-  chunks: Chunk[];
-  currentChunkIndex: number;
-  isPlaying: boolean;
-  wpm: number;
-  mode: TokenMode;
-  customCharWidth: number;
-}
-
-export interface AppState {
-  articles: Article[];
-  feeds: Feed[];
-  settings: {
-    defaultWpm: number;
-    defaultMode: TokenMode;
-    customCharWidth: number;
-  };
-}
