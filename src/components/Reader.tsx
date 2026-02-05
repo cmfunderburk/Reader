@@ -11,6 +11,7 @@ interface ReaderProps {
   showPacer?: boolean;
   wpm: number;
   colorPhase?: 'a' | 'b';
+  showORP?: boolean;
 }
 
 /**
@@ -25,7 +26,7 @@ function calculateWordOVP(word: string): number {
 /**
  * Render a single word with its OVP highlighted.
  */
-function WordWithOVP({ word }: { word: string }) {
+function WordWithOVP({ word, showORP = true }: { word: string; showORP?: boolean }) {
   const ovpIndex = calculateWordOVP(word);
   const before = word.slice(0, ovpIndex);
   const ovpChar = word[ovpIndex] || '';
@@ -34,13 +35,13 @@ function WordWithOVP({ word }: { word: string }) {
   return (
     <span className="reader-word">
       <span className="reader-word-before">{before}</span>
-      <span className="reader-orp">{ovpChar}</span>
+      <span className={showORP ? 'reader-orp' : 'reader-word-before'}>{ovpChar}</span>
       <span className="reader-word-after">{after}</span>
     </span>
   );
 }
 
-export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase }: ReaderProps) {
+export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
     return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} />;
@@ -80,7 +81,7 @@ export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true
           <div className="reader-text-multiword">
             {words.map((word, i) => (
               <span key={i}>
-                {showOVP ? <WordWithOVP word={word} /> : <span className="reader-word">{word}</span>}
+                {showOVP ? <WordWithOVP word={word} showORP={showORP} /> : <span className="reader-word">{word}</span>}
                 {i < words.length - 1 && <span className="reader-word-space"> </span>}
               </span>
             ))}
@@ -101,7 +102,7 @@ export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true
       <div className={`reader-display${colorPhase ? ` reader-color-${colorPhase}` : ''}`}>
         <div className="reader-text">
           <span className="reader-before">{beforeOrp}</span>
-          <span className={showOVP ? 'reader-orp' : 'reader-before'}>{orpChar}</span>
+          <span className={showOVP && showORP ? 'reader-orp' : 'reader-before'}>{orpChar}</span>
           <span className="reader-after">{afterOrp}</span>
         </div>
         <div className="reader-marker">▲</div>

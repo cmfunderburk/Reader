@@ -20,6 +20,7 @@ export interface Settings {
   rampRate: number;
   rampInterval: number;
   rsvpAlternateColors: boolean;
+  rsvpShowORP: boolean;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -36,6 +37,7 @@ const DEFAULT_SETTINGS: Settings = {
   rampRate: 25,
   rampInterval: 30,
   rsvpAlternateColors: false,
+  rsvpShowORP: true,
 };
 
 /**

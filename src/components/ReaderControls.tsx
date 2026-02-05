@@ -30,6 +30,8 @@ interface ReaderControlsProps {
   onRampEnabledChange: (enabled: boolean) => void;
   alternateColors: boolean;
   onAlternateColorsChange: (enabled: boolean) => void;
+  showORP: boolean;
+  onShowORPChange: (enabled: boolean) => void;
 }
 
 export function ReaderControls({
@@ -61,6 +63,8 @@ export function ReaderControls({
   onRampEnabledChange,
   alternateColors,
   onAlternateColorsChange,
+  showORP,
+  onShowORPChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall';
   const showChunks = !isSelfPaced && displayMode !== 'saccade';
@@ -123,14 +127,24 @@ export function ReaderControls({
         )}
 
         {displayMode === 'rsvp' && (
-          <label className="control-group control-checkbox">
-            <input
-              type="checkbox"
-              checked={alternateColors}
-              onChange={e => onAlternateColorsChange(e.target.checked)}
-            />
-            <span className="control-label">Alt colors</span>
-          </label>
+          <>
+            <label className="control-group control-checkbox">
+              <input
+                type="checkbox"
+                checked={alternateColors}
+                onChange={e => onAlternateColorsChange(e.target.checked)}
+              />
+              <span className="control-label">Alt colors</span>
+            </label>
+            <label className="control-group control-checkbox">
+              <input
+                type="checkbox"
+                checked={showORP}
+                onChange={e => onShowORPChange(e.target.checked)}
+              />
+              <span className="control-label">ORP</span>
+            </label>
+          </>
         )}
 
         <label className="control-group">

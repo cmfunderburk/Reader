@@ -197,6 +197,14 @@ export function App() {
     });
   }, []);
 
+  const handleShowORPChange = useCallback((enabled: boolean) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, rsvpShowORP: enabled };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleProgressChange = useCallback((progress: number) => {
     const newIndex = Math.floor((progress / 100) * rsvp.chunks.length);
     rsvp.goToIndex(newIndex);
@@ -273,6 +281,7 @@ export function App() {
                 showPacer={rsvp.showPacer}
                 wpm={rsvp.effectiveWpm}
                 colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
+                showORP={displaySettings.rsvpShowORP}
               />
             )}
 
@@ -326,6 +335,8 @@ export function App() {
               onRampEnabledChange={handleRampEnabledChange}
               alternateColors={displaySettings.rsvpAlternateColors}
               onAlternateColorsChange={handleAlternateColorsChange}
+              showORP={displaySettings.rsvpShowORP}
+              onShowORPChange={handleShowORPChange}
             />
           </>
         )}
