@@ -1,4 +1,4 @@
-import type { Chunk, DisplayMode, SaccadePage, TokenMode } from '../types';
+import type { Chunk, DisplayMode, SaccadePage } from '../types';
 import { isBreakChunk } from '../lib/rsvp';
 import { calculateORP } from '../lib/tokenizer';
 import { SaccadeReader } from './SaccadeReader';
@@ -7,7 +7,6 @@ interface ReaderProps {
   chunk: Chunk | null;
   isPlaying: boolean;
   displayMode: DisplayMode;
-  mode: TokenMode;
   saccadePage?: SaccadePage | null;
   showPacer?: boolean;
   wpm: number;
@@ -17,25 +16,7 @@ interface ReaderProps {
   saccadeLength?: number;
 }
 
-/**
- * Render a single word with its OVP highlighted.
- */
-function WordWithOVP({ word, showORP = true }: { word: string; showORP?: boolean }) {
-  const ovpIndex = calculateORP(word);
-  const before = word.slice(0, ovpIndex);
-  const ovpChar = word[ovpIndex] || '';
-  const after = word.slice(ovpIndex + 1);
-
-  return (
-    <span className="reader-word">
-      <span className="reader-word-before">{before}</span>
-      <span className={showORP ? 'reader-orp' : 'reader-word-before'}>{ovpChar}</span>
-      <span className="reader-word-after">{after}</span>
-    </span>
-  );
-}
-
-export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeLength }: ReaderProps) {
+export function Reader({ chunk, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeLength }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
     return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeLength={saccadeLength} />;
@@ -62,41 +43,24 @@ export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true
     );
   }
 
-  const { text, orpIndex } = chunk;
-  const isMultiWord = text.includes(' ') && text.length > 15;
+  const { text } = chunk;
 
-  // Multi-word chunks over 15 chars: show per-word OVP (word mode only)
-  if (isMultiWord) {
-    const words = text.split(' ').filter(w => w.length > 0);
-    const showOVP = mode === 'word';
-    return (
-      <div className="reader">
-        <div className={`reader-display${colorPhase ? ` reader-color-${colorPhase}` : ''}`}>
-          <div className="reader-text-multiword">
-            {words.map((word, i) => (
-              <span key={i}>
-                {showOVP ? <WordWithOVP word={word} showORP={showORP} /> : <span className="reader-word">{word}</span>}
-                {i < words.length - 1 && <span className="reader-word-space"> </span>}
-              </span>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // For multi-word chunks, center on the first word's ORP (parafoveal training).
+  // For single words, use the chunk's own orpIndex.
+  const isMultiWord = text.includes(' ');
+  const firstWord = isMultiWord ? text.split(' ', 1)[0] : text;
+  const orp = calculateORP(firstWord);
 
-  // Single word or short chunk: use single OVP with marker
-  const beforeOrp = text.slice(0, orpIndex);
-  const orpChar = text[orpIndex] || '';
-  const afterOrp = text.slice(orpIndex + 1);
-  const showOVP = mode === 'word';
+  const beforeOrp = text.slice(0, orp);
+  const orpChar = text[orp] || '';
+  const afterOrp = text.slice(orp + 1);
 
   return (
     <div className="reader">
       <div className={`reader-display${colorPhase ? ` reader-color-${colorPhase}` : ''}`}>
         <div className="reader-text">
           <span className="reader-before">{beforeOrp}</span>
-          <span className={showOVP && showORP ? 'reader-orp' : 'reader-before'}>{orpChar}</span>
+          <span className={showORP ? 'reader-orp' : 'reader-before'}>{orpChar}</span>
           <span className="reader-after">{afterOrp}</span>
         </div>
         <div className="reader-marker">▲</div>

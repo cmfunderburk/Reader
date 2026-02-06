@@ -55,8 +55,7 @@ export function ArticlePreview({
             className="control-select"
           >
             <option value="word">Word</option>
-            <option value="phrase">Phrase</option>
-            <option value="clause">Clause</option>
+            <option value="custom">Custom</option>
           </select>
         </label>
 

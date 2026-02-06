@@ -292,7 +292,6 @@ export function App() {
                 chunk={rsvp.currentChunk}
                 isPlaying={rsvp.isPlaying}
                 displayMode={rsvp.displayMode}
-                mode={rsvp.mode}
                 saccadePage={rsvp.currentSaccadePage}
                 showPacer={rsvp.showPacer}
                 wpm={rsvp.effectiveWpm}

@@ -45,7 +45,7 @@ describe('calculateDisplayTime', () => {
       expect(longTime / shortTime).toBeGreaterThan(1.2);
     });
 
-    it('phrase chunks land between single-word and sequential timing', () => {
+    it('multi-word chunks land between single-word and sequential timing', () => {
       const single = createChunk('alpha');
       const twoWord = createChunk('alpha beta');
       const threeWord = createChunk('alpha beta gamma');

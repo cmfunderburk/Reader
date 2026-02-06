@@ -28,7 +28,7 @@ export interface Settings {
 const DEFAULT_SETTINGS: Settings = {
   defaultWpm: 400,
   defaultMode: 'word',
-  customCharWidth: 30,
+  customCharWidth: 8,
   rsvpFontSize: 2.5,
   saccadeFontSize: 1.0,
   predictionFontSize: 1.25,
@@ -88,7 +88,11 @@ export function saveFeeds(feeds: Feed[]): void {
 export function loadSettings(): Settings {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.settings);
-    return data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    const settings = data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    // Clamp values that may have been saved under old wider ranges
+    settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
+    settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
+    return settings;
   } catch {
     return DEFAULT_SETTINGS;
   }

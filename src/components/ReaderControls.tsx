@@ -1,5 +1,4 @@
 import type { TokenMode, DisplayMode } from '../types';
-import { MODE_CHAR_WIDTHS } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
@@ -171,34 +170,33 @@ export function ReaderControls({
 
         {/* Hide chunk mode in self-paced and saccade modes */}
         {showChunks && (
-          <label className="control-group">
-            <span className="control-label">Chunks:</span>
-            <select
-              value={mode}
-              onChange={e => onModeChange(e.target.value as TokenMode)}
-              className="control-select"
-            >
-              <option value="word">Word</option>
-              <option value="phrase">Phrase (~{MODE_CHAR_WIDTHS.phrase}ch)</option>
-              <option value="clause">Clause (~{MODE_CHAR_WIDTHS.clause}ch)</option>
-              <option value="custom">Custom</option>
-            </select>
-          </label>
-        )}
-
-        {mode === 'custom' && showChunks && (
-          <label className="control-group">
-            <span className="control-label">Width:</span>
-            <input
-              type="range"
-              min="10"
-              max="60"
-              value={customCharWidth}
-              onChange={e => onCustomCharWidthChange(Number(e.target.value))}
-              className="control-slider"
-            />
-            <span className="control-value">{customCharWidth}ch</span>
-          </label>
+          <>
+            <label className="control-group">
+              <span className="control-label">Chunks:</span>
+              <select
+                value={mode}
+                onChange={e => onModeChange(e.target.value as TokenMode)}
+                className="control-select"
+              >
+                <option value="word">Word</option>
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            {mode === 'custom' && (
+              <label className="control-group">
+                <span className="control-label">Width:</span>
+                <input
+                  type="range"
+                  min="5"
+                  max="20"
+                  value={customCharWidth}
+                  onChange={e => onCustomCharWidthChange(Number(e.target.value))}
+                  className="control-slider"
+                />
+                <span className="control-value">{customCharWidth}ch</span>
+              </label>
+            )}
+          </>
         )}
 
         {displayMode === 'saccade' && (

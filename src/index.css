@@ -124,44 +124,14 @@ button {
   margin-top: 0.5rem;
 }
 
-/* Multi-word display (for chunks > 15 chars) */
-.reader-text-multiword {
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Source Code Pro', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: var(--rsvp-font-size, 2.5rem);
-  font-weight: 500;
-  white-space: nowrap;
-  text-align: center;
-}
-
-.reader-word {
-  display: inline;
-}
-
-.reader-word-before,
-.reader-word-after {
-  color: var(--text-primary);
-}
-
-.reader-word-space {
-  color: var(--text-primary);
-}
-
 /* Alternating color phases for RSVP chunk tracking */
 .reader-color-a .reader-before,
-.reader-color-a .reader-after,
-.reader-color-a .reader-word,
-.reader-color-a .reader-word-before,
-.reader-color-a .reader-word-after,
-.reader-color-a .reader-word-space {
+.reader-color-a .reader-after {
   color: var(--text-color-a);
 }
 
 .reader-color-b .reader-before,
-.reader-color-b .reader-after,
-.reader-color-b .reader-word,
-.reader-color-b .reader-word-before,
-.reader-color-b .reader-word-after,
-.reader-color-b .reader-word-space {
+.reader-color-b .reader-after {
   color: var(--text-color-b);
 }
 

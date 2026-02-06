@@ -63,7 +63,7 @@ interface UseRSVPReturn {
 export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const {
     initialWpm = 400,
-    initialMode = 'phrase',
+    initialMode = 'word',
     initialDisplayMode = 'rsvp',
     initialCustomCharWidth = 30,
     initialRampEnabled = false,

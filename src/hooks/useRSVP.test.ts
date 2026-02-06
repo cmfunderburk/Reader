@@ -286,19 +286,19 @@ describe('useRSVP — mode switch retokenization', () => {
     // Move to middle
     act(() => result.current.goToIndex(5));
 
-    // Switch to phrase mode — fewer chunks, position should map proportionally
-    act(() => result.current.setMode('phrase'));
+    // Switch to custom mode — fewer chunks, position should map proportionally
+    act(() => result.current.setMode('custom'));
 
-    const phraseChunkCount = result.current.chunks.length;
-    expect(phraseChunkCount).toBeLessThan(wordChunkCount);
+    const customChunkCount = result.current.chunks.length;
+    expect(customChunkCount).toBeLessThan(wordChunkCount);
     expect(result.current.currentChunkIndex).toBeGreaterThanOrEqual(0);
-    expect(result.current.currentChunkIndex).toBeLessThan(phraseChunkCount);
+    expect(result.current.currentChunkIndex).toBeLessThan(customChunkCount);
   });
 
   it('switching display mode to prediction uses word tokenization', () => {
     const article = makeArticle();
     const { result } = renderHook(() =>
-      useRSVP({ initialMode: 'phrase', initialDisplayMode: 'rsvp' })
+      useRSVP({ initialMode: 'custom', initialDisplayMode: 'rsvp' })
     );
 
     act(() => result.current.loadArticle(article));

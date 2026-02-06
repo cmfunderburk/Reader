@@ -1,5 +1,4 @@
 import type { Chunk, TokenMode } from '../types';
-import { MODE_CHAR_WIDTHS } from '../types';
 import { AVG_WORD_LENGTH } from './rsvp';
 
 /**
@@ -194,12 +193,8 @@ function tokenizeParagraph(text: string, mode: TokenMode, customCharWidth?: numb
   switch (mode) {
     case 'word':
       return tokenizeWordMode(text);
-    case 'phrase':
-      return tokenizeByCharWidth(text, MODE_CHAR_WIDTHS.phrase);
-    case 'clause':
-      return tokenizeByCharWidth(text, MODE_CHAR_WIDTHS.clause);
     case 'custom':
-      return tokenizeByCharWidth(text, customCharWidth ?? MODE_CHAR_WIDTHS.custom);
+      return tokenizeByCharWidth(text, customCharWidth ?? 8);
   }
 }
 
