@@ -21,6 +21,8 @@ export interface Settings {
   rampInterval: number;
   rsvpAlternateColors: boolean;
   rsvpShowORP: boolean;
+  saccadeShowOVP: boolean;
+  saccadeOVPCount: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -38,6 +40,8 @@ const DEFAULT_SETTINGS: Settings = {
   rampInterval: 30,
   rsvpAlternateColors: false,
   rsvpShowORP: true,
+  saccadeShowOVP: true,
+  saccadeOVPCount: 3,
 };
 
 /**

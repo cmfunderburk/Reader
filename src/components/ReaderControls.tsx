@@ -32,6 +32,10 @@ interface ReaderControlsProps {
   onAlternateColorsChange: (enabled: boolean) => void;
   showORP: boolean;
   onShowORPChange: (enabled: boolean) => void;
+  saccadeShowOVP: boolean;
+  onSaccadeShowOVPChange: (enabled: boolean) => void;
+  saccadeOVPCount: number;
+  onSaccadeOVPCountChange: (count: number) => void;
 }
 
 export function ReaderControls({
@@ -65,6 +69,10 @@ export function ReaderControls({
   onAlternateColorsChange,
   showORP,
   onShowORPChange,
+  saccadeShowOVP,
+  onSaccadeShowOVPChange,
+  saccadeOVPCount,
+  onSaccadeOVPCountChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall';
   const showChunks = !isSelfPaced && displayMode !== 'saccade';
@@ -194,14 +202,39 @@ export function ReaderControls({
         )}
 
         {displayMode === 'saccade' && (
-          <label className="control-group control-checkbox">
-            <input
-              type="checkbox"
-              checked={showPacer}
-              onChange={e => onShowPacerChange(e.target.checked)}
-            />
-            <span className="control-label">Pacer</span>
-          </label>
+          <>
+            <label className="control-group control-checkbox">
+              <input
+                type="checkbox"
+                checked={showPacer}
+                onChange={e => onShowPacerChange(e.target.checked)}
+              />
+              <span className="control-label">Pacer</span>
+            </label>
+            <label className="control-group control-checkbox">
+              <input
+                type="checkbox"
+                checked={saccadeShowOVP}
+                onChange={e => onSaccadeShowOVPChange(e.target.checked)}
+              />
+              <span className="control-label">OVP</span>
+            </label>
+            {saccadeShowOVP && (
+              <label className="control-group">
+                <span className="control-label">Markers:</span>
+                <input
+                  type="range"
+                  min="2"
+                  max="8"
+                  step="1"
+                  value={saccadeOVPCount}
+                  onChange={e => onSaccadeOVPCountChange(Number(e.target.value))}
+                  className="control-slider"
+                />
+                <span className="control-value">{saccadeOVPCount}</span>
+              </label>
+            )}
+          </>
         )}
 
         {(displayMode === 'saccade' || displayMode === 'recall') && (

@@ -189,6 +189,7 @@ button {
   line-height: 1.7;
   text-align: left;
   max-width: 82ch;  /* 80 chars + buffer */
+  background-image: var(--saccade-ovp-bg, none);
 }
 
 .saccade-line {
