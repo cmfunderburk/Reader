@@ -172,7 +172,7 @@ export function ReaderControls({
         {showChunks && (
           <>
             <label className="control-group">
-              <span className="control-label">Chunks:</span>
+              <span className="control-label">Chunking:</span>
               <select
                 value={mode}
                 onChange={e => onModeChange(e.target.value as TokenMode)}
@@ -184,7 +184,7 @@ export function ReaderControls({
             </label>
             {mode === 'custom' && (
               <label className="control-group">
-                <span className="control-label">Width:</span>
+                <span className="control-label">Span:</span>
                 <input
                   type="range"
                   min="5"
