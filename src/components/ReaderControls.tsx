@@ -34,8 +34,8 @@ interface ReaderControlsProps {
   onShowORPChange: (enabled: boolean) => void;
   saccadeShowOVP: boolean;
   onSaccadeShowOVPChange: (enabled: boolean) => void;
-  saccadeOVPCount: number;
-  onSaccadeOVPCountChange: (count: number) => void;
+  saccadeLength: number;
+  onSaccadeLengthChange: (length: number) => void;
 }
 
 export function ReaderControls({
@@ -71,8 +71,8 @@ export function ReaderControls({
   onShowORPChange,
   saccadeShowOVP,
   onSaccadeShowOVPChange,
-  saccadeOVPCount,
-  onSaccadeOVPCountChange,
+  saccadeLength,
+  onSaccadeLengthChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall';
   const showChunks = !isSelfPaced && displayMode !== 'saccade';
@@ -221,17 +221,17 @@ export function ReaderControls({
             </label>
             {saccadeShowOVP && (
               <label className="control-group">
-                <span className="control-label">Markers:</span>
+                <span className="control-label">Saccade:</span>
                 <input
                   type="range"
-                  min="2"
-                  max="8"
+                  min="7"
+                  max="15"
                   step="1"
-                  value={saccadeOVPCount}
-                  onChange={e => onSaccadeOVPCountChange(Number(e.target.value))}
+                  value={saccadeLength}
+                  onChange={e => onSaccadeLengthChange(Number(e.target.value))}
                   className="control-slider"
                 />
-                <span className="control-value">{saccadeOVPCount}</span>
+                <span className="control-value">{saccadeLength}ch</span>
               </label>
             )}
           </>

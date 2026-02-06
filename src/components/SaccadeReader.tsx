@@ -1,14 +1,17 @@
 import type { Chunk, SaccadePage, SaccadeLine } from '../types';
 import { calculateDisplayTime } from '../lib/rsvp';
+import { computeLineFixations } from '../lib/saccade';
 
 interface SaccadeReaderProps {
   page: SaccadePage | null;
   chunk: Chunk | null;
   showPacer: boolean;
   wpm: number;
+  saccadeShowOVP?: boolean;
+  saccadeLength?: number;
 }
 
-export function SaccadeReader({ page, chunk, showPacer, wpm }: SaccadeReaderProps) {
+export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, saccadeLength }: SaccadeReaderProps) {
   if (!page) {
     return (
       <div className="reader saccade-reader">
@@ -33,6 +36,8 @@ export function SaccadeReader({ page, chunk, showPacer, wpm }: SaccadeReaderProp
             lineChunks={page.lineChunks[lineIndex] || []}
             isCurrentLine={showPacer && lineIndex === currentLineIndex}
             wpm={wpm}
+            saccadeShowOVP={saccadeShowOVP}
+            saccadeLength={saccadeLength}
           />
         ))}
       </div>
@@ -46,9 +51,11 @@ interface SaccadeLineProps {
   lineChunks: Chunk[];
   isCurrentLine: boolean;
   wpm: number;
+  saccadeShowOVP?: boolean;
+  saccadeLength?: number;
 }
 
-function SaccadeLineComponent({ line, lineIndex, lineChunks, isCurrentLine, wpm }: SaccadeLineProps) {
+function SaccadeLineComponent({ line, lineIndex, lineChunks, isCurrentLine, wpm, saccadeShowOVP, saccadeLength }: SaccadeLineProps) {
   // Blank line - render non-breaking space to maintain height
   if (line.type === 'blank') {
     return (
@@ -78,12 +85,42 @@ function SaccadeLineComponent({ line, lineIndex, lineChunks, isCurrentLine, wpm 
 
   return (
     <div className={lineClasses} style={sweepStyle} key={isCurrentLine ? lineIndex : undefined}>
-      {renderLineText(line.text, isHeading)}
+      {renderLineText(line.text, isHeading, saccadeShowOVP, saccadeLength)}
     </div>
   );
 }
 
-function renderLineText(text: string, isHeading: boolean): JSX.Element {
+function renderLineText(text: string, isHeading: boolean, showOVP?: boolean, saccadeLength?: number): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
-  return <span className={className}>{text || '\u00A0'}</span>;
+
+  if (!showOVP || !saccadeLength || !text) {
+    return <span className={className}>{text || '\u00A0'}</span>;
+  }
+
+  const fixations = computeLineFixations(text, saccadeLength);
+  if (fixations.length === 0) {
+    return <span className={className}>{text}</span>;
+  }
+
+  // Build segments: split text around each fixation character index
+  const segments: JSX.Element[] = [];
+  let cursor = 0;
+
+  for (let i = 0; i < fixations.length; i++) {
+    const idx = fixations[i];
+    // Text before this fixation
+    if (idx > cursor) {
+      segments.push(<span key={`t${i}`}>{text.slice(cursor, idx)}</span>);
+    }
+    // The fixation character
+    segments.push(<span key={`f${i}`} className="saccade-fixation">{text[idx]}</span>);
+    cursor = idx + 1;
+  }
+
+  // Remaining text after last fixation
+  if (cursor < text.length) {
+    segments.push(<span key="tail">{text.slice(cursor)}</span>);
+  }
+
+  return <span className={className}>{segments}</span>;
 }

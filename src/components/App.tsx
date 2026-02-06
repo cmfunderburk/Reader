@@ -213,9 +213,9 @@ export function App() {
     });
   }, []);
 
-  const handleSaccadeOVPCountChange = useCallback((count: number) => {
+  const handleSaccadeLengthChange = useCallback((length: number) => {
     setDisplaySettings(prev => {
-      const next = { ...prev, saccadeOVPCount: count };
+      const next = { ...prev, saccadeLength: length };
       saveSettings(next);
       return next;
     });
@@ -239,22 +239,6 @@ export function App() {
     ? `${(totalWords / 1000).toFixed(1).replace(/\.0$/, '')}k`
     : `${totalWords}`;
 
-  const saccadeOvpBg = useMemo(() => {
-    if (!displaySettings.saccadeShowOVP) return 'none';
-    const f = displaySettings.saccadeOVPCount;
-    const stops: string[] = [];
-    for (let k = 1; k <= f; k++) {
-      const pct = ((2 * k - 1) / (2 * f) * 100).toFixed(4);
-      stops.push(
-        `transparent calc(${pct}% - 0.5px)`,
-        `rgba(255, 255, 255, 0.12) calc(${pct}% - 0.5px)`,
-        `rgba(255, 255, 255, 0.12) calc(${pct}% + 0.5px)`,
-        `transparent calc(${pct}% + 0.5px)`
-      );
-    }
-    return `linear-gradient(to right, ${stops.join(', ')})`;
-  }, [displaySettings.saccadeShowOVP, displaySettings.saccadeOVPCount]);
-
   const progress = calculateProgress(rsvp.currentChunkIndex, rsvp.chunks.length);
 
   return (
@@ -263,7 +247,6 @@ export function App() {
       '--saccade-font-size': `${displaySettings.saccadeFontSize}rem`,
       '--prediction-font-size': `${displaySettings.predictionFontSize}rem`,
       '--prediction-line-width': `${PREDICTION_LINE_WIDTHS[displaySettings.predictionLineWidth]}ch`,
-      '--saccade-ovp-bg': rsvp.displayMode === 'saccade' ? saccadeOvpBg : 'none',
     } as React.CSSProperties}>
       <header className="app-header">
         <h1>Reader</h1>
@@ -315,6 +298,8 @@ export function App() {
                 wpm={rsvp.effectiveWpm}
                 colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
                 showORP={displaySettings.rsvpShowORP}
+                saccadeShowOVP={displaySettings.saccadeShowOVP}
+                saccadeLength={displaySettings.saccadeLength}
               />
             )}
 
@@ -372,8 +357,8 @@ export function App() {
               onShowORPChange={handleShowORPChange}
               saccadeShowOVP={displaySettings.saccadeShowOVP}
               onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
-              saccadeOVPCount={displaySettings.saccadeOVPCount}
-              onSaccadeOVPCountChange={handleSaccadeOVPCountChange}
+              saccadeLength={displaySettings.saccadeLength}
+              onSaccadeLengthChange={handleSaccadeLengthChange}
             />
           </>
         )}

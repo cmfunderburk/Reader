@@ -22,7 +22,7 @@ export interface Settings {
   rsvpAlternateColors: boolean;
   rsvpShowORP: boolean;
   saccadeShowOVP: boolean;
-  saccadeOVPCount: number;
+  saccadeLength: number;
 }
 
 const DEFAULT_SETTINGS: Settings = {
@@ -41,7 +41,7 @@ const DEFAULT_SETTINGS: Settings = {
   rsvpAlternateColors: false,
   rsvpShowORP: true,
   saccadeShowOVP: true,
-  saccadeOVPCount: 3,
+  saccadeLength: 10,
 };
 
 /**

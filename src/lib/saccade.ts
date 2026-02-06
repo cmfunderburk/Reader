@@ -1,8 +1,68 @@
 import type { Chunk, SaccadePage, SaccadeLine } from '../types';
-import { normalizeText } from './tokenizer';
+import { normalizeText, calculateORP } from './tokenizer';
 
 export const SACCADE_LINE_WIDTH = 80;
 export const SACCADE_LINES_PER_PAGE = 15;
+
+/**
+ * Compute character indices within a line where fixation ORP highlights should appear.
+ * Returns absolute character positions into lineText for each fixation point.
+ */
+export function computeLineFixations(lineText: string, saccadeLength: number): number[] {
+  // Extract words with positions
+  const words: { word: string; start: number; orpPos: number }[] = [];
+  const regex = /\S+/g;
+  let m;
+  while ((m = regex.exec(lineText)) !== null) {
+    const word = m[0];
+    words.push({
+      word,
+      start: m.index,
+      orpPos: m.index + calculateORP(word),
+    });
+  }
+
+  if (words.length === 0) return [];
+
+  // First fixation = first word's ORP
+  const fixations: number[] = [words[0].orpPos];
+  let lastFixIdx = 0; // index into words[] of the last fixated word
+
+  while (true) {
+    const lastPos = fixations[fixations.length - 1];
+    const target = lastPos + saccadeLength;
+
+    // Find candidate words whose ORP is within [target-2, target+2] and past current word
+    let bestIdx = -1;
+    let bestDist = Infinity;
+
+    for (let i = lastFixIdx + 1; i < words.length; i++) {
+      const dist = Math.abs(words[i].orpPos - target);
+      if (dist <= 2 && dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx === -1) {
+      // No candidate in tolerance — pick the next word past current whose ORP is closest to target
+      for (let i = lastFixIdx + 1; i < words.length; i++) {
+        const dist = Math.abs(words[i].orpPos - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+    }
+
+    if (bestIdx === -1) break; // no more words
+
+    fixations.push(words[bestIdx].orpPos);
+    lastFixIdx = bestIdx;
+  }
+
+  return fixations;
+}
 
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;

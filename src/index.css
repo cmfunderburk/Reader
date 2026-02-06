@@ -189,7 +189,6 @@ button {
   line-height: 1.7;
   text-align: left;
   max-width: 82ch;  /* 80 chars + buffer */
-  background-image: var(--saccade-ovp-bg, none);
 }
 
 .saccade-line {
@@ -210,6 +209,12 @@ button {
 
 /* Heading text styling */
 .saccade-heading {
+  font-weight: 600;
+}
+
+/* Inline fixation-point highlights */
+.saccade-fixation {
+  color: rgba(233, 69, 96, 0.75);
   font-weight: 600;
 }
 

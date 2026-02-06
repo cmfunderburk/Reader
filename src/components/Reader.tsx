@@ -13,6 +13,8 @@ interface ReaderProps {
   wpm: number;
   colorPhase?: 'a' | 'b';
   showORP?: boolean;
+  saccadeShowOVP?: boolean;
+  saccadeLength?: number;
 }
 
 /**
@@ -33,10 +35,10 @@ function WordWithOVP({ word, showORP = true }: { word: string; showORP?: boolean
   );
 }
 
-export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true }: ReaderProps) {
+export function Reader({ chunk, displayMode, mode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeLength }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
-    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} />;
+    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeLength={saccadeLength} />;
   }
   // No article loaded
   if (!chunk) {
