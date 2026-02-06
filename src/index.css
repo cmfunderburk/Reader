@@ -212,7 +212,6 @@ button {
   bottom: 0;
   width: 0;
   background: rgba(233, 69, 96, 0.08);
-  border-right: 2px solid rgba(233, 69, 96, 0.4);
   pointer-events: none;
 }
 

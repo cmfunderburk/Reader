@@ -24,9 +24,10 @@ export function computeLineFixations(lineText: string, saccadeLength: number): n
 
   if (words.length === 0) return [];
 
-  // First fixation = first word's ORP
-  const fixations: number[] = [words[0].orpPos];
-  let lastFixIdx = 0; // index into words[] of the last fixated word
+  // First fixation: skip word 1 if it's ≤3 chars and a second word exists
+  const firstIdx = (words[0].word.length <= 3 && words.length > 1) ? 1 : 0;
+  const fixations: number[] = [words[firstIdx].orpPos];
+  let lastFixIdx = firstIdx;
 
   while (true) {
     const lastPos = fixations[fixations.length - 1];
