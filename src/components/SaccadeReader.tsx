@@ -7,10 +7,12 @@ interface SaccadeReaderProps {
   showPacer: boolean;
   wpm: number;
   saccadeShowOVP?: boolean;
+  saccadeShowSweep?: boolean;
+  saccadeShowNextORP?: boolean;
   saccadeLength?: number;
 }
 
-export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, saccadeLength }: SaccadeReaderProps) {
+export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeShowNextORP, saccadeLength }: SaccadeReaderProps) {
   if (!page) {
     return (
       <div className="reader saccade-reader">
@@ -32,9 +34,12 @@ export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, sac
             line={line}
             lineIndex={lineIndex}
             isActiveLine={lineIndex === currentLineIndex}
+            isFutureLine={showPacer && lineIndex > currentLineIndex}
             showPacer={showPacer}
             wpm={wpm}
             saccadeShowOVP={saccadeShowOVP}
+            saccadeShowSweep={saccadeShowSweep}
+            saccadeShowNextORP={saccadeShowNextORP}
             saccadeLength={saccadeLength}
           />
         ))}
@@ -47,13 +52,16 @@ interface SaccadeLineProps {
   line: SaccadeLine;
   lineIndex: number;
   isActiveLine: boolean;
+  isFutureLine: boolean;
   showPacer: boolean;
   wpm: number;
   saccadeShowOVP?: boolean;
+  saccadeShowSweep?: boolean;
+  saccadeShowNextORP?: boolean;
   saccadeLength?: number;
 }
 
-function SaccadeLineComponent({ line, lineIndex, isActiveLine, showPacer, wpm, saccadeShowOVP, saccadeLength }: SaccadeLineProps) {
+function SaccadeLineComponent({ line, lineIndex, isActiveLine, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeShowNextORP, saccadeLength }: SaccadeLineProps) {
   if (line.type === 'blank') {
     return (
       <div className="saccade-line">
@@ -73,23 +81,34 @@ function SaccadeLineComponent({ line, lineIndex, isActiveLine, showPacer, wpm, s
     : 0;
   const lineDuration = fixations.length * timePerSaccade;
 
-  const useSweepBar = showPacer && isActiveLine && lineDuration > 0 && fixations.length > 0;
+  const useSweepBar = showPacer && saccadeShowSweep !== false && isActiveLine && lineDuration > 0 && fixations.length > 0;
   const animateFlow = showPacer && isActiveLine && saccadeShowOVP && timePerSaccade > 0;
 
-  // Generate stepped keyframes so sweep bar arrives at each fixation position
-  // exactly when the ORP turns red
-  let sweepAnimName: string | undefined;
-  let sweepKeyframeCSS: string | undefined;
+  // Generate keyframes for sweep bar and per-fixation visibility
+  const keyframeBlocks: string[] = [];
 
   if (useSweepBar) {
-    sweepAnimName = `sweep-${lineIndex}`;
+    const sweepName = `sweep-${lineIndex}`;
     const steps = fixations.map((charIdx, i) => {
       const timePct = ((i / fixations.length) * 100).toFixed(2);
       return `${timePct}% { width: ${(charIdx + 0.5).toFixed(1)}ch; }`;
     });
     steps.push(`100% { width: ${(fixations[fixations.length - 1] + 0.5).toFixed(1)}ch; }`);
-    sweepKeyframeCSS = `@keyframes ${sweepAnimName} { ${steps.join(' ')} }`;
+    keyframeBlocks.push(`@keyframes ${sweepName} { ${steps.join(' ')} }`);
   }
+
+  if (animateFlow && fixations.length > 0) {
+    keyframeBlocks.push(generateFixationKeyframes(lineIndex, fixations.length, saccadeShowNextORP !== false));
+  }
+
+  // Static amber ORPs: all lines when pacer off, next line when lookahead on,
+  // or active line when not animating
+  const showStaticOVP = saccadeShowOVP && !animateFlow && (
+    !showPacer
+    || isActiveLine
+    || (isFutureLine && saccadeShowNextORP !== false)
+  );
+  const animConfig = animateFlow ? { lineIndex, lineDuration } : undefined;
 
   const lineClasses = [
     'saccade-line',
@@ -99,18 +118,60 @@ function SaccadeLineComponent({ line, lineIndex, isActiveLine, showPacer, wpm, s
 
   return (
     <div className={lineClasses} key={isActiveLine ? lineIndex : undefined}>
-      {useSweepBar && sweepAnimName && sweepKeyframeCSS && (
-        <>
-          <style>{sweepKeyframeCSS}</style>
-          <span
-            className="saccade-sweep"
-            style={{ animation: `${sweepAnimName} ${lineDuration}ms step-end both` }}
-          />
-        </>
+      {keyframeBlocks.length > 0 && <style>{keyframeBlocks.join(' ')}</style>}
+      {useSweepBar && (
+        <span
+          className="saccade-sweep"
+          style={{ animation: `sweep-${lineIndex} ${lineDuration}ms step-end both` }}
+        />
       )}
-      {renderLineText(line.text, isHeading, saccadeShowOVP, fixations, animateFlow, timePerSaccade)}
+      {renderLineText(line.text, isHeading, showStaticOVP || animateFlow, fixations, animConfig)}
     </div>
   );
+}
+
+/**
+ * Generate per-fixation @keyframes rules. When showNext is true, all future
+ * fixations start amber, turn red when current, then revert to plain text.
+ * When showNext is false, only the red "current" phase is visible; all other
+ * fixations remain plain text.
+ *
+ * Uses paired keyframes with linear timing to create sharp transitions.
+ * Each phase holds a value over a percentage range (e.g., "20%, 39.99%"),
+ * with a tiny 0.01% gap between ranges for effectively instant switches.
+ */
+function generateFixationKeyframes(lineIndex: number, N: number, showNext: boolean): string {
+  const plain = 'color: var(--text-primary); font-weight: normal';
+  const amber = 'color: rgba(224, 176, 56, 0.85); font-weight: 600';
+  const red = 'color: var(--accent); font-weight: 600';
+  const eps = 0.01;
+
+  const boundary = (step: number) => step / N * 100;
+  const fmt = (v: number) => v.toFixed(2);
+  const rangeEnd = (step: number) => step >= N ? '100' : fmt(boundary(step) - eps);
+
+  const rules: string[] = [];
+
+  for (let i = 0; i < N; i++) {
+    const kf: string[] = [];
+
+    // Before-current phase: amber (lookahead) or plain
+    if (i > 0) {
+      kf.push(`0%, ${rangeEnd(i)}% { ${showNext ? amber : plain} }`);
+    }
+
+    // Red "current" phase
+    kf.push(`${fmt(boundary(i))}%, ${rangeEnd(i + 1)}% { ${red} }`);
+
+    // Plain text after current phase
+    if (i + 1 < N) {
+      kf.push(`${fmt(boundary(i + 1))}%, 100% { ${plain} }`);
+    }
+
+    rules.push(`@keyframes fix-${lineIndex}-${i} { ${kf.join(' ')} }`);
+  }
+
+  return rules.join(' ');
 }
 
 function renderLineText(
@@ -118,8 +179,7 @@ function renderLineText(
   isHeading: boolean,
   showOVP?: boolean,
   fixations?: number[],
-  animateFlow?: boolean,
-  timePerSaccade?: number,
+  animConfig?: { lineIndex: number; lineDuration: number },
 ): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
 
@@ -135,13 +195,12 @@ function renderLineText(
     if (idx > cursor) {
       segments.push(<span key={`t${i}`}>{text.slice(cursor, idx)}</span>);
     }
-    if (animateFlow && timePerSaccade) {
+    if (animConfig) {
       const style = {
-        animationDuration: `${timePerSaccade}ms`,
-        animationDelay: `${i * timePerSaccade}ms`,
+        animation: `fix-${animConfig.lineIndex}-${i} ${animConfig.lineDuration}ms linear both`,
       };
       segments.push(
-        <span key={`f${i}`} className="saccade-fixation saccade-fixation-active" style={style}>
+        <span key={`f${i}`} className="saccade-fixation" style={style}>
           {text[idx]}
         </span>
       );

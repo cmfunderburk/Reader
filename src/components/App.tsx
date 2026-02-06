@@ -214,6 +214,22 @@ export function App() {
     });
   }, []);
 
+  const handleSaccadeShowSweepChange = useCallback((enabled: boolean) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, saccadeShowSweep: enabled };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleSaccadeShowNextORPChange = useCallback((enabled: boolean) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, saccadeShowNextORP: enabled };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleSaccadeLengthChange = useCallback((length: number) => {
     setDisplaySettings(prev => {
       const next = { ...prev, saccadeLength: length };
@@ -299,6 +315,8 @@ export function App() {
                 colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
                 showORP={displaySettings.rsvpShowORP}
                 saccadeShowOVP={displaySettings.saccadeShowOVP}
+                saccadeShowSweep={displaySettings.saccadeShowSweep}
+                saccadeShowNextORP={displaySettings.saccadeShowNextORP}
                 saccadeLength={displaySettings.saccadeLength}
               />
             )}
@@ -357,6 +375,10 @@ export function App() {
               onShowORPChange={handleShowORPChange}
               saccadeShowOVP={displaySettings.saccadeShowOVP}
               onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
+              saccadeShowSweep={displaySettings.saccadeShowSweep}
+              onSaccadeShowSweepChange={handleSaccadeShowSweepChange}
+              saccadeShowNextORP={displaySettings.saccadeShowNextORP}
+              onSaccadeShowNextORPChange={handleSaccadeShowNextORPChange}
               saccadeLength={displaySettings.saccadeLength}
               onSaccadeLengthChange={handleSaccadeLengthChange}
             />
