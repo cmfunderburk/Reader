@@ -92,13 +92,13 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // Initialize default library sources on first run
+  // Initialize default library sources on first run, or reset if all paths are stale
   const sources = loadSources()
-  if (sources.length === 0) {
-    // Library path is relative to app root (one level up from dist-electron/)
-    const libraryRoot = path.join(__dirname, '..', 'library')
+  const libraryRoot = path.join(__dirname, '..', 'library')
+  const needsReset = sources.length === 0 ||
+    sources.every(s => !fs.existsSync(s.path))
+  if (needsReset) {
     const defaultSources: LibrarySource[] = [
-      // Processed content only - unprocessed/ is for preprocessing workflow
       { name: 'Classics', path: path.join(libraryRoot, 'classics') },
       { name: 'Articles', path: path.join(libraryRoot, 'articles') },
       { name: 'References', path: path.join(libraryRoot, 'references') },
