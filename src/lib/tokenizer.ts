@@ -129,6 +129,12 @@ function tokenizeWordMode(text: string): Chunk[] {
 // Allowed: 4-char content words (1.5), 5-char function words (1.75), 6+ all (0-1.25)
 const MIN_FIXATION_PENALTY = 2.0;
 
+/** Words ending with clause/sentence punctuation are eligible as chunk boundaries
+ *  even when they'd otherwise be filtered by the quality threshold. */
+function hasClausePunctuation(word: string): boolean {
+  return /[,;:.!?\u2014\u2013]$/.test(word);
+}
+
 /**
  * Fixation-aligned chunking: uses the saccade scoring model to place fixation
  * points through the text, then partitions words into chunks around those
@@ -142,7 +148,7 @@ const MIN_FIXATION_PENALTY = 2.0;
  * @param text - Text to tokenize
  * @param saccadeLength - Target character distance between fixation points (7-15)
  */
-function tokenizeByFixation(text: string, saccadeLength: number): Chunk[] {
+export function tokenizeByFixation(text: string, saccadeLength: number): Chunk[] {
   const words = tokenizeWords(text);
   if (words.length === 0) return [];
   if (words.length === 1) {
@@ -180,7 +186,8 @@ function tokenizeByFixation(text: string, saccadeLength: number): Chunk[] {
     let bestLen = 0;
     for (let i = startFrom; i < endBefore; i++) {
       if (limitToWindow && layout[i].orpPos - lastPos > maxJump) continue;
-      if (requireQuality && wordPenalty(layout[i].word) >= MIN_FIXATION_PENALTY) continue;
+      if (requireQuality && wordPenalty(layout[i].word) >= MIN_FIXATION_PENALTY
+          && !hasClausePunctuation(layout[i].word)) continue;
       const score = Math.abs(layout[i].orpPos - target)
         + skipScale * wordPenalty(layout[i].word);
       if (score < bestScore - 0.001
@@ -231,10 +238,44 @@ function tokenizeByFixation(text: string, saccadeLength: number): Chunk[] {
   // Each chunk: [words from previous fixation + 1 .. current fixation]
   // Words before first fixation are prepended to first chunk.
   // Words after last fixation are appended to last chunk.
+  //
+  // Gap redistribution: when the gap between two fixations totals 6+ chars,
+  // move roughly half to the previous chunk so function words are balanced
+  // across chunks rather than piling up on the left side of one chunk.
   const chunks: Chunk[] = [];
   let chunkStart = 0;
 
-  for (const fixIdx of fixationIndices) {
+  for (let f = 0; f < fixationIndices.length; f++) {
+    const fixIdx = fixationIndices[f];
+
+    // Redistribute gap words between previous and current chunk
+    if (f > 0 && fixIdx > chunkStart) {
+      const gapWords = words.slice(chunkStart, fixIdx);
+      const gapChars = gapWords.reduce((sum, w) => sum + w.length, 0);
+
+      if (gapChars >= 6) {
+        const halfChars = gapChars / 2;
+        let movedChars = 0;
+        let moveCount = 0;
+        for (let i = 0; i < gapWords.length; i++) {
+          if (movedChars + gapWords[i].length > halfChars) break;
+          movedChars += gapWords[i].length;
+          moveCount++;
+        }
+
+        if (moveCount > 0) {
+          const toAppend = gapWords.slice(0, moveCount);
+          const lastChunk = chunks[chunks.length - 1];
+          chunks[chunks.length - 1] = {
+            text: lastChunk.text + ' ' + toAppend.join(' '),
+            wordCount: lastChunk.wordCount + toAppend.length,
+            orpIndex: lastChunk.orpIndex,
+          };
+          chunkStart += moveCount;
+        }
+      }
+    }
+
     const chunkWords = words.slice(chunkStart, fixIdx + 1);
     const chunkText = chunkWords.join(' ');
 
@@ -258,10 +299,80 @@ function tokenizeByFixation(text: string, saccadeLength: number): Chunk[] {
     chunks[chunks.length - 1] = {
       text: newText,
       wordCount: lastChunk.wordCount + trailingWords.length,
-      orpIndex: lastChunk.orpIndex, // stays on fixation word
+      orpIndex: lastChunk.orpIndex,
     };
   }
 
+  return chunks;
+}
+
+/**
+ * Flow-based chunking for RSVP: walks text left-to-right, accumulating words
+ * into reading-sized phrases and breaking at natural boundaries. Unlike the
+ * fixation-aligned chunker (which models saccade landing points), this produces
+ * chunks optimized for sequential flash presentation where the reader processes
+ * each chunk from left to right without parafoveal preview.
+ *
+ * Break points (in priority order):
+ * 1. After clause punctuation (, ; : . ! ?) when chunk >= punctLimit
+ * 2. Before a non-function word when chunk >= softLimit (natural phrase boundary)
+ * 3. Forced break when adding next word would exceed hardLimit
+ *
+ * @param text - Text to tokenize
+ * @param saccadeLength - Target phrase width in characters (controls chunk size)
+ */
+function tokenizeByPhrase(text: string, saccadeLength: number): Chunk[] {
+  const words = tokenizeWords(text);
+  if (words.length === 0) return [];
+
+  const softLimit = saccadeLength;
+  const hardLimit = saccadeLength * 2;
+  // Punctuation is a strong boundary — allow breaks at a lower threshold
+  const punctLimit = Math.max(4, Math.floor(saccadeLength * 0.6));
+
+  const chunks: Chunk[] = [];
+  let current: string[] = [];
+  let currentLen = 0;
+
+  function finalize() {
+    if (current.length === 0) return;
+    const chunkText = current.join(' ');
+    chunks.push({
+      text: chunkText,
+      wordCount: current.length,
+      orpIndex: calculateORP(chunkText),
+    });
+    current = [];
+    currentLen = 0;
+  }
+
+  for (const word of words) {
+    // Check if we should break BEFORE adding this word
+    if (current.length > 0) {
+      const newLen = currentLen + 1 + word.length;
+
+      if (currentLen >= softLimit) {
+        // Past soft limit: break if this word is a good chunk-starter
+        const clean = word.toLowerCase().replace(/[^a-z]/g, '');
+        if (!FUNCTION_WORDS.has(clean) || newLen > hardLimit) {
+          finalize();
+        }
+      } else if (newLen > hardLimit) {
+        // Hard limit: must break even if not ideal
+        finalize();
+      }
+    }
+
+    current.push(word);
+    currentLen = currentLen > 0 ? currentLen + 1 + word.length : word.length;
+
+    // Break AFTER this word if it has clause punctuation and chunk is large enough
+    if (currentLen >= punctLimit && hasClausePunctuation(word)) {
+      finalize();
+    }
+  }
+
+  finalize();
   return chunks;
 }
 
@@ -284,7 +395,7 @@ function tokenizeParagraph(text: string, mode: TokenMode, saccadeLength?: number
     case 'word':
       return tokenizeWordMode(text);
     case 'custom':
-      return tokenizeByFixation(text, saccadeLength ?? 10);
+      return tokenizeByPhrase(text, saccadeLength ?? 10);
   }
 }
 

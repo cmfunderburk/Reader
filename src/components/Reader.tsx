@@ -1,6 +1,6 @@
 import type { Chunk, DisplayMode, SaccadePage } from '../types';
 import { isBreakChunk } from '../lib/rsvp';
-import { calculateORP } from '../lib/tokenizer';
+import { calculateORP, FUNCTION_WORDS } from '../lib/tokenizer';
 import { SaccadeReader } from './SaccadeReader';
 
 interface ReaderProps {
@@ -46,11 +46,22 @@ export function Reader({ chunk, displayMode, saccadePage, showPacer = true, wpm,
 
   const { text } = chunk;
 
-  // For multi-word chunks, center on the first word's ORP (parafoveal training).
-  // For single words, use the chunk's own orpIndex.
-  const isMultiWord = text.includes(' ');
-  const firstWord = isMultiWord ? text.split(' ', 1)[0] : text;
-  const orp = calculateORP(firstWord);
+  // For multi-word chunks, place ORP on the first content word (skip function words).
+  // Function words are predictable enough to process from a nearby fixation even
+  // without the parafoveal preview that natural saccadic reading provides.
+  // For single words or when all words are function words, fall back to chunk center.
+  let orp = calculateORP(text);
+  if (text.includes(' ')) {
+    const words = text.split(' ');
+    let offset = 0;
+    for (const word of words) {
+      if (!FUNCTION_WORDS.has(word.toLowerCase().replace(/[^a-z]/g, ''))) {
+        orp = offset + calculateORP(word);
+        break;
+      }
+      offset += word.length + 1;
+    }
+  }
 
   const beforeOrp = text.slice(0, orp);
   const orpChar = text[orp] || '';
