@@ -5,6 +5,7 @@ import type { Article } from '../types';
 interface AddContentProps {
   onAdd: (article: Omit<Article, 'id' | 'addedAt' | 'readPosition' | 'isRead'>) => void;
   onClose: () => void;
+  inline?: boolean;
 }
 
 type Tab = 'url' | 'paste' | 'bookmarklet';
@@ -14,7 +15,7 @@ function getSpeedReadUrl(): string {
   return window.location.origin;
 }
 
-export function AddContent({ onAdd, onClose }: AddContentProps) {
+export function AddContent({ onAdd, onClose, inline }: AddContentProps) {
   const [tab, setTab] = useState<Tab>('url');
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -156,10 +157,12 @@ export function AddContent({ onAdd, onClose }: AddContentProps) {
 
   return (
     <div className="add-content">
-      <div className="add-header">
-        <h2>Add Article</h2>
-        <button onClick={onClose} className="btn-close">✕ Close</button>
-      </div>
+      {!inline && (
+        <div className="add-header">
+          <h2>Add Article</h2>
+          <button onClick={onClose} className="btn-close">✕ Close</button>
+        </div>
+      )}
 
       <div className="add-tabs">
         <button

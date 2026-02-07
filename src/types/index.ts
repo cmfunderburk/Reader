@@ -1,3 +1,6 @@
+// Activity: top-level grouping of display modes
+export type Activity = 'speed-reading' | 'comprehension' | 'training';
+
 // Display mode: how text is presented
 export type DisplayMode = 'rsvp' | 'saccade' | 'prediction' | 'recall' | 'training';
 

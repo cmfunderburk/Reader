@@ -20,6 +20,14 @@ export interface ExtractedContent {
   chapters?: Array<{ title: string; content: string }>
 }
 
+contextBridge.exposeInMainWorld('corpus', {
+  getInfo: (): Promise<{ available: boolean; totalChunks: number; totalArticles: number }> =>
+    ipcRenderer.invoke('corpus:getInfo'),
+
+  sample: (count: number, minDifficulty?: number): Promise<Array<{ text: string; source: string; domain: string; difficulty: number; words: number; sentences: number }>> =>
+    ipcRenderer.invoke('corpus:sample', count, minDifficulty),
+})
+
 contextBridge.exposeInMainWorld('library', {
   getSources: (): Promise<LibrarySource[]> =>
     ipcRenderer.invoke('library:getSources'),

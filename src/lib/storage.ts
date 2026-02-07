@@ -1,4 +1,4 @@
-import type { Article, Feed, TokenMode, PredictionLineWidth, RampCurve } from '../types';
+import type { Article, Feed, TokenMode, PredictionLineWidth, RampCurve, Activity, DisplayMode } from '../types';
 
 const STORAGE_KEYS = {
   articles: 'speedread_articles',
@@ -24,6 +24,7 @@ export interface Settings {
   saccadeShowOVP: boolean;
   saccadeShowSweep: boolean;
   saccadeLength: number;
+  lastSession?: { articleId: string; activity: Activity; displayMode: DisplayMode };
 }
 
 const DEFAULT_SETTINGS: Settings = {

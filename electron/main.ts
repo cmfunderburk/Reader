@@ -11,6 +11,52 @@ const __dirname = path.dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
 
+// ---------------------------------------------------------------------------
+// Corpus cache — loaded lazily on first request, held in memory for sampling
+// ---------------------------------------------------------------------------
+interface CorpusChunk {
+  text: string
+  source: string
+  domain: string
+  difficulty: number
+  words: number
+  sentences: number
+}
+
+let corpusChunks: CorpusChunk[] | null = null
+let corpusArticleCount = 0
+
+function getCorpusPath(): string {
+  return path.join(app.getPath('userData'), 'corpus', 'wikipedia-ga.jsonl')
+}
+
+function ensureCorpusLoaded(): boolean {
+  if (corpusChunks !== null) return true
+
+  const corpusPath = getCorpusPath()
+  if (!fs.existsSync(corpusPath)) return false
+
+  console.log(`Loading corpus from ${corpusPath} ...`)
+  const start = Date.now()
+  const content = fs.readFileSync(corpusPath, 'utf-8')
+  const lines = content.trim().split('\n')
+  const sources = new Set<string>()
+
+  corpusChunks = []
+  for (const line of lines) {
+    try {
+      const chunk = JSON.parse(line) as CorpusChunk
+      corpusChunks.push(chunk)
+      sources.add(chunk.source)
+    } catch {
+      // skip malformed lines
+    }
+  }
+  corpusArticleCount = sources.size
+  console.log(`Corpus loaded: ${corpusChunks.length} chunks from ${corpusArticleCount} articles (${Date.now() - start}ms)`)
+  return true
+}
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 function createWindow() {
@@ -25,8 +71,8 @@ function createWindow() {
     },
   })
 
-  if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
     mainWindow.webContents.openDevTools()
   } else {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
@@ -131,4 +177,36 @@ ipcMain.handle('library:selectDirectory', async () => {
   }
 
   return result.filePaths[0]
+})
+
+// Corpus IPC handlers
+ipcMain.handle('corpus:getInfo', () => {
+  const loaded = ensureCorpusLoaded()
+  return {
+    available: loaded,
+    totalChunks: corpusChunks?.length ?? 0,
+    totalArticles: corpusArticleCount,
+  }
+})
+
+ipcMain.handle('corpus:sample', (_, count: number, minDifficulty?: number) => {
+  if (!ensureCorpusLoaded() || !corpusChunks || corpusChunks.length === 0) {
+    return []
+  }
+
+  // Filter by difficulty floor if specified
+  const pool = minDifficulty != null && minDifficulty > 0
+    ? corpusChunks.filter(c => c.difficulty >= minDifficulty)
+    : corpusChunks
+
+  if (pool.length === 0) return []
+
+  // Fisher-Yates sample without replacement (up to count)
+  const n = Math.min(count, pool.length)
+  const indices = new Set<number>()
+  while (indices.size < n) {
+    indices.add(Math.floor(Math.random() * pool.length))
+  }
+
+  return Array.from(indices).map(i => pool[i])
 })

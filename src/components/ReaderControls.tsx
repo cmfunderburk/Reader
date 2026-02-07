@@ -5,6 +5,7 @@ interface ReaderControlsProps {
   wpm: number;
   mode: TokenMode;
   displayMode: DisplayMode;
+  allowedDisplayModes?: DisplayMode[];
   showPacer: boolean;
   linesPerPage: number;
   currentPageIndex: number;
@@ -42,6 +43,7 @@ export function ReaderControls({
   wpm,
   mode,
   displayMode,
+  allowedDisplayModes,
   showPacer,
   linesPerPage,
   currentPageIndex,
@@ -154,20 +156,32 @@ export function ReaderControls({
           </>
         )}
 
-        <label className="control-group">
-          <span className="control-label">Display:</span>
-          <select
-            value={displayMode}
-            onChange={e => onDisplayModeChange(e.target.value as DisplayMode)}
-            className="control-select"
-          >
-            <option value="rsvp">RSVP</option>
-            <option value="saccade">Saccade</option>
-            <option value="prediction">Prediction</option>
-            <option value="recall">Recall</option>
-            <option value="training">Training</option>
-          </select>
-        </label>
+        {(() => {
+          const ALL_MODES: { value: DisplayMode; label: string }[] = [
+            { value: 'rsvp', label: 'RSVP' },
+            { value: 'saccade', label: 'Saccade' },
+            { value: 'prediction', label: 'Prediction' },
+            { value: 'recall', label: 'Recall' },
+            { value: 'training', label: 'Training' },
+          ];
+          const modes = allowedDisplayModes
+            ? ALL_MODES.filter(m => allowedDisplayModes.includes(m.value))
+            : ALL_MODES;
+          return modes.length > 1 ? (
+            <label className="control-group">
+              <span className="control-label">Display:</span>
+              <select
+                value={displayMode}
+                onChange={e => onDisplayModeChange(e.target.value as DisplayMode)}
+                className="control-select"
+              >
+                {modes.map(m => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : null;
+        })()}
 
         {/* Hide chunk mode in self-paced and saccade modes */}
         {showChunks && (

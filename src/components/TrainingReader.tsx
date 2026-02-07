@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
 import type { Article, Chunk, TrainingParagraphResult } from '../types';
+import type { CorpusChunk, CorpusInfo } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import { isExactMatch, isWordKnown } from '../lib/levenshtein';
 import { loadTrainingHistory, saveTrainingHistory } from '../lib/storage';
@@ -7,15 +8,31 @@ import type { TrainingHistory } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
 
 type TrainingPhase = 'setup' | 'reading' | 'recall' | 'feedback' | 'complete';
+type DrillMode = 'article' | 'random';
+
+const SESSION_PRESETS = [
+  { label: 'Until I stop', value: null },
+  { label: '5 min', value: 5 * 60 },
+  { label: '10 min', value: 10 * 60 },
+  { label: '20 min', value: 20 * 60 },
+] as const;
+
+// Difficulty ratchet parameters
+const RATCHET_WINDOW = 5;
+const RATCHET_UP_THRESHOLD = 0.9;
+const RATCHET_DOWN_THRESHOLD = 0.7;
+const RATCHET_STEP = 0.05;
+const RATCHET_MAX = 0.8;
 
 interface TrainingReaderProps {
-  article: Article;
+  article?: Article;
   initialWpm: number;
   saccadeShowOVP?: boolean;
   saccadeShowSweep?: boolean;
   saccadeLength?: number;
   onClose: () => void;
   onWpmChange: (wpm: number) => void;
+  onSelectArticle?: () => void;
 }
 
 type WordKey = string;
@@ -42,14 +59,15 @@ export function TrainingReader({
   saccadeLength,
   onClose,
   onWpmChange,
+  onSelectArticle,
 }: TrainingReaderProps) {
   const paragraphs = useMemo(
-    () => segmentIntoParagraphs(article.content),
-    [article.content]
+    () => article ? segmentIntoParagraphs(article.content) : [],
+    [article?.content]
   );
 
   const [trainingHistory, setTrainingHistory] = useState<TrainingHistory>(
-    () => loadTrainingHistory(article.id)
+    () => article ? loadTrainingHistory(article.id) : {}
   );
 
   // Paragraph previews for setup TOC
@@ -93,6 +111,34 @@ export function TrainingReader({
   // Session history
   const [sessionHistory, setSessionHistory] = useState<TrainingParagraphResult[]>([]);
 
+  // --- Random Drill state ---
+  const [drillMode, setDrillMode] = useState<DrillMode>('article');
+  const [corpusInfo, setCorpusInfo] = useState<CorpusInfo | null>(null);
+  const [currentChunk, setCurrentChunk] = useState<CorpusChunk | null>(null);
+  const [chunkBuffer, setChunkBuffer] = useState<CorpusChunk[]>([]);
+  const [sessionTimeLimit, setSessionTimeLimit] = useState<number | null>(null);
+  const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
+  const [rollingScores, setRollingScores] = useState<number[]>([]);
+  const [currentDifficulty, setCurrentDifficulty] = useState(0);
+  const [drillChunksAttempted, setDrillChunksAttempted] = useState(0);
+  const [drillScoreSum, setDrillScoreSum] = useState(0);
+  const [drillWpmStart, setDrillWpmStart] = useState(initialWpm);
+
+  const isDrill = drillMode === 'random';
+
+  // Check corpus availability on mount
+  useEffect(() => {
+    window.corpus?.getInfo().then(info => setCorpusInfo(info ?? null));
+  }, []);
+
+  // Fetch chunks into buffer
+  const refillBuffer = useCallback(async (difficulty: number) => {
+    const chunks = await window.corpus?.sample(10, difficulty);
+    if (chunks && chunks.length > 0) {
+      setChunkBuffer(prev => [...prev, ...chunks]);
+    }
+  }, []);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLSpanElement>(null);
 
@@ -103,7 +149,9 @@ export function TrainingReader({
     () => sentenceMode ? segmentIntoSentences(currentParagraph) : [currentParagraph],
     [currentParagraph, sentenceMode]
   );
-  const currentText = sentenceChunks[currentSentenceIndex] ?? currentParagraph;
+  const currentText = isDrill && currentChunk
+    ? currentChunk.text
+    : (sentenceChunks[currentSentenceIndex] ?? currentParagraph);
 
   // Saccade data for reading phase
   const saccadeData = useMemo(
@@ -204,8 +252,8 @@ export function TrainingReader({
       knownWords += finalWord.known ? 1 : 0;
     }
 
-    // Sentence mode: if more sentences remain, advance and loop back to reading
-    if (sentenceMode && currentSentenceIndex < sentenceChunks.length - 1) {
+    // Sentence mode: if more sentences remain, advance and loop back to reading (article mode only)
+    if (!isDrill && sentenceMode && currentSentenceIndex < sentenceChunks.length - 1) {
       setParagraphStats({ totalWords, exactMatches, knownWords });
       setCurrentSentenceIndex(prev => prev + 1);
       setRecallInput('');
@@ -221,26 +269,46 @@ export function TrainingReader({
     }
 
     const score = totalWords > 0 ? Math.round((knownWords / totalWords) * 100) : 0;
+    const scoreNorm = score / 100;
 
-    const result: TrainingParagraphResult = {
-      paragraphIndex: currentParagraphIndex,
-      score: score / 100,
-      wpm,
-      repeated: sessionHistory.some(r => r.paragraphIndex === currentParagraphIndex),
-      wordCount: totalWords,
-      exactMatches,
-    };
+    if (isDrill) {
+      // Random drill: track stats, update difficulty ratchet
+      setDrillChunksAttempted(n => n + 1);
+      setDrillScoreSum(s => s + scoreNorm);
 
-    setSessionHistory(prev => [...prev, result]);
+      setRollingScores(prev => {
+        const updated = [...prev, scoreNorm].slice(-RATCHET_WINDOW);
+        const avg = updated.reduce((a, b) => a + b, 0) / updated.length;
+        if (updated.length >= RATCHET_WINDOW) {
+          if (avg >= RATCHET_UP_THRESHOLD) {
+            setCurrentDifficulty(d => Math.min(RATCHET_MAX, d + RATCHET_STEP));
+          } else if (avg < RATCHET_DOWN_THRESHOLD) {
+            setCurrentDifficulty(d => Math.max(0, d - RATCHET_STEP));
+          }
+        }
+        return updated;
+      });
+    } else {
+      // Article mode: persist to training history
+      const result: TrainingParagraphResult = {
+        paragraphIndex: currentParagraphIndex,
+        score: scoreNorm,
+        wpm,
+        repeated: sessionHistory.some(r => r.paragraphIndex === currentParagraphIndex),
+        wordCount: totalWords,
+        exactMatches,
+      };
 
-    // Persist to training history
-    setTrainingHistory(prev => {
-      const updated = { ...prev, [currentParagraphIndex]: { score: score / 100, wpm, timestamp: Date.now() } };
-      saveTrainingHistory(article.id, updated);
-      return updated;
-    });
+      setSessionHistory(prev => [...prev, result]);
 
-    // Determine WPM adjustment
+      setTrainingHistory(prev => {
+        const updated = { ...prev, [currentParagraphIndex]: { score: scoreNorm, wpm, timestamp: Date.now() } };
+        if (article) saveTrainingHistory(article.id, updated);
+        return updated;
+      });
+    }
+
+    // Determine WPM adjustment (same rules for both modes)
     let newWpm = wpm;
     if (score < 90) {
       newWpm = Math.max(100, wpm - 25);
@@ -251,7 +319,7 @@ export function TrainingReader({
     onWpmChange(newWpm);
 
     setPhase('feedback');
-  }, [currentParagraphIndex, wpm, sessionHistory, onWpmChange, article.id, sentenceMode, currentSentenceIndex, sentenceChunks.length]);
+  }, [isDrill, currentParagraphIndex, wpm, sessionHistory, onWpmChange, article?.id, sentenceMode, currentSentenceIndex, sentenceChunks.length]);
 
   const handleRecallSubmit = useCallback(() => {
     if (!currentRecallChunk || recallInput.trim() === '') return;
@@ -329,8 +397,12 @@ export function TrainingReader({
 
   // --- Feedback phase handlers ---
   const lastResult = sessionHistory[sessionHistory.length - 1];
-  const lastScore = lastResult ? Math.round(lastResult.score * 100) : 0;
-  const shouldRepeat = lastScore < 90;
+  const lastArticleScore = lastResult ? Math.round(lastResult.score * 100) : 0;
+  // In drill mode, use rolling scores; in article mode, use session history
+  const lastScore = isDrill
+    ? Math.round((rollingScores[rollingScores.length - 1] ?? 0) * 100)
+    : lastArticleScore;
+  const shouldRepeat = !isDrill && lastScore < 90;
 
   const handleContinue = useCallback(() => {
     // Reset recall state
@@ -345,7 +417,33 @@ export function TrainingReader({
     setReadingLeadIn(true);
     setCurrentSentenceIndex(0);
 
-    if (shouldRepeat) {
+    if (isDrill) {
+      // Check timed session expiry
+      if (sessionTimeLimit != null && sessionStartTime != null) {
+        const elapsed = (Date.now() - sessionStartTime) / 1000;
+        if (elapsed >= sessionTimeLimit) {
+          setPhase('complete');
+          return;
+        }
+      }
+
+      // Pop next chunk from buffer
+      setChunkBuffer(prev => {
+        const next = prev[0];
+        if (next) {
+          setCurrentChunk(next);
+          setPhase('reading');
+        } else {
+          setPhase('complete');
+        }
+        return prev.slice(1);
+      });
+
+      // Refill buffer if running low
+      if (chunkBuffer.length < 5) {
+        refillBuffer(currentDifficulty);
+      }
+    } else if (shouldRepeat) {
       // Repeat same paragraph
       setPhase('reading');
     } else {
@@ -357,14 +455,34 @@ export function TrainingReader({
         setPhase('reading');
       }
     }
-  }, [shouldRepeat, currentParagraphIndex, paragraphs.length]);
+  }, [isDrill, shouldRepeat, currentParagraphIndex, paragraphs.length, sessionTimeLimit, sessionStartTime, chunkBuffer.length, currentDifficulty, refillBuffer]);
 
   const handleStart = useCallback(() => {
     readingStepRef.current = 0;
     setReadingLeadIn(true);
     setCurrentSentenceIndex(0);
-    setPhase('reading');
-  }, []);
+
+    if (isDrill) {
+      // Reset drill session state
+      setDrillChunksAttempted(0);
+      setDrillScoreSum(0);
+      setDrillWpmStart(wpm);
+      setRollingScores([]);
+      setCurrentDifficulty(0);
+      setSessionStartTime(Date.now());
+
+      // Fetch initial buffer and start with first chunk
+      window.corpus?.sample(10, 0).then(chunks => {
+        if (chunks && chunks.length > 0) {
+          setCurrentChunk(chunks[0]);
+          setChunkBuffer(chunks.slice(1));
+          setPhase('reading');
+        }
+      });
+    } else {
+      setPhase('reading');
+    }
+  }, [isDrill, wpm]);
 
   const handleReturnToSetup = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -423,14 +541,37 @@ export function TrainingReader({
   // Setup phase
   if (phase === 'setup') {
     const trainedCount = Object.keys(trainingHistory).length;
+    const corpusAvailable = corpusInfo?.available ?? false;
     return (
       <div className="training-reader">
         <div className="training-setup">
           <h2>Training Mode</h2>
+
+          {corpusAvailable && (
+            <div className="training-mode-toggle">
+              <button
+                className={`training-mode-btn${!isDrill ? ' training-mode-active' : ''}`}
+                onClick={() => setDrillMode('article')}
+              >
+                Article
+              </button>
+              <button
+                className={`training-mode-btn${isDrill ? ' training-mode-active' : ''}`}
+                onClick={() => setDrillMode('random')}
+              >
+                Random Drill
+              </button>
+            </div>
+          )}
+
           <p className="training-setup-desc">
-            Read each paragraph at saccade pace, then recall its words.
-            WPM adjusts based on your comprehension score.
+            {isDrill
+              ? 'Random passages from Wikipedia. Read at saccade pace, then recall.'
+              : 'Read each paragraph at saccade pace, then recall its words.'
+            }
+            {' '}WPM adjusts based on your comprehension score.
           </p>
+
           <label className="training-setup-wpm">
             <span className="control-label">Speed:</span>
             <input
@@ -444,45 +585,80 @@ export function TrainingReader({
             />
             <span className="control-value">{wpm} WPM</span>
           </label>
-          <label className="training-setup-sentence">
-            <input
-              type="checkbox"
-              checked={sentenceMode}
-              onChange={e => setSentenceMode(e.target.checked)}
-            />
-            <span className="control-label">Sentence mode</span>
-          </label>
-          <div className="training-setup-info">
-            {paragraphs.length} paragraph{paragraphs.length !== 1 ? 's' : ''}
-            {trainedCount > 0 && ` · ${trainedCount} trained`}
-          </div>
-          <div className="training-toc">
-            {paragraphPreviews.map((p, i) => {
-              const hist = trainingHistory[i];
-              const isSelected = i === currentParagraphIndex;
-              return (
-                <button
-                  key={i}
-                  className={`training-toc-item${isSelected ? ' training-toc-selected' : ''}`}
-                  onClick={() => setCurrentParagraphIndex(i)}
+
+          {isDrill ? (
+            <>
+              <label className="training-setup-wpm">
+                <span className="control-label">Session:</span>
+                <select
+                  value={sessionTimeLimit ?? ''}
+                  onChange={e => setSessionTimeLimit(e.target.value ? Number(e.target.value) : null)}
+                  className="control-select"
                 >
-                  <span className="training-toc-num">{i + 1}</span>
-                  <span className="training-toc-preview">{p.preview}</span>
-                  <span className="training-toc-meta">
-                    {p.words}w
-                    {hist && (
-                      <span className={`training-toc-score${hist.score >= 0.9 ? ' training-toc-pass' : ''}`}>
-                        {' '}{Math.round(hist.score * 100)}%
-                      </span>
-                    )}
-                  </span>
+                  {SESSION_PRESETS.map(p => (
+                    <option key={p.label} value={p.value ?? ''}>{p.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="training-setup-info">
+                {corpusInfo!.totalChunks.toLocaleString()} chunks from {corpusInfo!.totalArticles.toLocaleString()} articles
+              </div>
+              <button onClick={handleStart} className="control-btn control-btn-primary">
+                Start Drill
+              </button>
+            </>
+          ) : !article ? (
+            <>
+              <div className="training-setup-info">No article selected</div>
+              {onSelectArticle && (
+                <button onClick={onSelectArticle} className="control-btn control-btn-primary">
+                  Select Article
                 </button>
-              );
-            })}
-          </div>
-          <button onClick={handleStart} className="control-btn control-btn-primary">
-            Start from {currentParagraphIndex + 1}
-          </button>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="training-setup-sentence">
+                <input
+                  type="checkbox"
+                  checked={sentenceMode}
+                  onChange={e => setSentenceMode(e.target.checked)}
+                />
+                <span className="control-label">Sentence mode</span>
+              </label>
+              <div className="training-setup-info">
+                {paragraphs.length} paragraph{paragraphs.length !== 1 ? 's' : ''}
+                {trainedCount > 0 && ` · ${trainedCount} trained`}
+              </div>
+              <div className="training-toc">
+                {paragraphPreviews.map((p, i) => {
+                  const hist = trainingHistory[i];
+                  const isSelected = i === currentParagraphIndex;
+                  return (
+                    <button
+                      key={i}
+                      className={`training-toc-item${isSelected ? ' training-toc-selected' : ''}`}
+                      onClick={() => setCurrentParagraphIndex(i)}
+                    >
+                      <span className="training-toc-num">{i + 1}</span>
+                      <span className="training-toc-preview">{p.preview}</span>
+                      <span className="training-toc-meta">
+                        {p.words}w
+                        {hist && (
+                          <span className={`training-toc-score${hist.score >= 0.9 ? ' training-toc-pass' : ''}`}>
+                            {' '}{Math.round(hist.score * 100)}%
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={handleStart} className="control-btn control-btn-primary">
+                Start from {currentParagraphIndex + 1}
+              </button>
+            </>
+          )}
         </div>
       </div>
     );
@@ -490,11 +666,39 @@ export function TrainingReader({
 
   // Complete phase
   if (phase === 'complete') {
+    const drillAvgScore = drillChunksAttempted > 0
+      ? Math.round((drillScoreSum / drillChunksAttempted) * 100)
+      : 0;
+    const drillDuration = sessionStartTime
+      ? Math.round((Date.now() - sessionStartTime) / 1000)
+      : 0;
+    const drillMinutes = Math.floor(drillDuration / 60);
+    const drillSeconds = drillDuration % 60;
+
     return (
       <div className="training-reader">
         <div className="training-complete">
-          <h2>Training Complete</h2>
-          {sessionSummary && (
+          <h2>{isDrill ? 'Drill Complete' : 'Training Complete'}</h2>
+          {isDrill ? (
+            <div className="prediction-complete-stats">
+              <div className="prediction-stat">
+                <span className="prediction-stat-value">{drillChunksAttempted}</span>
+                <span className="prediction-stat-label">chunks</span>
+              </div>
+              <div className="prediction-stat">
+                <span className="prediction-stat-value">{drillAvgScore}%</span>
+                <span className="prediction-stat-label">avg score</span>
+              </div>
+              <div className="prediction-stat">
+                <span className="prediction-stat-value">{drillWpmStart} → {wpm}</span>
+                <span className="prediction-stat-label">WPM</span>
+              </div>
+              <div className="prediction-stat">
+                <span className="prediction-stat-value">{drillMinutes}:{String(drillSeconds).padStart(2, '0')}</span>
+                <span className="prediction-stat-label">duration</span>
+              </div>
+            </div>
+          ) : sessionSummary && (
             <div className="prediction-complete-stats">
               <div className="prediction-stat">
                 <span className="prediction-stat-value">{sessionSummary.paragraphCount}</span>
@@ -521,9 +725,14 @@ export function TrainingReader({
             </div>
           )}
           <div className="prediction-complete-actions">
-            <button onClick={onClose} className="control-btn control-btn-primary">
-              Close
+            <button onClick={handleReturnToSetup} className="control-btn control-btn-primary">
+              {isDrill ? 'Drill Again' : 'Close'}
             </button>
+            {isDrill && (
+              <button onClick={onClose} className="control-btn">
+                Exit
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -532,32 +741,39 @@ export function TrainingReader({
 
   // Feedback phase
   if (phase === 'feedback') {
-    const wpmDelta = lastResult
-      ? (() => {
-          const s = Math.round(lastResult.score * 100);
-          if (s < 90) return -25;
-          if (s >= 95) return +15;
-          return 0;
-        })()
-      : 0;
+    const wpmDelta = (() => {
+      if (lastScore < 90) return -25;
+      if (lastScore >= 95) return +15;
+      return 0;
+    })();
 
     return (
       <div className="training-reader">
         <div className="training-header">
           <span className="training-phase-label">Feedback</span>
           <span className="training-progress">
-            Paragraph {currentParagraphIndex + 1} / {paragraphs.length}
+            {isDrill
+              ? `Chunk ${drillChunksAttempted}`
+              : `Paragraph ${currentParagraphIndex + 1} / ${paragraphs.length}`
+            }
           </span>
           <span className="training-wpm">{wpm} WPM</span>
-          <button onClick={handleReturnToSetup} className="control-btn training-pause-btn" title="Return to paragraph list">
+          <button onClick={handleReturnToSetup} className="control-btn training-pause-btn" title="Return to setup">
             Exit
           </button>
         </div>
         <div className="training-feedback">
           <div className="training-score-value">{lastScore}%</div>
-          <div className="training-score-detail">
-            {lastResult && `${lastResult.exactMatches} / ${lastResult.wordCount} exact`}
-          </div>
+          {!isDrill && lastResult && (
+            <div className="training-score-detail">
+              {lastResult.exactMatches} / {lastResult.wordCount} exact
+            </div>
+          )}
+          {isDrill && currentChunk && (
+            <div className="training-score-detail">
+              From: {currentChunk.source} ({currentChunk.domain})
+            </div>
+          )}
           {wpmDelta !== 0 && (
             <div className="training-wpm-change">
               WPM {wpmDelta > 0 ? '+' : ''}{wpmDelta} → {wpm}
@@ -569,7 +785,7 @@ export function TrainingReader({
             </div>
           )}
           <button onClick={handleContinue} className="control-btn control-btn-primary">
-            {shouldRepeat ? 'Retry' : currentParagraphIndex + 1 >= paragraphs.length ? 'Finish' : 'Continue'}
+            {isDrill ? 'Next' : shouldRepeat ? 'Retry' : currentParagraphIndex + 1 >= paragraphs.length ? 'Finish' : 'Continue'}
           </button>
           <div className="prediction-continue-hint">Press Space to continue</div>
         </div>
@@ -584,8 +800,11 @@ export function TrainingReader({
         <div className="training-header">
           <span className="training-phase-label">{paused ? 'Paused' : 'Read'}</span>
           <span className="training-progress">
-            Paragraph {currentParagraphIndex + 1} / {paragraphs.length}
-            {sentenceMode && sentenceChunks.length > 1 && ` · Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length}`}
+            {isDrill
+              ? `Chunk ${drillChunksAttempted + 1}`
+              : <>Paragraph {currentParagraphIndex + 1} / {paragraphs.length}
+                {sentenceMode && sentenceChunks.length > 1 && ` · Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length}`}</>
+            }
           </span>
           <span className="training-wpm">{wpm} WPM</span>
           <button onClick={togglePause} className="control-btn training-pause-btn">
@@ -624,9 +843,11 @@ export function TrainingReader({
       <div className="training-header">
         <span className="training-phase-label">{paused ? 'Paused' : 'Recall'}</span>
         <span className="training-progress">
-          {sentenceMode && sentenceChunks.length > 1
-            ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recallWordIndex} / ${totalRecallWords} words`
-            : `${recallWordIndex} / ${totalRecallWords} words`
+          {isDrill
+            ? `Chunk ${drillChunksAttempted + 1} · ${recallWordIndex} / ${totalRecallWords} words`
+            : sentenceMode && sentenceChunks.length > 1
+              ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recallWordIndex} / ${totalRecallWords} words`
+              : `${recallWordIndex} / ${totalRecallWords} words`
           }
         </span>
         <span className="training-wpm">{wpm} WPM</span>

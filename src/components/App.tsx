@@ -2,11 +2,10 @@ import { useState, useCallback, useMemo } from 'react';
 import { Reader } from './Reader';
 import { ReaderControls } from './ReaderControls';
 import { ProgressBar } from './ProgressBar';
-import { ArticleQueue } from './ArticleQueue';
 import { ArticlePreview } from './ArticlePreview';
 import { AddContent } from './AddContent';
-import { FeedManager } from './FeedManager';
-import { Library } from './Library';
+import { HomeScreen } from './HomeScreen';
+import { ContentBrowser } from './ContentBrowser';
 import { LibrarySettings } from './LibrarySettings';
 import { SettingsPanel } from './SettingsPanel';
 import { PredictionReader } from './PredictionReader';
@@ -19,17 +18,31 @@ import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rs
 import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings, saveSettings } from '../lib/storage';
 import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
-import type { Article, Feed, TokenMode } from '../types';
+import type { Article, Feed, TokenMode, Activity, DisplayMode } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 
-type View = 'reader' | 'preview' | 'add' | 'library-settings' | 'settings';
+type ViewState =
+  | { screen: 'home' }
+  | { screen: 'content-browser'; activity: Activity }
+  | { screen: 'preview'; activity: Activity; article: Article }
+  | { screen: 'active-reader' }
+  | { screen: 'active-exercise' }
+  | { screen: 'active-training'; article?: Article }
+  | { screen: 'settings' }
+  | { screen: 'library-settings' }
+  | { screen: 'add' }; // bookmarklet import
 
-// Check if we're in import mode (opened from bookmarklet)
-function getInitialView(): View {
+function getInitialView(): ViewState {
   const params = new URLSearchParams(window.location.search);
-  return params.get('import') === '1' ? 'add' : 'reader';
+  return params.get('import') === '1' ? { screen: 'add' } : { screen: 'home' };
 }
+
+const ACTIVITY_LABELS: Record<Activity, string> = {
+  'speed-reading': 'Speed Reading',
+  'comprehension': 'Comprehension',
+  'training': 'Training',
+};
 
 export function App() {
   const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
@@ -52,8 +65,7 @@ export function App() {
     return loaded;
   });
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
-  const [view, setView] = useState<View>(getInitialView);
-  const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
+  const [viewState, setViewState] = useState<ViewState>(getInitialView);
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
 
   const rsvp = useRSVP({
@@ -66,26 +78,41 @@ export function App() {
     rampRate: settings.rampRate,
     rampInterval: settings.rampInterval,
     saccadeLength: settings.saccadeLength,
-    onComplete: () => {
-      // Could auto-advance to next article here
-    },
+    onComplete: () => {},
   });
 
+  const navigate = useCallback((next: ViewState) => {
+    rsvp.pause();
+    setViewState(next);
+  }, [rsvp]);
+
+  const goHome = useCallback(() => {
+    rsvp.pause();
+    setViewState({ screen: 'home' });
+  }, [rsvp]);
+
   // Keyboard shortcuts
+  const isActiveView = viewState.screen === 'active-reader' || viewState.screen === 'active-exercise' || viewState.screen === 'active-training';
+
   useKeyboard({
-    onSpace: (rsvp.displayMode === 'prediction' || rsvp.displayMode === 'recall' || rsvp.displayMode === 'training') ? undefined : rsvp.toggle,
-    onLeft: rsvp.prev,
-    onRight: rsvp.next,
-    onBracketLeft: () => rsvp.setWpm(Math.max(100, rsvp.wpm - 10)),
-    onBracketRight: () => rsvp.setWpm(Math.min(800, rsvp.wpm + 10)),
+    onSpace: isActiveView && rsvp.displayMode !== 'prediction' && rsvp.displayMode !== 'recall' && rsvp.displayMode !== 'training'
+      ? rsvp.toggle : undefined,
+    onLeft: isActiveView ? rsvp.prev : undefined,
+    onRight: isActiveView ? rsvp.next : undefined,
+    onBracketLeft: isActiveView ? () => rsvp.setWpm(Math.max(100, rsvp.wpm - 10)) : undefined,
+    onBracketRight: isActiveView ? () => rsvp.setWpm(Math.min(800, rsvp.wpm + 10)) : undefined,
     onEscape: () => {
-      if (view !== 'reader') {
-        setView('reader');
-      } else {
-        rsvp.pause();
+      if (viewState.screen === 'home') return;
+      if (isActiveView) {
+        goHome();
+      } else if (viewState.screen === 'content-browser' || viewState.screen === 'preview' ||
+                 viewState.screen === 'settings' || viewState.screen === 'library-settings' || viewState.screen === 'add') {
+        goHome();
       }
     },
   });
+
+  // --- Article / Feed handlers (unchanged) ---
 
   const handleAddArticle = useCallback((article: Omit<Article, 'id' | 'addedAt' | 'readPosition' | 'isRead'>) => {
     const metrics = measureTextMetrics(article.content);
@@ -100,22 +127,11 @@ export function App() {
     const updated = [...articles, newArticle];
     setArticles(updated);
     saveArticles(updated);
-    setView('reader');
-  }, [articles]);
-
-  const handleSelectArticle = useCallback((article: Article) => {
-    setPreviewArticle(article);
-    setView('preview');
-  }, []);
-
-  const handleStartReading = useCallback((article: Article, wpm: number, mode: TokenMode) => {
-    rsvp.setWpm(wpm);
-    rsvp.setMode(mode);
-    rsvp.loadArticle(article);
-    setView('reader');
-    // Auto-play after a brief delay
-    setTimeout(() => rsvp.play(), 100);
-  }, [rsvp]);
+    // If in content-browser stay there; if bookmarklet import go home
+    if (viewState.screen === 'add') {
+      setViewState({ screen: 'home' });
+    }
+  }, [articles, viewState.screen]);
 
   const handleRemoveArticle = useCallback((id: string) => {
     const updated = articles.filter(a => a.id !== id);
@@ -127,13 +143,10 @@ export function App() {
     setIsLoadingFeed(true);
     try {
       const { feed, articles: feedArticles } = await fetchFeed(url);
-
-      // Add feed
       const updatedFeeds = [...feeds, feed];
       setFeeds(updatedFeeds);
       saveFeeds(updatedFeeds);
 
-      // Add articles (avoid duplicates by URL)
       const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
       const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
       if (newArticles.length > 0) {
@@ -156,8 +169,6 @@ export function App() {
     setIsLoadingFeed(true);
     try {
       const { articles: feedArticles } = await fetchFeed(feed.url);
-
-      // Add new articles (avoid duplicates)
       const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
       const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
       if (newArticles.length > 0) {
@@ -165,8 +176,6 @@ export function App() {
         setArticles(updatedArticles);
         saveArticles(updatedArticles);
       }
-
-      // Update feed's lastFetched
       const updatedFeeds = feeds.map(f =>
         f.id === feed.id ? { ...f, lastFetched: Date.now() } : f
       );
@@ -176,6 +185,8 @@ export function App() {
       setIsLoadingFeed(false);
     }
   }, [feeds, articles]);
+
+  // --- Settings handlers (unchanged) ---
 
   const handleSettingsChange = useCallback((newSettings: Settings) => {
     setDisplaySettings(newSettings);
@@ -236,6 +247,83 @@ export function App() {
     rsvp.goToIndex(newIndex);
   }, [rsvp]);
 
+  // --- Navigation handlers ---
+
+  const saveLastSession = useCallback((articleId: string, activity: Activity, displayMode: DisplayMode) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, lastSession: { articleId, activity, displayMode } };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleSelectActivity = useCallback((activity: Activity) => {
+    navigate({ screen: 'content-browser', activity });
+  }, [navigate]);
+
+  const handleStartDrill = useCallback(() => {
+    navigate({ screen: 'active-training' });
+  }, [navigate]);
+
+  // Content browser → article selected → preview
+  const handleContentBrowserSelectArticle = useCallback((article: Article) => {
+    if (viewState.screen === 'content-browser') {
+      const activity = viewState.activity;
+      if (activity === 'training') {
+        // Training skips preview, goes directly to training setup
+        navigate({ screen: 'active-training', article });
+        return;
+      }
+      navigate({ screen: 'preview', activity, article });
+    }
+  }, [viewState, navigate]);
+
+  // Preview → start reading
+  const handleStartReading = useCallback((article: Article, wpm: number, mode: TokenMode) => {
+    if (viewState.screen !== 'preview') return;
+    const activity = viewState.activity;
+
+    rsvp.setWpm(wpm);
+    rsvp.setMode(mode);
+    rsvp.loadArticle(article);
+
+    if (activity === 'speed-reading') {
+      rsvp.setDisplayMode('rsvp');
+      saveLastSession(article.id, 'speed-reading', 'rsvp');
+      setViewState({ screen: 'active-reader' });
+      setTimeout(() => rsvp.play(), 100);
+    } else if (activity === 'comprehension') {
+      rsvp.setDisplayMode('prediction');
+      saveLastSession(article.id, 'comprehension', 'prediction');
+      setViewState({ screen: 'active-exercise' });
+    }
+  }, [rsvp, viewState, saveLastSession]);
+
+  // Continue from home screen
+  const continueInfo = useMemo(() => {
+    const session = settings.lastSession;
+    if (!session) return null;
+    const article = articles.find(a => a.id === session.articleId);
+    if (!article) return null;
+    return { article, activity: session.activity, displayMode: session.displayMode };
+  }, [settings.lastSession, articles]);
+
+  const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
+    rsvp.loadArticle(info.article);
+    rsvp.setDisplayMode(info.displayMode);
+
+    if (info.activity === 'speed-reading') {
+      setViewState({ screen: 'active-reader' });
+      setTimeout(() => rsvp.play(), 100);
+    } else if (info.activity === 'comprehension') {
+      setViewState({ screen: 'active-exercise' });
+    } else if (info.activity === 'training') {
+      setViewState({ screen: 'active-training', article: info.article });
+    }
+  }, [rsvp]);
+
+  // --- Computed values ---
+
   const remainingTime = rsvp.chunks.length > 0
     ? formatTime(calculateRemainingTime(rsvp.chunks, rsvp.currentChunkIndex, rsvp.effectiveWpm, rsvp.mode))
     : '--:--';
@@ -251,6 +339,83 @@ export function App() {
 
   const progress = calculateProgress(rsvp.currentChunkIndex, rsvp.chunks.length);
 
+  // Header title based on view
+  const headerTitle = (() => {
+    switch (viewState.screen) {
+      case 'active-reader': return 'Speed Reading';
+      case 'active-exercise': return 'Comprehension';
+      case 'active-training': return 'Training';
+      case 'content-browser': return ACTIVITY_LABELS[viewState.activity];
+      case 'preview': return ACTIVITY_LABELS[viewState.activity];
+      case 'settings': return 'Settings';
+      case 'library-settings': return 'Library Settings';
+      default: return 'Reader';
+    }
+  })();
+
+  const showBackButton = viewState.screen !== 'home';
+
+  // --- Render helpers ---
+
+  const renderReaderControls = (allowedModes: DisplayMode[]) => (
+    <ReaderControls
+      isPlaying={rsvp.isPlaying}
+      wpm={rsvp.wpm}
+      mode={rsvp.mode}
+      displayMode={rsvp.displayMode}
+      allowedDisplayModes={allowedModes}
+      showPacer={rsvp.showPacer}
+      linesPerPage={rsvp.linesPerPage}
+      currentPageIndex={rsvp.currentSaccadePageIndex}
+      totalPages={rsvp.saccadePages.length}
+      onPlay={rsvp.play}
+      onPause={rsvp.pause}
+      onNext={rsvp.next}
+      onPrev={rsvp.prev}
+      onReset={rsvp.reset}
+      onSkipToEnd={() => rsvp.goToIndex(rsvp.chunks.length - 1)}
+      onWpmChange={rsvp.setWpm}
+      onModeChange={rsvp.setMode}
+      onDisplayModeChange={rsvp.setDisplayMode}
+      onShowPacerChange={rsvp.setShowPacer}
+      onLinesPerPageChange={rsvp.setLinesPerPage}
+      onNextPage={rsvp.nextPage}
+      onPrevPage={rsvp.prevPage}
+      rampEnabled={rsvp.rampEnabled}
+      effectiveWpm={rsvp.effectiveWpm}
+      onRampEnabledChange={handleRampEnabledChange}
+      alternateColors={displaySettings.rsvpAlternateColors}
+      onAlternateColorsChange={handleAlternateColorsChange}
+      showORP={displaySettings.rsvpShowORP}
+      onShowORPChange={handleShowORPChange}
+      saccadeShowOVP={displaySettings.saccadeShowOVP}
+      onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
+      saccadeShowSweep={displaySettings.saccadeShowSweep}
+      onSaccadeShowSweepChange={handleSaccadeShowSweepChange}
+      saccadeLength={displaySettings.saccadeLength}
+      onSaccadeLengthChange={handleSaccadeLengthChange}
+    />
+  );
+
+  const renderArticleInfo = () => (
+    <div className="article-info">
+      {rsvp.article ? (
+        <>
+          <span className="article-title">{rsvp.article.title}</span>
+          <span className="article-meta">
+            {rsvp.displayMode === 'prediction' || rsvp.displayMode === 'recall' ? (
+              `${rsvp.article.source} • ${rsvp.currentChunkIndex} / ${rsvp.chunks.length} words`
+            ) : (
+              `${rsvp.article.source} • ${formattedWordCount} words • ${remainingTime} remaining • ${rsvp.effectiveWpm} WPM`
+            )}
+          </span>
+        </>
+      ) : (
+        <span className="article-meta">No article loaded</span>
+      )}
+    </div>
+  );
+
   return (
     <div className="app" style={{
       '--rsvp-font-size': `${displaySettings.rsvpFontSize}rem`,
@@ -259,42 +424,83 @@ export function App() {
       '--prediction-line-width': `${PREDICTION_LINE_WIDTHS[displaySettings.predictionLineWidth]}ch`,
     } as React.CSSProperties}>
       <header className="app-header">
-        <h1>Reader</h1>
-        <button className="settings-gear-btn" onClick={() => setView('settings')} title="Display settings">&#9881;</button>
+        <div className="app-header-left">
+          {showBackButton && (
+            <button className="control-btn app-back-btn" onClick={goHome}>Home</button>
+          )}
+          <h1>{headerTitle}</h1>
+        </div>
+        <button className="settings-gear-btn" onClick={() => navigate({ screen: 'settings' })} title="Display settings">&#9881;</button>
       </header>
 
       <main className="app-main">
-        {view === 'reader' && (
+        {/* Home Screen */}
+        {viewState.screen === 'home' && (
+          <HomeScreen
+            onSelectActivity={handleSelectActivity}
+            onContinue={handleContinue}
+            onStartDrill={handleStartDrill}
+            continueInfo={continueInfo}
+          />
+        )}
+
+        {/* Content Browser */}
+        {viewState.screen === 'content-browser' && (
+          <ContentBrowser
+            activity={viewState.activity}
+            articles={articles}
+            currentArticleId={rsvp.article?.id}
+            feeds={feeds}
+            isLoadingFeed={isLoadingFeed}
+            wpm={rsvp.wpm}
+            onSelectArticle={handleContentBrowserSelectArticle}
+            onRemoveArticle={handleRemoveArticle}
+            onAddArticle={handleAddArticle}
+            onAddFeed={handleAddFeed}
+            onRemoveFeed={handleRemoveFeed}
+            onRefreshFeed={handleRefreshFeed}
+            onOpenLibrarySettings={() => navigate({ screen: 'library-settings' })}
+            onBack={goHome}
+          />
+        )}
+
+        {/* Article Preview */}
+        {viewState.screen === 'preview' && (
+          <ArticlePreview
+            article={viewState.article}
+            initialWpm={rsvp.wpm}
+            initialMode={rsvp.mode}
+            onStart={handleStartReading}
+            onClose={() => navigate({ screen: 'content-browser', activity: viewState.activity })}
+          />
+        )}
+
+        {/* Speed Reading: RSVP / Saccade */}
+        {viewState.screen === 'active-reader' && (
           <>
-            {rsvp.displayMode === 'training' && rsvp.article ? (
-              <div className="training-container">
-                <TrainingReader
-                  article={rsvp.article}
-                  initialWpm={rsvp.wpm}
-                  saccadeShowOVP={displaySettings.saccadeShowOVP}
-                  saccadeShowSweep={displaySettings.saccadeShowSweep}
-                  saccadeLength={displaySettings.saccadeLength}
-                  onClose={() => rsvp.setDisplayMode('rsvp')}
-                  onWpmChange={rsvp.setWpm}
-                />
-              </div>
-            ) : rsvp.displayMode === 'prediction' ? (
-              <div className="prediction-container">
-                <PredictionStats stats={rsvp.predictionStats} />
-                <PredictionReader
-                  chunks={rsvp.chunks}
-                  currentChunkIndex={rsvp.currentChunkIndex}
-                  onAdvance={rsvp.advanceSelfPaced}
-                  onPredictionResult={rsvp.handlePredictionResult}
-                  onReset={rsvp.resetPredictionStats}
-                  onClose={() => rsvp.setDisplayMode('rsvp')}
-                  stats={rsvp.predictionStats}
-                  wpm={rsvp.wpm}
-                  goToIndex={rsvp.goToIndex}
-                  onWpmChange={rsvp.setWpm}
-                />
-              </div>
-            ) : rsvp.displayMode === 'recall' ? (
+            <Reader
+              chunk={rsvp.currentChunk}
+              isPlaying={rsvp.isPlaying}
+              displayMode={rsvp.displayMode}
+              saccadePage={rsvp.currentSaccadePage}
+              showPacer={rsvp.showPacer}
+              wpm={rsvp.effectiveWpm}
+              colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
+              showORP={displaySettings.rsvpShowORP}
+              saccadeShowOVP={displaySettings.saccadeShowOVP}
+              saccadeShowSweep={displaySettings.saccadeShowSweep}
+              saccadeLength={displaySettings.saccadeLength}
+            />
+            <ProgressBar progress={progress} onChange={handleProgressChange} />
+            {renderArticleInfo()}
+            {renderReaderControls(['rsvp', 'saccade'])}
+          </>
+        )}
+
+        {/* Comprehension: Prediction / Recall */}
+        {viewState.screen === 'active-exercise' && (
+          <>
+            {rsvp.displayMode === 'recall' ? (
               <div className="recall-container">
                 <PredictionStats stats={rsvp.predictionStats} />
                 <RecallReader
@@ -304,142 +510,69 @@ export function App() {
                   onAdvance={rsvp.advanceSelfPaced}
                   onPredictionResult={rsvp.handlePredictionResult}
                   onReset={rsvp.resetPredictionStats}
-                  onClose={() => rsvp.setDisplayMode('rsvp')}
+                  onClose={goHome}
                   stats={rsvp.predictionStats}
                   goToIndex={rsvp.goToIndex}
                 />
               </div>
             ) : (
-              <Reader
-                chunk={rsvp.currentChunk}
-                isPlaying={rsvp.isPlaying}
-                displayMode={rsvp.displayMode}
-                saccadePage={rsvp.currentSaccadePage}
-                showPacer={rsvp.showPacer}
-                wpm={rsvp.effectiveWpm}
-                colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
-                showORP={displaySettings.rsvpShowORP}
-                saccadeShowOVP={displaySettings.saccadeShowOVP}
-                saccadeShowSweep={displaySettings.saccadeShowSweep}
-                saccadeLength={displaySettings.saccadeLength}
-              />
+              <div className="prediction-container">
+                <PredictionStats stats={rsvp.predictionStats} />
+                <PredictionReader
+                  chunks={rsvp.chunks}
+                  currentChunkIndex={rsvp.currentChunkIndex}
+                  onAdvance={rsvp.advanceSelfPaced}
+                  onPredictionResult={rsvp.handlePredictionResult}
+                  onReset={rsvp.resetPredictionStats}
+                  onClose={goHome}
+                  stats={rsvp.predictionStats}
+                  wpm={rsvp.wpm}
+                  goToIndex={rsvp.goToIndex}
+                  onWpmChange={rsvp.setWpm}
+                />
+              </div>
             )}
-
-            {rsvp.displayMode !== 'prediction' && rsvp.displayMode !== 'recall' && rsvp.displayMode !== 'training' && (
-              <ProgressBar progress={progress} onChange={handleProgressChange} />
-            )}
-
-            <div className="article-info">
-              {rsvp.article ? (
-                <>
-                  <span className="article-title">{rsvp.article.title}</span>
-                  <span className="article-meta">
-                    {rsvp.displayMode === 'training' ? (
-                      `${rsvp.article.source} • Training Mode`
-                    ) : rsvp.displayMode === 'prediction' || rsvp.displayMode === 'recall' ? (
-                      `${rsvp.article.source} • ${rsvp.currentChunkIndex} / ${rsvp.chunks.length} words`
-                    ) : (
-                      `${rsvp.article.source} • ${formattedWordCount} words • ${remainingTime} remaining • ${rsvp.effectiveWpm} WPM`
-                    )}
-                  </span>
-                </>
-              ) : (
-                <span className="article-meta">No article loaded</span>
-              )}
-            </div>
-
-            <ReaderControls
-              isPlaying={rsvp.isPlaying}
-              wpm={rsvp.wpm}
-              mode={rsvp.mode}
-              displayMode={rsvp.displayMode}
-              showPacer={rsvp.showPacer}
-              linesPerPage={rsvp.linesPerPage}
-              currentPageIndex={rsvp.currentSaccadePageIndex}
-              totalPages={rsvp.saccadePages.length}
-              onPlay={rsvp.play}
-              onPause={rsvp.pause}
-              onNext={rsvp.next}
-              onPrev={rsvp.prev}
-              onReset={rsvp.reset}
-              onSkipToEnd={() => rsvp.goToIndex(rsvp.chunks.length - 1)}
-              onWpmChange={rsvp.setWpm}
-              onModeChange={rsvp.setMode}
-              onDisplayModeChange={rsvp.setDisplayMode}
-              onShowPacerChange={rsvp.setShowPacer}
-              onLinesPerPageChange={rsvp.setLinesPerPage}
-              onNextPage={rsvp.nextPage}
-              onPrevPage={rsvp.prevPage}
-              rampEnabled={rsvp.rampEnabled}
-              effectiveWpm={rsvp.effectiveWpm}
-              onRampEnabledChange={handleRampEnabledChange}
-              alternateColors={displaySettings.rsvpAlternateColors}
-              onAlternateColorsChange={handleAlternateColorsChange}
-              showORP={displaySettings.rsvpShowORP}
-              onShowORPChange={handleShowORPChange}
-              saccadeShowOVP={displaySettings.saccadeShowOVP}
-              onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
-              saccadeShowSweep={displaySettings.saccadeShowSweep}
-              onSaccadeShowSweepChange={handleSaccadeShowSweepChange}
-              saccadeLength={displaySettings.saccadeLength}
-              onSaccadeLengthChange={handleSaccadeLengthChange}
-            />
+            {renderReaderControls(['prediction', 'recall'])}
           </>
         )}
 
-        {view === 'preview' && previewArticle && (
-          <ArticlePreview
-            article={previewArticle}
-            initialWpm={rsvp.wpm}
-            initialMode={rsvp.mode}
-            onStart={handleStartReading}
-            onClose={() => setView('reader')}
-          />
+        {/* Training */}
+        {viewState.screen === 'active-training' && (
+          <div className="training-container">
+            <TrainingReader
+              article={viewState.article}
+              initialWpm={rsvp.wpm}
+              saccadeShowOVP={displaySettings.saccadeShowOVP}
+              saccadeShowSweep={displaySettings.saccadeShowSweep}
+              saccadeLength={displaySettings.saccadeLength}
+              onClose={goHome}
+              onWpmChange={rsvp.setWpm}
+              onSelectArticle={() => navigate({ screen: 'content-browser', activity: 'training' })}
+            />
+          </div>
         )}
 
-        {view === 'add' && (
+        {/* Bookmarklet import */}
+        {viewState.screen === 'add' && (
           <AddContent
             onAdd={handleAddArticle}
-            onClose={() => setView('reader')}
+            onClose={goHome}
           />
         )}
 
-        {view === 'library-settings' && (
-          <LibrarySettings onClose={() => setView('reader')} />
-        )}
-
-        {view === 'settings' && (
+        {/* Settings */}
+        {viewState.screen === 'settings' && (
           <SettingsPanel
             settings={displaySettings}
             onSettingsChange={handleSettingsChange}
-            onClose={() => setView('reader')}
+            onClose={goHome}
           />
+        )}
+
+        {viewState.screen === 'library-settings' && (
+          <LibrarySettings onClose={goHome} />
         )}
       </main>
-
-      <aside className="app-sidebar">
-        <ArticleQueue
-          articles={articles}
-          currentArticleId={rsvp.article?.id}
-          onSelect={handleSelectArticle}
-          onRemove={handleRemoveArticle}
-          onAddClick={() => setView('add')}
-          wpm={rsvp.wpm}
-        />
-        <FeedManager
-          feeds={feeds}
-          onAddFeed={handleAddFeed}
-          onRemoveFeed={handleRemoveFeed}
-          onRefreshFeed={handleRefreshFeed}
-          isLoading={isLoadingFeed}
-        />
-        {window.library && (
-          <Library
-            onAdd={handleAddArticle}
-            onOpenSettings={() => setView('library-settings')}
-          />
-        )}
-      </aside>
     </div>
   );
 }
