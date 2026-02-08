@@ -55,6 +55,7 @@ Vite config conditionally loads Electron plugins when `ELECTRON=true` or mode is
 
 ## Conventions
 
+- Python package manager: `uv` (use `uv pip install`, `uv run`, etc.)
 - All state persisted to localStorage (articles, feeds, settings, reading positions)
 - Monospace font stack throughout (JetBrains Mono, Fira Code, SF Mono, etc.)
 - Dark theme via CSS custom properties (--bg-primary, --accent, etc.)

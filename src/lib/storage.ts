@@ -173,6 +173,30 @@ export function saveTrainingHistory(articleId: string, history: TrainingHistory)
   localStorage.setItem(trainingKey(articleId), JSON.stringify(history));
 }
 
+// --- Random drill persistence ---
+
+export interface DrillState {
+  wpm: number;
+  granularity: number;
+  rollingScores: number[];
+  tier?: 'easy' | 'medium' | 'hard';
+}
+
+const DRILL_STATE_KEY = 'speedread_drill_state';
+
+export function loadDrillState(): DrillState | null {
+  try {
+    const data = localStorage.getItem(DRILL_STATE_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDrillState(state: DrillState): void {
+  localStorage.setItem(DRILL_STATE_KEY, JSON.stringify(state));
+}
+
 /**
  * Generate a unique ID.
  */

@@ -29,24 +29,27 @@ export interface LibraryAPI {
   selectDirectory(): Promise<string | null>
 }
 
-export interface CorpusChunk {
+export interface CorpusArticle {
+  title: string
   text: string
-  source: string      // article title
   domain: string
-  difficulty: number   // 0–1
+  fk_grade: number
   words: number
   sentences: number
 }
 
-export interface CorpusInfo {
+export type CorpusTier = 'easy' | 'medium' | 'hard'
+
+export interface CorpusTierInfo {
   available: boolean
-  totalChunks: number
   totalArticles: number
 }
 
+export type CorpusInfo = Record<CorpusTier, CorpusTierInfo>
+
 export interface CorpusAPI {
   getInfo(): Promise<CorpusInfo>
-  sample(count: number, minDifficulty?: number): Promise<CorpusChunk[]>
+  sampleArticle(tier: CorpusTier): Promise<CorpusArticle | null>
 }
 
 declare global {

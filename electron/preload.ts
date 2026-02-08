@@ -21,11 +21,11 @@ export interface ExtractedContent {
 }
 
 contextBridge.exposeInMainWorld('corpus', {
-  getInfo: (): Promise<{ available: boolean; totalChunks: number; totalArticles: number }> =>
+  getInfo: (): Promise<Record<string, { available: boolean; totalArticles: number }>> =>
     ipcRenderer.invoke('corpus:getInfo'),
 
-  sample: (count: number, minDifficulty?: number): Promise<Array<{ text: string; source: string; domain: string; difficulty: number; words: number; sentences: number }>> =>
-    ipcRenderer.invoke('corpus:sample', count, minDifficulty),
+  sampleArticle: (tier: string): Promise<{ title: string; text: string; domain: string; fk_grade: number; words: number; sentences: number } | null> =>
+    ipcRenderer.invoke('corpus:sampleArticle', tier),
 })
 
 contextBridge.exposeInMainWorld('library', {

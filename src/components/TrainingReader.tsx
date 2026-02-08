@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
 import type { Article, Chunk, TrainingParagraphResult } from '../types';
-import type { CorpusChunk, CorpusInfo } from '../types/electron';
+import type { CorpusArticle, CorpusInfo, CorpusTier } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import { isExactMatch, isWordKnown } from '../lib/levenshtein';
-import { loadTrainingHistory, saveTrainingHistory } from '../lib/storage';
-import type { TrainingHistory } from '../lib/storage';
+import { loadTrainingHistory, saveTrainingHistory, loadDrillState, saveDrillState } from '../lib/storage';
+import type { TrainingHistory, DrillState } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
 
 type TrainingPhase = 'setup' | 'reading' | 'recall' | 'feedback' | 'complete';
@@ -17,12 +17,11 @@ const SESSION_PRESETS = [
   { label: '20 min', value: 20 * 60 },
 ] as const;
 
-// Difficulty ratchet parameters
+// Granularity ratchet parameters
 const RATCHET_WINDOW = 5;
 const RATCHET_UP_THRESHOLD = 0.9;
 const RATCHET_DOWN_THRESHOLD = 0.7;
-const RATCHET_STEP = 0.05;
-const RATCHET_MAX = 0.8;
+const CATASTROPHIC_THRESHOLD = 0.5;
 
 interface TrainingReaderProps {
   article?: Article;
@@ -80,9 +79,12 @@ export function TrainingReader({
     [paragraphs]
   );
 
+  // Load persisted drill state once on mount (used as defaults below)
+  const [savedDrill] = useState<DrillState | null>(() => loadDrillState());
+
   const [currentParagraphIndex, setCurrentParagraphIndex] = useState(0);
   const [phase, setPhase] = useState<TrainingPhase>('setup');
-  const [wpm, setWpm] = useState(initialWpm);
+  const [wpm, setWpm] = useState(savedDrill?.wpm ?? initialWpm);
   const [paused, setPaused] = useState(false);
 
   // Sentence mode: cycle read→recall per sentence within a paragraph
@@ -113,14 +115,15 @@ export function TrainingReader({
 
   // --- Random Drill state ---
   const [drillMode, setDrillMode] = useState<DrillMode>('article');
+  const [drillTier, setDrillTier] = useState<CorpusTier>(() => savedDrill?.tier ?? 'hard');
   const [corpusInfo, setCorpusInfo] = useState<CorpusInfo | null>(null);
-  const [currentChunk, setCurrentChunk] = useState<CorpusChunk | null>(null);
-  const [chunkBuffer, setChunkBuffer] = useState<CorpusChunk[]>([]);
+  const [drillArticle, setDrillArticle] = useState<CorpusArticle | null>(null);
+  const [drillSentenceIndex, setDrillSentenceIndex] = useState(0);
+  const [granularity, setGranularity] = useState(() => savedDrill?.granularity ?? 1);
   const [sessionTimeLimit, setSessionTimeLimit] = useState<number | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
-  const [rollingScores, setRollingScores] = useState<number[]>([]);
-  const [currentDifficulty, setCurrentDifficulty] = useState(0);
-  const [drillChunksAttempted, setDrillChunksAttempted] = useState(0);
+  const [rollingScores, setRollingScores] = useState<number[]>(() => savedDrill?.rollingScores ?? []);
+  const [drillRoundsCompleted, setDrillRoundsCompleted] = useState(0);
   const [drillScoreSum, setDrillScoreSum] = useState(0);
   const [drillWpmStart, setDrillWpmStart] = useState(initialWpm);
 
@@ -131,13 +134,10 @@ export function TrainingReader({
     window.corpus?.getInfo().then(info => setCorpusInfo(info ?? null));
   }, []);
 
-  // Fetch chunks into buffer
-  const refillBuffer = useCallback(async (difficulty: number) => {
-    const chunks = await window.corpus?.sample(10, difficulty);
-    if (chunks && chunks.length > 0) {
-      setChunkBuffer(prev => [...prev, ...chunks]);
-    }
-  }, []);
+  // Persist cross-session drill state whenever it changes
+  useEffect(() => {
+    saveDrillState({ wpm, granularity, rollingScores, tier: drillTier });
+  }, [wpm, granularity, rollingScores, drillTier]);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLSpanElement>(null);
@@ -149,8 +149,20 @@ export function TrainingReader({
     () => sentenceMode ? segmentIntoSentences(currentParagraph) : [currentParagraph],
     [currentParagraph, sentenceMode]
   );
-  const currentText = isDrill && currentChunk
-    ? currentChunk.text
+  // Drill: split article into sentences, extract current round's text
+  const drillSentences = useMemo(
+    () => drillArticle ? segmentIntoSentences(drillArticle.text) : [],
+    [drillArticle?.text]
+  );
+
+  const drillRoundText = useMemo(() => {
+    if (!isDrill || drillSentences.length === 0) return '';
+    const end = Math.min(drillSentenceIndex + granularity, drillSentences.length);
+    return drillSentences.slice(drillSentenceIndex, end).join(' ');
+  }, [isDrill, drillSentences, drillSentenceIndex, granularity]);
+
+  const currentText = isDrill && drillArticle
+    ? drillRoundText
     : (sentenceChunks[currentSentenceIndex] ?? currentParagraph);
 
   // Saccade data for reading phase
@@ -272,19 +284,22 @@ export function TrainingReader({
     const scoreNorm = score / 100;
 
     if (isDrill) {
-      // Random drill: track stats, update difficulty ratchet
-      setDrillChunksAttempted(n => n + 1);
+      // Random drill: track stats, update granularity ratchet
+      setDrillRoundsCompleted(n => n + 1);
       setDrillScoreSum(s => s + scoreNorm);
 
+      // Catastrophic: immediate step-down
+      if (scoreNorm < CATASTROPHIC_THRESHOLD) {
+        setGranularity(g => Math.max(1, g - 1));
+      }
+
+      // Rolling window
       setRollingScores(prev => {
         const updated = [...prev, scoreNorm].slice(-RATCHET_WINDOW);
-        const avg = updated.reduce((a, b) => a + b, 0) / updated.length;
         if (updated.length >= RATCHET_WINDOW) {
-          if (avg >= RATCHET_UP_THRESHOLD) {
-            setCurrentDifficulty(d => Math.min(RATCHET_MAX, d + RATCHET_STEP));
-          } else if (avg < RATCHET_DOWN_THRESHOLD) {
-            setCurrentDifficulty(d => Math.max(0, d - RATCHET_STEP));
-          }
+          const avg = updated.reduce((a, b) => a + b, 0) / updated.length;
+          if (avg >= RATCHET_UP_THRESHOLD) setGranularity(g => g + 1);
+          else if (avg < RATCHET_DOWN_THRESHOLD) setGranularity(g => Math.max(1, g - 1));
         }
         return updated;
       });
@@ -355,6 +370,16 @@ export function TrainingReader({
     }
   }, [recallInput, currentRecallChunk, recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase]);
 
+  const handleGiveUp = useCallback(() => {
+    // Score all remaining words (including current) as misses
+    const remaining = recallData.chunks.length - recallWordIndex;
+    finishRecallPhase({
+      totalWords: paragraphStats.totalWords + remaining,
+      exactMatches: paragraphStats.exactMatches,
+      knownWords: paragraphStats.knownWords,
+    }, null);
+  }, [recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase]);
+
   const handleMissContinue = useCallback(() => {
     setShowingMiss(false);
     setLastMissResult(null);
@@ -378,8 +403,11 @@ export function TrainingReader({
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       handleRecallSubmit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleGiveUp();
     }
-  }, [handleRecallSubmit]);
+  }, [handleRecallSubmit, handleGiveUp]);
 
   // Global key listener for miss state
   useEffect(() => {
@@ -427,21 +455,22 @@ export function TrainingReader({
         }
       }
 
-      // Pop next chunk from buffer
-      setChunkBuffer(prev => {
-        const next = prev[0];
-        if (next) {
-          setCurrentChunk(next);
-          setPhase('reading');
-        } else {
-          setPhase('complete');
-        }
-        return prev.slice(1);
-      });
-
-      // Refill buffer if running low
-      if (chunkBuffer.length < 5) {
-        refillBuffer(currentDifficulty);
+      // Advance within article or fetch next
+      const nextIdx = drillSentenceIndex + granularity;
+      if (nextIdx < drillSentences.length) {
+        setDrillSentenceIndex(nextIdx);
+        setPhase('reading');
+      } else {
+        // Article exhausted — fetch next
+        window.corpus?.sampleArticle(drillTier).then(article => {
+          if (article) {
+            setDrillArticle(article);
+            setDrillSentenceIndex(0);
+            setPhase('reading');
+          } else {
+            setPhase('complete');
+          }
+        });
       }
     } else if (shouldRepeat) {
       // Repeat same paragraph
@@ -455,7 +484,7 @@ export function TrainingReader({
         setPhase('reading');
       }
     }
-  }, [isDrill, shouldRepeat, currentParagraphIndex, paragraphs.length, sessionTimeLimit, sessionStartTime, chunkBuffer.length, currentDifficulty, refillBuffer]);
+  }, [isDrill, shouldRepeat, currentParagraphIndex, paragraphs.length, sessionTimeLimit, sessionStartTime, drillSentenceIndex, granularity, drillSentences.length, drillTier]);
 
   const handleStart = useCallback(() => {
     readingStepRef.current = 0;
@@ -463,26 +492,23 @@ export function TrainingReader({
     setCurrentSentenceIndex(0);
 
     if (isDrill) {
-      // Reset drill session state
-      setDrillChunksAttempted(0);
+      // Reset per-session counters (cross-session state persists from init)
+      setDrillRoundsCompleted(0);
       setDrillScoreSum(0);
       setDrillWpmStart(wpm);
-      setRollingScores([]);
-      setCurrentDifficulty(0);
       setSessionStartTime(Date.now());
+      setDrillSentenceIndex(0);
 
-      // Fetch initial buffer and start with first chunk
-      window.corpus?.sample(10, 0).then(chunks => {
-        if (chunks && chunks.length > 0) {
-          setCurrentChunk(chunks[0]);
-          setChunkBuffer(chunks.slice(1));
+      window.corpus?.sampleArticle(drillTier).then(article => {
+        if (article) {
+          setDrillArticle(article);
           setPhase('reading');
         }
       });
     } else {
       setPhase('reading');
     }
-  }, [isDrill, wpm]);
+  }, [isDrill, wpm, drillTier]);
 
   const handleReturnToSetup = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -541,13 +567,14 @@ export function TrainingReader({
   // Setup phase
   if (phase === 'setup') {
     const trainedCount = Object.keys(trainingHistory).length;
-    const corpusAvailable = corpusInfo?.available ?? false;
+    const anyTierAvailable = corpusInfo != null && (['easy', 'medium', 'hard'] as const).some(t => corpusInfo[t]?.available);
+    const tierInfo = corpusInfo?.[drillTier];
     return (
       <div className="training-reader">
         <div className="training-setup">
           <h2>Training Mode</h2>
 
-          {corpusAvailable && (
+          {anyTierAvailable && (
             <div className="training-mode-toggle">
               <button
                 className={`training-mode-btn${!isDrill ? ' training-mode-active' : ''}`}
@@ -588,6 +615,23 @@ export function TrainingReader({
 
           {isDrill ? (
             <>
+              <div className="training-mode-toggle">
+                {(['easy', 'medium', 'hard'] as const).map(t => {
+                  const ti = corpusInfo?.[t];
+                  const available = ti?.available ?? false;
+                  return (
+                    <button
+                      key={t}
+                      className={`training-mode-btn${drillTier === t ? ' training-mode-active' : ''}${!available ? ' training-mode-disabled' : ''}`}
+                      onClick={() => available && setDrillTier(t)}
+                      disabled={!available}
+                      title={available ? `${ti!.totalArticles.toLocaleString()} articles` : 'Corpus not installed'}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  );
+                })}
+              </div>
               <label className="training-setup-wpm">
                 <span className="control-label">Session:</span>
                 <select
@@ -601,9 +645,13 @@ export function TrainingReader({
                 </select>
               </label>
               <div className="training-setup-info">
-                {corpusInfo!.totalChunks.toLocaleString()} chunks from {corpusInfo!.totalArticles.toLocaleString()} articles
+                {tierInfo?.totalArticles.toLocaleString() ?? 0} articles
               </div>
-              <button onClick={handleStart} className="control-btn control-btn-primary">
+              <button
+                onClick={handleStart}
+                className="control-btn control-btn-primary"
+                disabled={!tierInfo?.available}
+              >
                 Start Drill
               </button>
             </>
@@ -666,8 +714,8 @@ export function TrainingReader({
 
   // Complete phase
   if (phase === 'complete') {
-    const drillAvgScore = drillChunksAttempted > 0
-      ? Math.round((drillScoreSum / drillChunksAttempted) * 100)
+    const drillAvgScore = drillRoundsCompleted > 0
+      ? Math.round((drillScoreSum / drillRoundsCompleted) * 100)
       : 0;
     const drillDuration = sessionStartTime
       ? Math.round((Date.now() - sessionStartTime) / 1000)
@@ -682,8 +730,8 @@ export function TrainingReader({
           {isDrill ? (
             <div className="prediction-complete-stats">
               <div className="prediction-stat">
-                <span className="prediction-stat-value">{drillChunksAttempted}</span>
-                <span className="prediction-stat-label">chunks</span>
+                <span className="prediction-stat-value">{drillRoundsCompleted}</span>
+                <span className="prediction-stat-label">rounds</span>
               </div>
               <div className="prediction-stat">
                 <span className="prediction-stat-value">{drillAvgScore}%</span>
@@ -753,7 +801,7 @@ export function TrainingReader({
           <span className="training-phase-label">Feedback</span>
           <span className="training-progress">
             {isDrill
-              ? `Chunk ${drillChunksAttempted}`
+              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + granularity, drillSentences.length)}/${drillSentences.length} · ×${granularity}`
               : `Paragraph ${currentParagraphIndex + 1} / ${paragraphs.length}`
             }
           </span>
@@ -769,9 +817,9 @@ export function TrainingReader({
               {lastResult.exactMatches} / {lastResult.wordCount} exact
             </div>
           )}
-          {isDrill && currentChunk && (
+          {isDrill && drillArticle && (
             <div className="training-score-detail">
-              From: {currentChunk.source} ({currentChunk.domain})
+              From: {drillArticle.title} ({drillArticle.domain})
             </div>
           )}
           {wpmDelta !== 0 && (
@@ -801,7 +849,7 @@ export function TrainingReader({
           <span className="training-phase-label">{paused ? 'Paused' : 'Read'}</span>
           <span className="training-progress">
             {isDrill
-              ? `Chunk ${drillChunksAttempted + 1}`
+              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + granularity, drillSentences.length)}/${drillSentences.length} · ×${granularity}`
               : <>Paragraph {currentParagraphIndex + 1} / {paragraphs.length}
                 {sentenceMode && sentenceChunks.length > 1 && ` · Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length}`}</>
             }
@@ -844,7 +892,7 @@ export function TrainingReader({
         <span className="training-phase-label">{paused ? 'Paused' : 'Recall'}</span>
         <span className="training-progress">
           {isDrill
-            ? `Chunk ${drillChunksAttempted + 1} · ${recallWordIndex} / ${totalRecallWords} words`
+            ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + granularity, drillSentences.length)}/${drillSentences.length} · ×${granularity} · ${recallWordIndex} / ${totalRecallWords} words`
             : sentenceMode && sentenceChunks.length > 1
               ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recallWordIndex} / ${totalRecallWords} words`
               : `${recallWordIndex} / ${totalRecallWords} words`
@@ -910,6 +958,12 @@ export function TrainingReader({
           <div className="prediction-continue-hint">
             Press Space to continue
           </div>
+        </div>
+      )}
+
+      {!paused && !showingMiss && recallWordIndex > 0 && (
+        <div className="prediction-continue-hint">
+          Esc to skip remaining
         </div>
       )}
     </div>

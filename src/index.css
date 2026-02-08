@@ -1792,6 +1792,11 @@ button {
   color: var(--text-primary);
 }
 
+.training-mode-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .training-setup-desc {
   color: var(--text-secondary);
   font-size: 0.95rem;
