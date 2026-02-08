@@ -32,7 +32,18 @@ interface TierData {
 
 const corpusCache = new Map<CorpusTier, TierData>()
 
+function getResourcePath(...segments: string[]): string {
+  const base = app.isPackaged
+    ? process.resourcesPath
+    : path.join(__dirname, '..')
+  return path.join(base, ...segments)
+}
+
 function getCorpusDir(): string {
+  if (app.isPackaged) {
+    return getResourcePath('corpus')
+  }
+  // Dev: corpus lives in userData (copied there by prepare-corpus scripts)
   return path.join(app.getPath('userData'), 'corpus')
 }
 
@@ -66,8 +77,6 @@ function ensureCorpusLoaded(tier: CorpusTier): boolean {
   return true
 }
 
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
-
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -87,13 +96,14 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  // Register Ctrl+Shift+I to toggle dev tools (works in production too)
-  mainWindow.webContents.on('before-input-event', (event, input) => {
-    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
-      mainWindow?.webContents.toggleDevTools()
-      event.preventDefault()
-    }
-  })
+  if (!app.isPackaged) {
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+        mainWindow?.webContents.toggleDevTools()
+        event.preventDefault()
+      }
+    })
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -103,14 +113,12 @@ function createWindow() {
 app.whenReady().then(() => {
   // Initialize default library sources on first run, or reset if all paths are stale
   const sources = loadSources()
-  const libraryRoot = path.join(__dirname, '..', 'library')
+  const libraryRoot = getResourcePath('library')
   const needsReset = sources.length === 0 ||
     sources.every(s => !fs.existsSync(s.path))
   if (needsReset) {
     const defaultSources: LibrarySource[] = [
       { name: 'Classics', path: path.join(libraryRoot, 'classics') },
-      { name: 'Articles', path: path.join(libraryRoot, 'articles') },
-      { name: 'References', path: path.join(libraryRoot, 'references') },
     ]
     saveSources(defaultSources)
   }

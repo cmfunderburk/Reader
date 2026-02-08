@@ -2,6 +2,82 @@
 
 Detailed patterns and examples for each content type in the library.
 
+## EPUB Structured Content Patterns
+
+EPUBs (especially Calibre-formatted ones) use CSS classes on `<p>` elements to style numbered lists and ordered items. These are **not** semantic `<ol>/<li>` tags, so naive HTML-to-text conversion drops them.
+
+### Ordered List Items
+```html
+<p class="order">1. WHAT IS THE BOOK ABOUT AS A WHOLE? You must try to discover...</p>
+<p class="order">2. WHAT IS BEING SAID IN DETAIL, AND HOW? You must try to discover...</p>
+```
+**Plain text output**: Each item should become a numbered paragraph:
+```
+1. WHAT IS THE BOOK ABOUT AS A WHOLE? You must try to discover...
+
+2. WHAT IS BEING SAID IN DETAIL, AND HOW? You must try to discover...
+```
+
+### Continuation Paragraphs Under List Items
+```html
+<p class="order">3. CHECK THE INDEX if the book has one...</p>
+<p class="order-indent">As in the case of the table of contents, you might at this point...</p>
+```
+**Plain text output**: The continuation paragraph follows without a number:
+```
+3. CHECK THE INDEX if the book has one...
+
+As in the case of the table of contents, you might at this point...
+```
+
+### Class Name Variants
+All of these contain substantive content and must be preserved:
+- `order` — standard numbered item
+- `order-indent` — continuation paragraph (indented under a numbered item)
+- `orderb` / `order-indentb` — bottom-margin variants (last item in a list)
+- `order1b` / `order1ba` / `order1b1` — alternate numbering styles (nested lists, sub-items)
+- `order2b` — secondary numbering style
+- `order1` — compact numbered item
+
+### Footnote Superscripts
+```html
+<p>...any book.<a href="..."><sup class="sup">I</sup></a></p>
+```
+These extract as stray characters (e.g., "any book. I") at the end of paragraphs. Strip them during preprocessing — the footnote text itself usually appears at chapter end in a `<p class="footnote">` element and can be kept or discarded based on relevance.
+
+### Detection Script
+```bash
+# Scan all chapters for ordered content
+node -e "
+const EPub = require('epub');
+const { JSDOM } = require('jsdom');
+const epub = new EPub('library/BOOK.epub');
+epub.on('end', () => {
+  const flow = epub.flow || [];
+  let pending = flow.length;
+  flow.forEach(item => {
+    epub.getChapter(item.id, (err, html) => {
+      pending--;
+      if (!err && html) {
+        const dom = new JSDOM(html);
+        const doc = dom.window.document;
+        const items = doc.querySelectorAll('[class^=\"order\"]');
+        if (items.length > 0) {
+          process.stdout.write(item.href + ': ' + items.length + ' items\n');
+          items.forEach(el => {
+            const text = el.textContent.trim().substring(0, 80);
+            process.stdout.write('  [' + el.className + '] ' + text + '\n');
+          });
+        }
+      }
+      if (pending === 0) process.stdout.write('DONE\n');
+    });
+  });
+});
+epub.parse();
+"
+```
+
 ## Classics Collection Patterns
 
 ### Project Gutenberg EPUBs
