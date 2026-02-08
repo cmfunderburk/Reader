@@ -647,7 +647,7 @@ export function TrainingReader({
                 ? 'Simple English Wikipedia (Good and Very Good articles). Read at saccade pace, then recall.'
                 : drillTier === 'hard'
                   ? 'Standard Wikipedia Good Article introductions. Read at saccade pace, then recall.'
-                  : 'FK-graded intermediate passages from standard Wikipedia (coming soon). Read at saccade pace, then recall.'
+                  : 'Readability-graded Standard Wikipedia articles (familiar vocabulary, moderate sentence length). Read at saccade pace, then recall.'
               : 'Read each paragraph at saccade pace, then recall its words.'
             }
             {' '}WPM adjusts based on your comprehension score.
