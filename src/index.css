@@ -1992,6 +1992,52 @@ button {
   font-size: 0.85rem;
 }
 
+.daily-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.85rem 1.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--text-muted);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.daily-banner:hover {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 0 12px rgba(212,160,74,0.1);
+}
+
+.daily-banner:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.daily-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+
+.daily-desc {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.daily-meta {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .activity-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

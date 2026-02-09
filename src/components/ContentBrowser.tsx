@@ -6,8 +6,8 @@ import { FeedManager } from './FeedManager';
 import { Library } from './Library';
 
 const ACTIVITY_LABELS: Record<Activity, string> = {
-  'speed-reading': 'Speed Reading',
-  'comprehension': 'Comprehension',
+  'paced-reading': 'Paced Reading',
+  'active-recall': 'Active Recall',
   'training': 'Training',
 };
 

@@ -15,9 +15,10 @@ import { TrainingReader } from './TrainingReader';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
-import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings, saveSettings } from '../lib/storage';
+import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings, saveSettings, loadDailyInfo, saveDailyInfo } from '../lib/storage';
 import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
+import { fetchDailyArticle, getTodayUTC } from '../lib/wikipedia';
 import type { Article, Feed, TokenMode, Activity, DisplayMode } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
@@ -39,8 +40,8 @@ function getInitialView(): ViewState {
 }
 
 const ACTIVITY_LABELS: Record<Activity, string> = {
-  'speed-reading': 'Speed Reading',
-  'comprehension': 'Comprehension',
+  'paced-reading': 'Paced Reading',
+  'active-recall': 'Active Recall',
   'training': 'Training',
 };
 
@@ -67,6 +68,8 @@ export function App() {
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
   const [viewState, setViewState] = useState<ViewState>(getInitialView);
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
+  const [dailyStatus, setDailyStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [dailyError, setDailyError] = useState<string | null>(null);
 
   const rsvp = useRSVP({
     initialWpm: settings.defaultWpm,
@@ -265,6 +268,62 @@ export function App() {
     navigate({ screen: 'active-training' });
   }, [navigate]);
 
+  const handleStartDaily = useCallback(async () => {
+    const today = getTodayUTC();
+
+    // Check if we already fetched today's article
+    const daily = loadDailyInfo();
+    if (daily && daily.date === today) {
+      const existing = articles.find(a => a.id === daily.articleId);
+      if (existing) {
+        rsvp.loadArticle(existing, { displayMode: 'saccade' });
+        saveLastSession(existing.id, 'paced-reading', 'saccade');
+        setViewState({ screen: 'active-reader' });
+        setTimeout(() => rsvp.play(), 100);
+        return;
+      }
+    }
+
+    setDailyStatus('loading');
+    setDailyError(null);
+    try {
+      const { title, content, url } = await fetchDailyArticle();
+
+      // Deduplicate by URL
+      const existing = articles.find(a => a.url === url);
+      let article: Article;
+      if (existing) {
+        article = existing;
+      } else {
+        const metrics = measureTextMetrics(content);
+        article = {
+          id: generateId(),
+          title,
+          content,
+          source: 'Wikipedia Daily',
+          url,
+          addedAt: Date.now(),
+          readPosition: 0,
+          isRead: false,
+          ...metrics,
+        };
+        const updated = [...articles, article];
+        setArticles(updated);
+        saveArticles(updated);
+      }
+
+      saveDailyInfo(today, article.id);
+      rsvp.loadArticle(article, { displayMode: 'saccade' });
+      saveLastSession(article.id, 'paced-reading', 'saccade');
+      setDailyStatus('idle');
+      setViewState({ screen: 'active-reader' });
+      setTimeout(() => rsvp.play(), 100);
+    } catch (err) {
+      setDailyStatus('error');
+      setDailyError(err instanceof Error ? err.message : 'Failed to fetch daily article');
+    }
+  }, [articles, rsvp, saveLastSession]);
+
   // Content browser → article selected → preview
   const handleContentBrowserSelectArticle = useCallback((article: Article) => {
     if (viewState.screen === 'content-browser') {
@@ -285,14 +344,14 @@ export function App() {
 
     rsvp.setWpm(wpm);
 
-    if (activity === 'speed-reading') {
+    if (activity === 'paced-reading') {
       rsvp.loadArticle(article, { mode, displayMode: 'rsvp' });
-      saveLastSession(article.id, 'speed-reading', 'rsvp');
+      saveLastSession(article.id, 'paced-reading', 'rsvp');
       setViewState({ screen: 'active-reader' });
       setTimeout(() => rsvp.play(), 100);
-    } else if (activity === 'comprehension') {
+    } else if (activity === 'active-recall') {
       rsvp.loadArticle(article, { displayMode: 'prediction' });
-      saveLastSession(article.id, 'comprehension', 'prediction');
+      saveLastSession(article.id, 'active-recall', 'prediction');
       setViewState({ screen: 'active-exercise' });
     }
   }, [rsvp, viewState, saveLastSession]);
@@ -309,10 +368,10 @@ export function App() {
   const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
     rsvp.loadArticle(info.article, { displayMode: info.displayMode });
 
-    if (info.activity === 'speed-reading') {
+    if (info.activity === 'paced-reading') {
       setViewState({ screen: 'active-reader' });
       setTimeout(() => rsvp.play(), 100);
-    } else if (info.activity === 'comprehension') {
+    } else if (info.activity === 'active-recall') {
       setViewState({ screen: 'active-exercise' });
     } else if (info.activity === 'training') {
       setViewState({ screen: 'active-training', article: info.article });
@@ -339,8 +398,8 @@ export function App() {
   // Header title based on view
   const headerTitle = (() => {
     switch (viewState.screen) {
-      case 'active-reader': return 'Speed Reading';
-      case 'active-exercise': return 'Comprehension';
+      case 'active-reader': return 'Paced Reading';
+      case 'active-exercise': return 'Active Recall';
       case 'active-training': return 'Training';
       case 'content-browser': return ACTIVITY_LABELS[viewState.activity];
       case 'preview': return ACTIVITY_LABELS[viewState.activity];
@@ -437,6 +496,9 @@ export function App() {
             onSelectActivity={handleSelectActivity}
             onContinue={handleContinue}
             onStartDrill={handleStartDrill}
+            onStartDaily={handleStartDaily}
+            dailyStatus={dailyStatus}
+            dailyError={dailyError}
             continueInfo={continueInfo}
           />
         )}
@@ -472,7 +534,7 @@ export function App() {
           />
         )}
 
-        {/* Speed Reading: RSVP / Saccade */}
+        {/* Paced Reading: RSVP / Saccade */}
         {viewState.screen === 'active-reader' && (
           <>
             <Reader
@@ -494,7 +556,7 @@ export function App() {
           </>
         )}
 
-        {/* Comprehension: Prediction / Recall */}
+        {/* Active Recall: Prediction / Recall */}
         {viewState.screen === 'active-exercise' && (
           <>
             {rsvp.displayMode === 'recall' ? (

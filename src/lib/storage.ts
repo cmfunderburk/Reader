@@ -4,6 +4,8 @@ const STORAGE_KEYS = {
   articles: 'speedread_articles',
   feeds: 'speedread_feeds',
   settings: 'speedread_settings',
+  dailyDate: 'speedread_daily_date',
+  dailyArticleId: 'speedread_daily_article_id',
 } as const;
 
 export interface Settings {
@@ -95,6 +97,12 @@ export function loadSettings(): Settings {
     // Clamp values that may have been saved under old wider ranges
     settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
     settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
+    // Migrate renamed activity types
+    if (settings.lastSession) {
+      const act = settings.lastSession.activity as string;
+      if (act === 'speed-reading') settings.lastSession.activity = 'paced-reading';
+      if (act === 'comprehension') settings.lastSession.activity = 'active-recall';
+    }
     return settings;
   } catch {
     return DEFAULT_SETTINGS;
@@ -195,6 +203,23 @@ export function loadDrillState(): DrillState | null {
 
 export function saveDrillState(state: DrillState): void {
   localStorage.setItem(DRILL_STATE_KEY, JSON.stringify(state));
+}
+
+// --- Daily article persistence ---
+
+export function loadDailyInfo(): { date: string; articleId: string } | null {
+  try {
+    const date = localStorage.getItem(STORAGE_KEYS.dailyDate);
+    const articleId = localStorage.getItem(STORAGE_KEYS.dailyArticleId);
+    return date && articleId ? { date, articleId } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDailyInfo(date: string, articleId: string): void {
+  localStorage.setItem(STORAGE_KEYS.dailyDate, date);
+  localStorage.setItem(STORAGE_KEYS.dailyArticleId, articleId);
 }
 
 /**
