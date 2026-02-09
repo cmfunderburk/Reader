@@ -13,10 +13,13 @@ interface HomeScreenProps {
   onStartDaily: () => void;
   dailyStatus: 'idle' | 'loading' | 'error';
   dailyError: string | null;
+  onStartRandom: () => void;
+  randomStatus: 'idle' | 'loading' | 'error';
+  randomError: string | null;
   continueInfo: ContinueInfo | null;
 }
 
-export function HomeScreen({ onSelectActivity, onContinue, onStartDrill, onStartDaily, dailyStatus, dailyError, continueInfo }: HomeScreenProps) {
+export function HomeScreen({ onSelectActivity, onContinue, onStartDrill, onStartDaily, dailyStatus, dailyError, onStartRandom, randomStatus, randomError, continueInfo }: HomeScreenProps) {
   return (
     <div className="home-screen">
       {continueInfo && (
@@ -30,21 +33,39 @@ export function HomeScreen({ onSelectActivity, onContinue, onStartDrill, onStart
         </button>
       )}
 
-      <button
-        className="daily-banner"
-        onClick={onStartDaily}
-        disabled={dailyStatus === 'loading'}
-      >
-        <span className="daily-label">Daily Article</span>
-        <span className="daily-desc">
-          {dailyStatus === 'loading'
-            ? 'Fetching\u2026'
-            : dailyStatus === 'error'
-              ? dailyError ?? 'Failed to load'
-              : 'Today\u2019s Wikipedia featured article'}
-        </span>
-        <span className="daily-meta">Saccade</span>
-      </button>
+      <div className="featured-row">
+        <button
+          className="daily-banner"
+          onClick={onStartDaily}
+          disabled={dailyStatus === 'loading'}
+        >
+          <span className="daily-label">Daily Article</span>
+          <span className="daily-desc">
+            {dailyStatus === 'loading'
+              ? 'Fetching\u2026'
+              : dailyStatus === 'error'
+                ? dailyError ?? 'Failed to load'
+                : 'Today\u2019s Wikipedia featured article'}
+          </span>
+          <span className="daily-meta">Saccade</span>
+        </button>
+
+        <button
+          className="daily-banner"
+          onClick={onStartRandom}
+          disabled={randomStatus === 'loading'}
+        >
+          <span className="daily-label">Random Article</span>
+          <span className="daily-desc">
+            {randomStatus === 'loading'
+              ? 'Fetching\u2026'
+              : randomStatus === 'error'
+                ? randomError ?? 'Failed to load'
+                : 'Random Wikipedia featured article'}
+          </span>
+          <span className="daily-meta">Saccade</span>
+        </button>
+      </div>
 
       <div className="activity-grid">
         <button

@@ -17,10 +17,10 @@ interface ReaderProps {
   saccadeLength?: number;
 }
 
-export function Reader({ chunk, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeShowSweep, saccadeLength }: ReaderProps) {
+export function Reader({ chunk, isPlaying, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeShowSweep, saccadeLength }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
-    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadeLength={saccadeLength} />;
+    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadeLength={saccadeLength} />;
   }
   // No article loaded
   if (!chunk) {

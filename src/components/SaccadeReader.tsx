@@ -4,6 +4,7 @@ import { computeLineFixations, calculateSaccadeLineDuration } from '../lib/sacca
 interface SaccadeReaderProps {
   page: SaccadePage | null;
   chunk: Chunk | null;
+  isPlaying: boolean;
   showPacer: boolean;
   wpm: number;
   saccadeShowOVP?: boolean;
@@ -11,7 +12,7 @@ interface SaccadeReaderProps {
   saccadeLength?: number;
 }
 
-export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeLength }: SaccadeReaderProps) {
+export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeLength }: SaccadeReaderProps) {
   if (!page) {
     return (
       <div className="reader saccade-reader">
@@ -33,6 +34,7 @@ export function SaccadeReader({ page, chunk, showPacer, wpm, saccadeShowOVP, sac
             line={line}
             lineIndex={lineIndex}
             isActiveLine={lineIndex === currentLineIndex}
+            isPlaying={isPlaying}
             isFutureLine={showPacer && lineIndex > currentLineIndex}
             showPacer={showPacer}
             wpm={wpm}
@@ -50,6 +52,7 @@ export interface SaccadeLineProps {
   line: SaccadeLine;
   lineIndex: number;
   isActiveLine: boolean;
+  isPlaying: boolean;
   isFutureLine: boolean;
   showPacer: boolean;
   wpm: number;
@@ -58,7 +61,7 @@ export interface SaccadeLineProps {
   saccadeLength?: number;
 }
 
-export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeLength }: SaccadeLineProps) {
+export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadeLength }: SaccadeLineProps) {
   if (line.type === 'blank') {
     return (
       <div className="saccade-line">
@@ -101,7 +104,7 @@ export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isFutureLi
     keyframeBlocks.push(generateDecolorKeyframes(lineIndex, fixations, textLength));
   }
 
-  const decolorConfig = sweepDecolors ? { lineIndex, lineDuration } : undefined;
+  const decolorConfig = sweepDecolors ? { lineIndex, lineDuration, isPlaying } : undefined;
 
   const lineClasses = [
     'saccade-line',
@@ -115,7 +118,10 @@ export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isFutureLi
       {useSweepBar && (
         <span
           className="saccade-sweep"
-          style={{ animation: `sweep-${lineIndex} ${lineDuration}ms linear both` }}
+          style={{
+            animation: `sweep-${lineIndex} ${lineDuration}ms linear both`,
+            animationPlayState: isPlaying ? 'running' : 'paused',
+          }}
         />
       )}
       {renderLineText(line.text, isHeading, showStaticOVP || sweepDecolors, fixations, decolorConfig)}
@@ -146,7 +152,7 @@ function renderLineText(
   isHeading: boolean,
   showOVP?: boolean,
   fixations?: number[],
-  decolorConfig?: { lineIndex: number; lineDuration: number },
+  decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
 ): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
 
@@ -165,6 +171,7 @@ function renderLineText(
     if (decolorConfig) {
       const style = {
         animation: `orp-${decolorConfig.lineIndex}-${i} ${decolorConfig.lineDuration}ms linear both`,
+        animationPlayState: decolorConfig.isPlaying ? 'running' as const : 'paused' as const,
       };
       segments.push(
         <span key={`f${i}`} className="saccade-fixation" style={style}>

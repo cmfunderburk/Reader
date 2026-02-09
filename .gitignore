@@ -4,6 +4,7 @@ node_modules/
 # Build output
 dist/
 dist-electron/
+dist-electron-build/
 
 # Electron builder output
 release/
@@ -34,6 +35,12 @@ npm-debug.log*
 
 # Library content (PDFs, EPUBs) - not tracked in git
 library/
+
+# Corpus build artifacts
+scripts/prepare-corpus/.corpus-cache/
+scripts/prepare-corpus/.corpus-cache-simple/
+scripts/prepare-corpus/__pycache__/
+scripts/prepare-corpus/*.jsonl
 
 # Scratchpad / session notes
 PLAN-*.md

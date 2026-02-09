@@ -1011,6 +1011,7 @@ export function TrainingReader({
               line={line}
               lineIndex={lineIndex}
               isActiveLine={!paused && !readingLeadIn && lineIndex === currentLineIndex}
+              isPlaying={!paused && !readingLeadIn}
               isFutureLine={!paused && !readingLeadIn && currentLineIndex >= 0 && lineIndex > currentLineIndex}
               showPacer={!paused && !readingLeadIn}
               wpm={wpm}
