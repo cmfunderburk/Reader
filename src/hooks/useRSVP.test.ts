@@ -290,6 +290,65 @@ describe('useRSVP — goToIndex', () => {
   });
 });
 
+describe('useRSVP — saccade paging', () => {
+  it('nextPage/prevPage move by page with bounds', () => {
+    const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
+    const article = makeArticle({ content: longContent });
+    const { result } = renderHook(() =>
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'saccade' })
+    );
+
+    act(() => result.current.loadArticle(article, { displayMode: 'saccade' }));
+    act(() => result.current.setLinesPerPage(5));
+
+    expect(result.current.saccadePages.length).toBeGreaterThan(1);
+    expect(result.current.currentSaccadePageIndex).toBe(0);
+
+    act(() => result.current.prevPage());
+    expect(result.current.currentSaccadePageIndex).toBe(0);
+
+    act(() => result.current.nextPage());
+    expect(result.current.currentSaccadePageIndex).toBe(1);
+
+    const lastPageIndex = result.current.saccadePages.length - 1;
+    for (let i = 0; i < result.current.saccadePages.length + 3; i++) {
+      act(() => result.current.nextPage());
+    }
+    expect(result.current.currentSaccadePageIndex).toBe(lastPageIndex);
+
+    act(() => result.current.nextPage());
+    expect(result.current.currentSaccadePageIndex).toBe(lastPageIndex);
+  });
+
+  it('re-paginates when linesPerPage changes and page jumps follow the new layout', () => {
+    const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
+    const article = makeArticle({ content: longContent });
+    const { result } = renderHook(() =>
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'saccade' })
+    );
+
+    act(() => result.current.loadArticle(article, { displayMode: 'saccade' }));
+    act(() => result.current.setLinesPerPage(5));
+
+    const pagesAt5 = result.current.saccadePages.length;
+    expect(pagesAt5).toBeGreaterThan(1);
+    expect(result.current.saccadePages.every(page => page.lines.length <= 5)).toBe(true);
+
+    act(() => result.current.setLinesPerPage(25));
+
+    expect(result.current.saccadePages.length).toBeLessThan(pagesAt5);
+    expect(result.current.saccadePages.every(page => page.lines.length <= 25)).toBe(true);
+
+    if (result.current.saccadePages.length > 1) {
+      const pageBefore = result.current.currentSaccadePageIndex;
+      act(() => result.current.nextPage());
+      expect(result.current.currentSaccadePageIndex).toBe(
+        Math.min(pageBefore + 1, result.current.saccadePages.length - 1)
+      );
+    }
+  });
+});
+
 describe('useRSVP — advanceSelfPaced', () => {
   it('advances index by 1', () => {
     const article = makeArticle();

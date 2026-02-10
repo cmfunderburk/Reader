@@ -320,7 +320,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setCurrentChunkIndex(clampChunkIndex(index, chunks.length));
   }, [chunks.length]);
 
-  // Page navigation for saccade mode (manual navigation when pacer is off)
+  // Page navigation for saccade mode
   const nextPage = useCallback(() => {
     if (displayMode !== 'saccade' || saccadePages.length === 0) return;
 

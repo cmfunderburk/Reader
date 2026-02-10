@@ -85,6 +85,9 @@ export function ReaderControls({
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall' || displayMode === 'training';
   const showChunks = !isSelfPaced && displayMode !== 'saccade';
+  const showSaccadePageTransport = !isSelfPaced && displayMode === 'saccade';
+  const hasSaccadePages = totalPages > 0;
+  const safePageNumber = hasSaccadePages ? currentPageIndex + 1 : 0;
 
   return (
     <div className="reader-controls">
@@ -97,6 +100,21 @@ export function ReaderControls({
           <button onClick={onPrev} title="Previous chunk (←)" className="control-btn">
             ⏪
           </button>
+          {showSaccadePageTransport && (
+            <>
+              <button
+                onClick={onPrevPage}
+                disabled={!hasSaccadePages || currentPageIndex <= 0}
+                className="control-btn control-btn-page"
+                title="Previous page"
+              >
+                ◀ Pg
+              </button>
+              <span className="page-indicator page-indicator-inline">
+                Page {safePageNumber} / {totalPages}
+              </span>
+            </>
+          )}
           <button
             onClick={isPlaying ? onPause : onPlay}
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
@@ -107,6 +125,16 @@ export function ReaderControls({
           <button onClick={onNext} title="Next chunk (→)" className="control-btn">
             ⏩
           </button>
+          {showSaccadePageTransport && (
+            <button
+              onClick={onNextPage}
+              disabled={!hasSaccadePages || currentPageIndex >= totalPages - 1}
+              className="control-btn control-btn-page"
+              title="Next page"
+            >
+              Pg ▶
+            </button>
+          )}
           <button onClick={onSkipToEnd} title="Skip to end" className="control-btn">
             ⏭
           </button>
@@ -312,30 +340,6 @@ export function ReaderControls({
           </label>
         )}
       </div>
-
-      {displayMode === 'saccade' && !showPacer && (
-        <div className="controls-page-nav">
-          <button
-            onClick={onPrevPage}
-            disabled={currentPageIndex <= 0}
-            className="control-btn"
-            title="Previous page"
-          >
-            ◀ Prev
-          </button>
-          <span className="page-indicator">
-            Page {currentPageIndex + 1} / {totalPages}
-          </span>
-          <button
-            onClick={onNextPage}
-            disabled={currentPageIndex >= totalPages - 1}
-            className="control-btn"
-            title="Next page"
-          >
-            Next ▶
-          </button>
-        </div>
-      )}
     </div>
   );
 }

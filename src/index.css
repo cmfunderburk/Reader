@@ -652,6 +652,11 @@ button {
   font-size: 0.86rem;
 }
 
+.controls-transport .control-btn-page {
+  padding: 0.36rem 0.62rem;
+  font-size: 0.78rem;
+}
+
 .control-btn {
   padding: 0.5rem 1rem;
   background: var(--bg-secondary);
@@ -751,20 +756,16 @@ button {
   cursor: pointer;
 }
 
-/* Page navigation for saccade mode */
-.controls-page-nav {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  justify-content: center;
-  margin-top: 0.5rem;
-}
-
 .page-indicator {
   color: var(--text-secondary);
   font-size: 0.9rem;
   min-width: 100px;
   text-align: center;
+}
+
+.page-indicator-inline {
+  font-size: 0.78rem;
+  min-width: 82px;
 }
 
 @media (max-width: 1180px) {
@@ -2109,16 +2110,39 @@ button {
 
 /* Gear button in header */
 .settings-gear-btn {
-  padding: 0.4rem 0.6rem;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 1.1rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-primary);
   line-height: 1;
+  transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.settings-gear-icon {
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
 .settings-gear-btn:hover {
-  color: var(--text-primary);
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(212, 160, 74, 0.15);
+}
+
+.settings-gear-btn:focus-visible {
+  outline: none;
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(212, 160, 74, 0.2);
+}
+
+.settings-gear-btn:active {
+  transform: translateY(1px);
 }
 
 /* Recall Mode */
