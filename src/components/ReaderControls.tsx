@@ -274,7 +274,7 @@ export function ReaderControls({
                   checked={saccadeMergeShortFunctionWords}
                   onChange={e => onSaccadeMergeShortFunctionWordsChange(e.target.checked)}
                 />
-                <span className="control-label">Merge short function words</span>
+                <span className="control-label">Merge short words</span>
               </label>
             )}
             {(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'fixation')

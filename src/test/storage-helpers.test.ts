@@ -9,6 +9,8 @@ import {
   loadSessionSnapshot,
   saveSessionSnapshot,
   clearSessionSnapshot,
+  loadSettings,
+  saveSettings,
 } from '../lib/storage';
 import type { Passage } from '../types';
 import {
@@ -132,5 +134,21 @@ describe('storage-helpers with real storage functions', () => {
     expect(loadSessionSnapshot()?.reading?.articleId).toBe('a1');
     clearSessionSnapshot();
     expect(loadSessionSnapshot()).toBeNull();
+  });
+
+  it('settings default and persist prediction preview configuration', () => {
+    const defaults = loadSettings();
+    expect(defaults.predictionPreviewMode).toBe('sentences');
+    expect(defaults.predictionPreviewSentenceCount).toBe(2);
+
+    saveSettings({
+      ...defaults,
+      predictionPreviewMode: 'unlimited',
+      predictionPreviewSentenceCount: 5,
+    });
+
+    const loaded = loadSettings();
+    expect(loaded.predictionPreviewMode).toBe('unlimited');
+    expect(loaded.predictionPreviewSentenceCount).toBe(5);
   });
 });

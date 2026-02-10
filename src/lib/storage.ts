@@ -3,6 +3,7 @@ import type {
   Feed,
   TokenMode,
   PredictionLineWidth,
+  PredictionPreviewMode,
   RampCurve,
   Activity,
   DisplayMode,
@@ -32,6 +33,8 @@ export interface Settings {
   saccadeFontSize: number;
   predictionFontSize: number;
   predictionLineWidth: PredictionLineWidth;
+  predictionPreviewMode: PredictionPreviewMode;
+  predictionPreviewSentenceCount: number;
   rampEnabled: boolean;
   rampCurve: RampCurve;
   rampStartPercent: number;
@@ -56,6 +59,8 @@ const DEFAULT_SETTINGS: Settings = {
   saccadeFontSize: 1.0,
   predictionFontSize: 1.25,
   predictionLineWidth: 'medium',
+  predictionPreviewMode: 'sentences',
+  predictionPreviewSentenceCount: 2,
   rampEnabled: false,
   rampCurve: 'linear',
   rampStartPercent: 50,
@@ -196,6 +201,11 @@ export function loadSettings(): Settings {
     // Clamp values that may have been saved under old wider ranges
     settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
     settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
+    settings.predictionPreviewMode = settings.predictionPreviewMode === 'unlimited' ? 'unlimited' : 'sentences';
+    settings.predictionPreviewSentenceCount = Math.max(
+      1,
+      Math.min(10, Math.round(settings.predictionPreviewSentenceCount || 2))
+    );
     // Migrate renamed activity types
     if (settings.lastSession) {
       const act = settings.lastSession.activity as string;

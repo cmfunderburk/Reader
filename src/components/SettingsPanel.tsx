@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Settings } from '../lib/storage';
-import type { PredictionLineWidth, RampCurve } from '../types';
+import type { PredictionLineWidth, PredictionPreviewMode, RampCurve } from '../types';
 import { getEffectiveWpm } from '../lib/rsvp';
 
 interface SettingsPanelProps {
@@ -18,6 +18,11 @@ const LINE_WIDTH_OPTIONS: { value: PredictionLineWidth; label: string }[] = [
   { value: 'narrow', label: 'Narrow' },
   { value: 'medium', label: 'Medium' },
   { value: 'wide', label: 'Wide' },
+];
+
+const PREVIEW_MODE_OPTIONS: { value: PredictionPreviewMode; label: string }[] = [
+  { value: 'sentences', label: 'Next N Sentences' },
+  { value: 'unlimited', label: 'Unlimited' },
 ];
 
 function RampCurveGraph({ settings }: { settings: Settings }) {
@@ -220,6 +225,41 @@ export function SettingsPanel({ settings, onSettingsChange, onClose }: SettingsP
           </div>
 
           <RampCurveGraph settings={settings} />
+        </div>
+
+        <div className="settings-section">
+          <h3>Prediction Preview</h3>
+
+          <div className="settings-row">
+            <span className="settings-label">Tab Preview</span>
+            <div className="settings-presets">
+              {PREVIEW_MODE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  className={`settings-preset${settings.predictionPreviewMode === opt.value ? ' settings-preset-active' : ''}`}
+                  onClick={() => update({ predictionPreviewMode: opt.value })}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {settings.predictionPreviewMode === 'sentences' && (
+            <div className="settings-row">
+              <span className="settings-label">Sentence Count</span>
+              <input
+                className="settings-slider"
+                type="range"
+                min="1"
+                max="10"
+                step="1"
+                value={settings.predictionPreviewSentenceCount}
+                onChange={e => update({ predictionPreviewSentenceCount: parseInt(e.target.value) })}
+              />
+              <span className="settings-value">{settings.predictionPreviewSentenceCount}</span>
+            </div>
+          )}
         </div>
 
         <div className="settings-section">

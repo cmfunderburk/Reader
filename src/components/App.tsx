@@ -76,7 +76,6 @@ const ACTIVITY_LABELS: Record<Activity, string> = {
   'training': 'Training',
 };
 
-const PASSAGE_QUEUE_PREVIEW_LIMIT = 8;
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
 
 function clipPassagePreview(text: string, maxChars: number = 180): string {
@@ -164,6 +163,7 @@ export function App() {
   const [passages, setPassages] = useState<Passage[]>(() => loadPassages());
   const [captureNotice, setCaptureNotice] = useState<string | null>(null);
   const [activePassageId, setActivePassageId] = useState<string | null>(null);
+  const [isPassageWorkspaceOpen, setIsPassageWorkspaceOpen] = useState(false);
 
   const rsvp = useRSVP({
     initialWpm: settings.defaultWpm,
@@ -563,6 +563,7 @@ export function App() {
     touchPassageReview(passage.id, mode);
     setActivePassageId(passage.id);
     refreshPassagesFromStorage();
+    setIsPassageWorkspaceOpen(false);
 
     rsvp.pause();
     rsvp.loadArticle(passageArticle, { displayMode: mode === 'recall' ? 'recall' : 'prediction' });
@@ -778,6 +779,7 @@ export function App() {
 
   const showBackButton = viewState.screen !== 'home';
   const headerBackAction = viewState.screen === 'active-exercise' ? closeActiveExercise : goHome;
+  const appMainClassName = viewState.screen === 'active-reader' ? 'app-main app-main-active-reader' : 'app-main';
 
   // --- Render helpers ---
 
@@ -849,13 +851,24 @@ export function App() {
       && rsvp.displayMode === 'saccade'
       && !rsvp.isPlaying
       && !!currentSaccadeCaptureContext;
-    const queueItems = reviewQueue.slice(0, PASSAGE_QUEUE_PREVIEW_LIMIT);
+    const queueItems = reviewQueue;
 
     return (
-      <section className="passage-workspace">
-        <div className="passage-workspace-header">
-          <strong>Passage Workspace</strong>
-          <span className="passage-workspace-count">{reviewQueue.length} queued</span>
+      <section className={`passage-workspace ${isPassageWorkspaceOpen ? 'passage-workspace-open' : ''}`}>
+        <div className="passage-workspace-toolbar">
+          <div className="passage-workspace-header">
+            <strong>Passage Workspace</strong>
+            <span className="passage-workspace-count">{reviewQueue.length} queued</span>
+          </div>
+          <button
+            className={`control-btn passage-workspace-toggle ${isPassageWorkspaceOpen ? 'control-btn-active' : ''}`}
+            onClick={() => setIsPassageWorkspaceOpen((open) => !open)}
+            title={isPassageWorkspaceOpen ? 'Hide passage queue' : 'Show passage queue'}
+            aria-expanded={isPassageWorkspaceOpen}
+            aria-controls="passage-queue-panel"
+          >
+            {isPassageWorkspaceOpen ? 'Hide Queue' : 'Show Queue'}
+          </button>
         </div>
 
         <div className="passage-capture-actions">
@@ -897,42 +910,48 @@ export function App() {
         </div>
 
         {captureNotice && (
-          <div className="passage-capture-notice">{captureNotice}</div>
+          <div className="passage-capture-notice-toast" role="status" aria-live="polite">
+            {captureNotice}
+          </div>
         )}
 
-        {queueItems.length === 0 ? (
-          <div className="passage-queue-empty">No passages saved yet.</div>
-        ) : (
-          <div className="passage-queue-list">
-            {queueItems.map((passage) => (
-              <article
-                key={passage.id}
-                className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
-              >
-                <div className="passage-queue-meta">
-                  <span>{passage.articleTitle}</span>
-                  <span>{passage.captureKind} • {passage.reviewState}</span>
-                </div>
-                <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
-                <div className="passage-queue-actions">
-                  <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
-                    Recall
-                  </button>
-                  <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
-                    Predict
-                  </button>
-                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
-                    Hard
-                  </button>
-                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
-                    Easy
-                  </button>
-                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
-                    Done
-                  </button>
-                </div>
-              </article>
-            ))}
+        {isPassageWorkspaceOpen && (
+          <div id="passage-queue-panel" className="passage-workspace-panel">
+            {queueItems.length === 0 ? (
+              <div className="passage-queue-empty">No passages saved yet.</div>
+            ) : (
+              <div className="passage-queue-list">
+                {queueItems.map((passage) => (
+                  <article
+                    key={passage.id}
+                    className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
+                  >
+                    <div className="passage-queue-meta">
+                      <span>{passage.articleTitle}</span>
+                      <span>{passage.captureKind} • {passage.reviewState}</span>
+                    </div>
+                    <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
+                    <div className="passage-queue-actions">
+                      <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
+                        Recall
+                      </button>
+                      <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
+                        Predict
+                      </button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
+                        Hard
+                      </button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
+                        Easy
+                      </button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
+                        Done
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </section>
@@ -956,7 +975,7 @@ export function App() {
         <button className="settings-gear-btn" onClick={() => navigate({ screen: 'settings' })} title="Display settings">&#9881;</button>
       </header>
 
-      <main className="app-main">
+      <main className={appMainClassName}>
         {/* Home Screen */}
         {viewState.screen === 'home' && (
           <HomeScreen
@@ -1066,6 +1085,8 @@ export function App() {
                   wpm={rsvp.wpm}
                   goToIndex={rsvp.goToIndex}
                   onWpmChange={rsvp.setWpm}
+                  previewMode={displaySettings.predictionPreviewMode}
+                  previewSentenceCount={displaySettings.predictionPreviewSentenceCount}
                 />
               </div>
             )}

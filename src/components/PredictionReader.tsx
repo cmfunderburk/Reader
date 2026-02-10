@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
-import type { Chunk, PredictionResult, PredictionStats } from '../types';
+import type { Chunk, PredictionPreviewMode, PredictionResult, PredictionStats } from '../types';
 import { normalizedLoss, isWordKnown } from '../lib/levenshtein';
 import { calculateORP } from '../lib/tokenizer';
+import { findPreviewSentenceTargetIndex } from '../lib/predictionPreview';
 import { LossMeter } from './LossMeter';
 import { PredictionComplete } from './PredictionComplete';
 
@@ -16,6 +17,8 @@ interface PredictionReaderProps {
   wpm: number;
   goToIndex: (index: number) => void;
   onWpmChange: (wpm: number) => void;
+  previewMode: PredictionPreviewMode;
+  previewSentenceCount: number;
 }
 
 export function PredictionReader({
@@ -29,6 +32,8 @@ export function PredictionReader({
   wpm,
   goToIndex,
   onWpmChange,
+  previewMode,
+  previewSentenceCount,
 }: PredictionReaderProps) {
   const [input, setInput] = useState('');
   const [showingMiss, setShowingMiss] = useState(false);
@@ -38,6 +43,7 @@ export function PredictionReader({
   const [previewIndex, setPreviewIndex] = useState(0);
   const [previewStartIndex, setPreviewStartIndex] = useState(0);
   const previewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const previewTargetIndexRef = useRef<number | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const textAreaRef = useRef<HTMLDivElement>(null);
@@ -162,6 +168,7 @@ export function PredictionReader({
       clearInterval(previewTimerRef.current);
       previewTimerRef.current = null;
     }
+    previewTargetIndexRef.current = null;
     goToIndex(previewStartIndex);
     setIsPreviewing(false);
     setInput('');
@@ -176,6 +183,10 @@ export function PredictionReader({
     const interval = Math.max(minInterval, 60000 / wpm);
     previewTimerRef.current = setInterval(() => {
       setPreviewIndex(prev => {
+        if (previewTargetIndexRef.current !== null && prev >= previewTargetIndexRef.current) {
+          setTimeout(() => stopPreview(), 0);
+          return prev;
+        }
         let next = prev + 1;
         while (next < chunks.length && chunks[next].wordCount === 0) {
           next++;
@@ -190,11 +201,20 @@ export function PredictionReader({
   }, [wpm, chunks, stopPreview]);
 
   const startPreview = useCallback(() => {
+    if (previewMode === 'sentences') {
+      previewTargetIndexRef.current = findPreviewSentenceTargetIndex(
+        chunks,
+        currentChunkIndex,
+        previewSentenceCount
+      );
+    } else {
+      previewTargetIndexRef.current = null;
+    }
     setPreviewStartIndex(currentChunkIndex);
     setPreviewIndex(currentChunkIndex);
     setIsPreviewing(true);
     setInput('');
-  }, [currentChunkIndex]);
+  }, [chunks, currentChunkIndex, previewMode, previewSentenceCount]);
 
   const togglePreview = useCallback(() => {
     if (showingMiss || isComplete) return;
@@ -214,6 +234,7 @@ export function PredictionReader({
     setShowingMiss(false);
     setLastResult(null);
     setInput('');
+    previewTargetIndexRef.current = null;
     goToIndex(0);
     onReset();
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -339,7 +360,9 @@ export function PredictionReader({
 
       {isPreviewing && (
         <div className="prediction-preview-badge">
-          Tab to stop preview
+          {previewMode === 'sentences'
+            ? `Previewing next ${previewSentenceCount} sentence${previewSentenceCount === 1 ? '' : 's'}`
+            : 'Previewing continuously'} - Tab to stop
         </div>
       )}
 
@@ -371,7 +394,9 @@ export function PredictionReader({
           <span className="prediction-speed-value">{wpm} WPM</span>
         </label>
         <div className="prediction-controls-hint">
-          Press Tab to preview at your selected speed
+          {previewMode === 'sentences'
+            ? `Press Tab to preview next ${previewSentenceCount} sentence${previewSentenceCount === 1 ? '' : 's'}`
+            : 'Press Tab to preview continuously at your selected speed'}
         </div>
       </div>
     </div>
