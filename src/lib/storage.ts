@@ -4,6 +4,7 @@ import type {
   TokenMode,
   PredictionLineWidth,
   PredictionPreviewMode,
+  ThemePreference,
   RampCurve,
   Activity,
   DisplayMode,
@@ -35,6 +36,7 @@ export interface Settings {
   predictionLineWidth: PredictionLineWidth;
   predictionPreviewMode: PredictionPreviewMode;
   predictionPreviewSentenceCount: number;
+  themePreference: ThemePreference;
   rampEnabled: boolean;
   rampCurve: RampCurve;
   rampStartPercent: number;
@@ -61,6 +63,7 @@ const DEFAULT_SETTINGS: Settings = {
   predictionLineWidth: 'medium',
   predictionPreviewMode: 'sentences',
   predictionPreviewSentenceCount: 2,
+  themePreference: 'dark',
   rampEnabled: false,
   rampCurve: 'linear',
   rampStartPercent: 50,
@@ -206,6 +209,9 @@ export function loadSettings(): Settings {
       1,
       Math.min(10, Math.round(settings.predictionPreviewSentenceCount || 2))
     );
+    settings.themePreference = settings.themePreference === 'light' || settings.themePreference === 'system'
+      ? settings.themePreference
+      : 'dark';
     // Migrate renamed activity types
     if (settings.lastSession) {
       const act = settings.lastSession.activity as string;

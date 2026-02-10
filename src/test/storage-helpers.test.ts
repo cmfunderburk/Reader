@@ -140,15 +140,18 @@ describe('storage-helpers with real storage functions', () => {
     const defaults = loadSettings();
     expect(defaults.predictionPreviewMode).toBe('sentences');
     expect(defaults.predictionPreviewSentenceCount).toBe(2);
+    expect(defaults.themePreference).toBe('dark');
 
     saveSettings({
       ...defaults,
       predictionPreviewMode: 'unlimited',
       predictionPreviewSentenceCount: 5,
+      themePreference: 'system',
     });
 
     const loaded = loadSettings();
     expect(loaded.predictionPreviewMode).toBe('unlimited');
     expect(loaded.predictionPreviewSentenceCount).toBe(5);
+    expect(loaded.themePreference).toBe('system');
   });
 });

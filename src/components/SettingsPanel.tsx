@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { Settings } from '../lib/storage';
-import type { PredictionLineWidth, PredictionPreviewMode, RampCurve } from '../types';
+import type { PredictionLineWidth, PredictionPreviewMode, RampCurve, ThemePreference } from '../types';
 import { getEffectiveWpm } from '../lib/rsvp';
 
 interface SettingsPanelProps {
@@ -23,6 +23,12 @@ const LINE_WIDTH_OPTIONS: { value: PredictionLineWidth; label: string }[] = [
 const PREVIEW_MODE_OPTIONS: { value: PredictionPreviewMode; label: string }[] = [
   { value: 'sentences', label: 'Next N Sentences' },
   { value: 'unlimited', label: 'Unlimited' },
+];
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
+  { value: 'system', label: 'System' },
 ];
 
 function RampCurveGraph({ settings }: { settings: Settings }) {
@@ -116,6 +122,21 @@ export function SettingsPanel({ settings, onSettingsChange, onClose }: SettingsP
       </div>
 
       <div className="settings-sections">
+        <div className="settings-section">
+          <h3>Theme</h3>
+          <div className="settings-presets">
+            {THEME_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                className={`settings-preset${settings.themePreference === opt.value ? ' settings-preset-active' : ''}`}
+                onClick={() => update({ themePreference: opt.value })}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="settings-section">
           <h3>Font Sizes</h3>
 

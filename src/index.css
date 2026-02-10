@@ -16,6 +16,38 @@ html, body, #root {
   --success:        #7ab87a;
   --text-color-a:   #8ec8a0;
   --text-color-b:   #b4a0c4;
+  --noise-opacity:   0.025;
+}
+
+html[data-theme='dark'] {
+  --bg-primary:     #1c1a17;
+  --bg-secondary:   #252320;
+  --bg-tertiary:    #151310;
+  --text-primary:   #e8e0d4;
+  --text-secondary: #9a9186;
+  --text-muted:     #5c564e;
+  --accent:         #d4a04a;
+  --accent-hover:   #e0b45e;
+  --border:         #3a3530;
+  --success:        #7ab87a;
+  --text-color-a:   #8ec8a0;
+  --text-color-b:   #b4a0c4;
+}
+
+html[data-theme='light'] {
+  --bg-primary:     #f6f1e6;
+  --bg-secondary:   #fdf8ef;
+  --bg-tertiary:    #e8ddc9;
+  --text-primary:   #2b2418;
+  --text-secondary: #6b5c48;
+  --text-muted:     #988770;
+  --accent:         #b97622;
+  --accent-hover:   #ca8630;
+  --border:         #d0c2ad;
+  --success:        #2f8f4f;
+  --text-color-a:   #2d7f61;
+  --text-color-b:   #6c5897;
+  --noise-opacity:  0.015;
 }
 
 * {
@@ -57,7 +89,7 @@ button {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.025;
+  opacity: var(--noise-opacity, 0.025);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 256px 256px;

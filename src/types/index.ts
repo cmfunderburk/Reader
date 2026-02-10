@@ -11,6 +11,7 @@ export type RampCurve = 'linear' | 'logarithmic';
 
 export type PredictionLineWidth = 'narrow' | 'medium' | 'wide';
 export type PredictionPreviewMode = 'sentences' | 'unlimited';
+export type ThemePreference = 'dark' | 'light' | 'system';
 export type SaccadePacerStyle = 'sweep' | 'focus';
 export type SaccadeFocusTarget = 'fixation' | 'word';
 

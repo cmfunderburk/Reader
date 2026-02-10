@@ -49,6 +49,7 @@ import type {
   PassageReviewMode,
   PassageReviewState,
   SessionSnapshot,
+  ThemePreference,
 } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
@@ -94,9 +95,18 @@ function passageStatePriority(state: PassageReviewState): number {
   }
 }
 
+function resolveThemePreference(themePreference: ThemePreference, systemTheme: 'dark' | 'light'): 'dark' | 'light' {
+  if (themePreference === 'system') return systemTheme;
+  return themePreference;
+}
+
 export function App() {
   const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
   const settings = displaySettings;
+  const [systemTheme, setSystemTheme] = useState<'dark' | 'light'>(() => {
+    if (!window.matchMedia) return 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [articles, setArticles] = useState<Article[]>(() => {
     const loaded = loadArticles();
     let needsUpdate = false;
@@ -164,6 +174,30 @@ export function App() {
   const [captureNotice, setCaptureNotice] = useState<string | null>(null);
   const [activePassageId, setActivePassageId] = useState<string | null>(null);
   const [isPassageWorkspaceOpen, setIsPassageWorkspaceOpen] = useState(false);
+
+  const resolvedTheme = useMemo(
+    () => resolveThemePreference(displaySettings.themePreference, systemTheme),
+    [displaySettings.themePreference, systemTheme]
+  );
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (event: MediaQueryListEvent) => {
+      setSystemTheme(event.matches ? 'dark' : 'light');
+    };
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', handleChange);
+      return () => media.removeEventListener('change', handleChange);
+    }
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+    document.documentElement.style.colorScheme = resolvedTheme;
+  }, [resolvedTheme]);
 
   const rsvp = useRSVP({
     initialWpm: settings.defaultWpm,
