@@ -141,17 +141,38 @@ describe('storage-helpers with real storage functions', () => {
     expect(defaults.predictionPreviewMode).toBe('sentences');
     expect(defaults.predictionPreviewSentenceCount).toBe(2);
     expect(defaults.themePreference).toBe('dark');
+    expect(defaults.wpmByActivity['paced-reading']).toBe(defaults.defaultWpm);
+    expect(defaults.wpmByActivity['active-recall']).toBe(defaults.defaultWpm);
+    expect(defaults.wpmByActivity.training).toBe(defaults.defaultWpm);
 
     saveSettings({
       ...defaults,
       predictionPreviewMode: 'unlimited',
       predictionPreviewSentenceCount: 5,
       themePreference: 'system',
+      wpmByActivity: {
+        ...defaults.wpmByActivity,
+        training: 460,
+      },
     });
 
     const loaded = loadSettings();
     expect(loaded.predictionPreviewMode).toBe('unlimited');
     expect(loaded.predictionPreviewSentenceCount).toBe(5);
     expect(loaded.themePreference).toBe('system');
+    expect(loaded.wpmByActivity.training).toBe(460);
+  });
+
+  it('migrates legacy settings without per-activity WPM', () => {
+    localStorage.setItem('speedread_settings', JSON.stringify({
+      defaultWpm: 360,
+      predictionPreviewMode: 'sentences',
+    }));
+
+    const loaded = loadSettings();
+    expect(loaded.defaultWpm).toBe(360);
+    expect(loaded.wpmByActivity['paced-reading']).toBe(360);
+    expect(loaded.wpmByActivity['active-recall']).toBe(360);
+    expect(loaded.wpmByActivity.training).toBe(360);
   });
 });

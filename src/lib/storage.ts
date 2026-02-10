@@ -28,6 +28,7 @@ const STORAGE_KEYS = {
 
 export interface Settings {
   defaultWpm: number;
+  wpmByActivity: Record<Activity, number>;
   defaultMode: TokenMode;
   customCharWidth: number;
   rsvpFontSize: number;
@@ -55,6 +56,11 @@ export interface Settings {
 
 const DEFAULT_SETTINGS: Settings = {
   defaultWpm: 300,
+  wpmByActivity: {
+    'paced-reading': 300,
+    'active-recall': 300,
+    training: 300,
+  },
   defaultMode: 'word',
   customCharWidth: 8,
   rsvpFontSize: 2.5,
@@ -78,6 +84,15 @@ const DEFAULT_SETTINGS: Settings = {
   saccadeMergeShortFunctionWords: false,
   saccadeLength: 10,
 };
+
+const MIN_WPM = 100;
+const MAX_WPM = 800;
+
+function clampWpm(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(n)));
+}
 
 /**
  * Load articles from localStorage.
@@ -197,6 +212,15 @@ export function loadSettings(): Settings {
     const data = localStorage.getItem(STORAGE_KEYS.settings);
     const parsed = data ? JSON.parse(data) : null;
     const settings = parsed ? { ...DEFAULT_SETTINGS, ...parsed } : { ...DEFAULT_SETTINGS };
+    const legacyDefaultWpm = clampWpm(settings.defaultWpm, DEFAULT_SETTINGS.defaultWpm);
+    const parsedWpmByActivity = parsed?.wpmByActivity as Partial<Record<Activity, number>> | undefined;
+    settings.wpmByActivity = {
+      'paced-reading': clampWpm(parsedWpmByActivity?.['paced-reading'], legacyDefaultWpm),
+      'active-recall': clampWpm(parsedWpmByActivity?.['active-recall'], legacyDefaultWpm),
+      training: clampWpm(parsedWpmByActivity?.training, legacyDefaultWpm),
+    };
+    // Keep legacy field aligned with paced reading for older code paths/migrations.
+    settings.defaultWpm = settings.wpmByActivity['paced-reading'];
     // Backfill pacer style from legacy sweep toggle.
     if (!parsed || !('saccadePacerStyle' in parsed)) {
       settings.saccadePacerStyle = settings.saccadeShowSweep === false ? 'focus' : 'sweep';
@@ -228,7 +252,19 @@ export function loadSettings(): Settings {
  * Save settings to localStorage.
  */
 export function saveSettings(settings: Settings): void {
-  localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+  const normalized: Settings = {
+    ...settings,
+    wpmByActivity: {
+      'paced-reading': clampWpm(settings.wpmByActivity?.['paced-reading'], settings.defaultWpm),
+      'active-recall': clampWpm(settings.wpmByActivity?.['active-recall'], settings.defaultWpm),
+      training: clampWpm(settings.wpmByActivity?.training, settings.defaultWpm),
+    },
+    defaultWpm: clampWpm(
+      settings.wpmByActivity?.['paced-reading'],
+      clampWpm(settings.defaultWpm, DEFAULT_SETTINGS.defaultWpm)
+    ),
+  };
+  localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(normalized));
 }
 
 /**

@@ -98,7 +98,7 @@ export interface Feed {
   lastFetched: number;
 }
 
-export type PassageCaptureKind = 'line' | 'paragraph' | 'last-lines';
+export type PassageCaptureKind = 'line' | 'sentence' | 'paragraph' | 'last-lines';
 export type PassageReviewState = 'new' | 'hard' | 'easy' | 'done';
 export type PassageReviewMode = 'recall' | 'prediction';
 

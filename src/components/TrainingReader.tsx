@@ -451,10 +451,32 @@ export function TrainingReader({
       }
     } else {
       setCompletedWords(prev => new Map(prev).set(key, { text: actual, correct: false }));
-      setLastMissResult({ predicted: recallInput.trim(), actual });
-      setShowingMiss(true);
+
+      // In random drill mode, keep flow uninterrupted: mark wrong inline and continue.
+      if (isDrill) {
+        setRecallInput('');
+        setLastMissResult(null);
+        setShowingMiss(false);
+
+        const nextIdx = recallWordIndex + 1;
+        if (nextIdx >= recallData.chunks.length) {
+          finishRecallPhase(paragraphStats, { known: false, exact: false, isDetail: detail });
+        } else {
+          setParagraphStats(prev => ({
+            totalWords: prev.totalWords + 1,
+            exactMatches: prev.exactMatches,
+            knownWords: prev.knownWords,
+            detailTotal: prev.detailTotal + (detail ? 1 : 0),
+            detailKnown: prev.detailKnown,
+          }));
+          setRecallWordIndex(nextIdx);
+        }
+      } else {
+        setLastMissResult({ predicted: recallInput.trim(), actual });
+        setShowingMiss(true);
+      }
     }
-  }, [recallInput, currentRecallChunk, recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail]);
+  }, [recallInput, currentRecallChunk, recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail, isDrill]);
 
   const handleGiveUp = useCallback(() => {
     // Score all remaining words (including current) as misses

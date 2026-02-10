@@ -60,6 +60,7 @@ import type {
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 import { formatBookName } from './Library';
+import { isSentenceBoundaryChunk } from '../lib/predictionPreview';
 
 type ViewState =
   | { screen: 'home' }
@@ -84,6 +85,8 @@ const ACTIVITY_LABELS: Record<Activity, string> = {
 };
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
+const MIN_WPM = 100;
+const MAX_WPM = 800;
 
 function clipPassagePreview(text: string, maxChars: number = 180): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -104,6 +107,28 @@ function passageStatePriority(state: PassageReviewState): number {
 function resolveThemePreference(themePreference: ThemePreference, systemTheme: 'dark' | 'light'): 'dark' | 'light' {
   if (themePreference === 'system') return systemTheme;
   return themePreference;
+}
+
+function clampWpm(value: number): number {
+  return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(value)));
+}
+
+function normalizeCaptureLineText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function captureKindLabel(captureKind: PassageCaptureKind): string {
+  switch (captureKind) {
+    case 'sentence':
+      return 'sentence';
+    case 'paragraph':
+      return 'paragraph';
+    case 'last-lines':
+      return 'lines';
+    case 'line':
+    default:
+      return 'line';
+  }
 }
 
 export function App() {
@@ -214,7 +239,7 @@ export function App() {
   }, [resolvedTheme]);
 
   const rsvp = useRSVP({
-    initialWpm: settings.defaultWpm,
+    initialWpm: settings.wpmByActivity['paced-reading'],
     initialMode: settings.defaultMode,
     initialCustomCharWidth: settings.customCharWidth,
     initialRampEnabled: settings.rampEnabled,
@@ -225,6 +250,33 @@ export function App() {
     saccadeLength: settings.saccadeLength,
     onComplete: () => {},
   });
+
+  const getActivityWpm = useCallback((activity: Activity): number => {
+    return settings.wpmByActivity[activity] ?? settings.defaultWpm;
+  }, [settings.defaultWpm, settings.wpmByActivity]);
+
+  const setActivityWpm = useCallback((activity: Activity, nextWpm: number) => {
+    const clamped = clampWpm(nextWpm);
+    rsvp.setWpm(clamped);
+    setDisplaySettings(prev => {
+      const next: Settings = {
+        ...prev,
+        wpmByActivity: {
+          ...prev.wpmByActivity,
+          [activity]: clamped,
+        },
+      };
+      if (activity === 'paced-reading') {
+        next.defaultWpm = clamped;
+      }
+      saveSettings(next);
+      return next;
+    });
+  }, [rsvp]);
+
+  const syncWpmForActivity = useCallback((activity: Activity) => {
+    rsvp.setWpm(getActivityWpm(activity));
+  }, [getActivityWpm, rsvp]);
 
   const navigate = useCallback((next: ViewState) => {
     rsvp.pause();
@@ -241,6 +293,7 @@ export function App() {
     if (snapshot?.reading) {
       const sourceArticle = articles.find((article) => article.id === snapshot.reading!.articleId);
       if (sourceArticle) {
+        syncWpmForActivity('paced-reading');
         const targetDisplayMode = snapshot.reading.displayMode === 'saccade' || snapshot.reading.displayMode === 'rsvp'
           ? snapshot.reading.displayMode
           : 'saccade';
@@ -260,18 +313,29 @@ export function App() {
       clearSessionSnapshot();
     }
     goHome();
-  }, [articles, goHome, rsvp]);
+  }, [articles, goHome, rsvp, syncWpmForActivity]);
 
   // Keyboard shortcuts
   const isActiveView = viewState.screen === 'active-reader' || viewState.screen === 'active-exercise' || viewState.screen === 'active-training';
+  const activeWpmActivity: Activity | null = viewState.screen === 'active-reader'
+    ? 'paced-reading'
+    : viewState.screen === 'active-exercise'
+      ? 'active-recall'
+      : viewState.screen === 'active-training'
+        ? 'training'
+        : null;
 
   useKeyboard({
     onSpace: isActiveView && rsvp.displayMode !== 'prediction' && rsvp.displayMode !== 'recall' && rsvp.displayMode !== 'training'
       ? rsvp.toggle : undefined,
     onLeft: isActiveView ? rsvp.prev : undefined,
     onRight: isActiveView ? rsvp.next : undefined,
-    onBracketLeft: isActiveView ? () => rsvp.setWpm(Math.max(100, rsvp.wpm - 10)) : undefined,
-    onBracketRight: isActiveView ? () => rsvp.setWpm(Math.min(800, rsvp.wpm + 10)) : undefined,
+    onBracketLeft: isActiveView && activeWpmActivity
+      ? () => setActivityWpm(activeWpmActivity, rsvp.wpm - 10)
+      : undefined,
+    onBracketRight: isActiveView && activeWpmActivity
+      ? () => setActivityWpm(activeWpmActivity, rsvp.wpm + 10)
+      : undefined,
     onEscape: () => {
       if (viewState.screen === 'home') return;
       if (viewState.screen === 'active-exercise') {
@@ -442,58 +506,102 @@ export function App() {
     rsvp.goToIndex(newIndex);
   }, [rsvp]);
 
+  const flatSaccadeLines = useMemo(() => {
+    const chunkIndexByLineKey = new Map<string, number>();
+    for (let i = 0; i < rsvp.chunks.length; i++) {
+      const sac = rsvp.chunks[i].saccade;
+      if (!sac) continue;
+      const key = `${sac.pageIndex}:${sac.lineIndex}`;
+      if (!chunkIndexByLineKey.has(key)) {
+        chunkIndexByLineKey.set(key, i);
+      }
+    }
+
+    return rsvp.saccadePages.flatMap((page, pageIndex) =>
+      page.lines.map((line, lineIndex) => {
+        const key = `${pageIndex}:${lineIndex}`;
+        const chunkIndex = chunkIndexByLineKey.get(key);
+        return {
+          globalLineIndex: 0, // backfilled below
+          pageIndex,
+          lineIndex,
+          type: line.type,
+          text: line.text,
+          chunkIndex,
+        };
+      })
+    ).map((line, idx) => ({ ...line, globalLineIndex: idx }));
+  }, [rsvp.chunks, rsvp.saccadePages]);
+
   const currentSaccadeCaptureContext = useMemo(() => {
     if (rsvp.displayMode !== 'saccade') return null;
-    if (!rsvp.article || !rsvp.currentChunk?.saccade || !rsvp.currentSaccadePage) return null;
+    if (!rsvp.article || !rsvp.currentChunk?.saccade) return null;
 
     const currentSac = rsvp.currentChunk.saccade;
-    const lineIndex = currentSac.lineIndex;
-    const line = rsvp.currentSaccadePage.lines[lineIndex];
-    if (!line || line.type === 'blank') return null;
+    const globalLineIndex = flatSaccadeLines.findIndex((line) =>
+      line.pageIndex === currentSac.pageIndex && line.lineIndex === currentSac.lineIndex
+    );
+    if (globalLineIndex < 0) return null;
+
+    const line = flatSaccadeLines[globalLineIndex];
+    if (!line || line.type === 'blank' || normalizeCaptureLineText(line.text).length === 0) return null;
 
     return {
       article: rsvp.article,
       pageIndex: currentSac.pageIndex,
-      lineIndex,
-      page: rsvp.currentSaccadePage,
+      lineIndex: currentSac.lineIndex,
+      globalLineIndex,
       currentChunkIndex: rsvp.currentChunkIndex,
     };
-  }, [rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.currentSaccadePage, rsvp.displayMode]);
+  }, [flatSaccadeLines, rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.displayMode]);
 
-  const collectChunkIndicesForLines = useCallback((pageIndex: number, lineIndices: Set<number>): number[] => {
-    const collected: number[] = [];
-    for (let i = 0; i < rsvp.chunks.length; i++) {
-      const sac = rsvp.chunks[i].saccade;
-      if (!sac) continue;
-      if (sac.pageIndex !== pageIndex) continue;
-      if (!lineIndices.has(sac.lineIndex)) continue;
-      collected.push(i);
+  const getContiguousNonBlankLineRange = useCallback((centerGlobalLineIndex: number): [number, number] | null => {
+    if (centerGlobalLineIndex < 0 || centerGlobalLineIndex >= flatSaccadeLines.length) return null;
+    const centerLine = flatSaccadeLines[centerGlobalLineIndex];
+    if (centerLine.type === 'blank') return null;
+
+    let start = centerGlobalLineIndex;
+    let end = centerGlobalLineIndex;
+    while (start > 0 && flatSaccadeLines[start - 1].type !== 'blank') {
+      start -= 1;
     }
-    return collected;
-  }, [rsvp.chunks]);
+    while (end < flatSaccadeLines.length - 1 && flatSaccadeLines[end + 1].type !== 'blank') {
+      end += 1;
+    }
+    return [start, end];
+  }, [flatSaccadeLines]);
 
-  const capturePassageFromLineIndices = useCallback((
+  const capturePassageFromLines = useCallback((
     captureKind: PassageCaptureKind,
-    lineIndices: number[]
+    selectedLines: Array<{
+      pageIndex: number;
+      lineIndex: number;
+      text: string;
+      type: string;
+      chunkIndex?: number;
+    }>,
+    textOverride?: string
   ): Passage | null => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return null;
 
-    const sortedIndices = [...new Set(lineIndices)]
-      .filter((lineIndex) => lineIndex >= 0 && lineIndex < ctx.page.lines.length)
-      .sort((a, b) => a - b);
-    if (sortedIndices.length === 0) return null;
-
-    const lines = sortedIndices
-      .map((lineIndex) => ctx.page.lines[lineIndex])
+    const lines = selectedLines
       .filter((line) => line.type !== 'blank')
-      .map((line) => line.text.trim())
-      .filter(Boolean);
-    const text = lines.join('\n').trim();
+      .map((line) => ({
+        ...line,
+        text: normalizeCaptureLineText(line.text),
+      }))
+      .filter((line) => line.text.length > 0);
+    if (lines.length === 0 && !textOverride) return null;
+
+    const joinedText = captureKind === 'last-lines'
+      ? lines.map((line) => line.text).join('\n')
+      : lines.map((line) => line.text).join(' ');
+    const text = (textOverride ?? joinedText).trim();
     if (!text) return null;
 
     const now = Date.now();
-    const chunkIndices = collectChunkIndicesForLines(ctx.pageIndex, new Set(sortedIndices));
+    const firstLine = lines[0];
     const passage: Passage = {
       id: generateId(),
       articleId: ctx.article.id,
@@ -503,58 +611,111 @@ export function App() {
       text,
       createdAt: now,
       updatedAt: now,
-      sourceChunkIndex: chunkIndices[0] ?? ctx.currentChunkIndex,
-      sourcePageIndex: ctx.pageIndex,
-      sourceLineIndex: sortedIndices[0],
+      sourceChunkIndex: firstLine?.chunkIndex ?? ctx.currentChunkIndex,
+      sourcePageIndex: firstLine?.pageIndex ?? ctx.pageIndex,
+      sourceLineIndex: firstLine?.lineIndex ?? ctx.lineIndex,
       reviewState: 'new',
       reviewCount: 0,
     };
 
     upsertPassage(passage);
     setPassages((prev) => [passage, ...prev.filter((existing) => existing.id !== passage.id)]);
-    setCaptureNotice(`Saved ${captureKind === 'line' ? 'line' : captureKind === 'paragraph' ? 'paragraph' : 'lines'} to passage queue`);
+    setCaptureNotice(`Saved ${captureKindLabel(captureKind)} to passage queue`);
     return passage;
-  }, [collectChunkIndicesForLines, currentSaccadeCaptureContext]);
+  }, [currentSaccadeCaptureContext]);
 
-  const handleCaptureCurrentLine = useCallback(() => {
-    if (!currentSaccadeCaptureContext) return;
-    capturePassageFromLineIndices('line', [currentSaccadeCaptureContext.lineIndex]);
-  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+  const handleCaptureSentence = useCallback(() => {
+    const ctx = currentSaccadeCaptureContext;
+    if (!ctx) return;
+
+    const paragraphRange = getContiguousNonBlankLineRange(ctx.globalLineIndex);
+    if (!paragraphRange) return;
+    const [paraStart, paraEnd] = paragraphRange;
+    const paragraphRefs = flatSaccadeLines.slice(paraStart, paraEnd + 1)
+      .filter((line) => line.type !== 'blank');
+    if (paragraphRefs.length === 0) return;
+
+    let cursor = 0;
+    const segments = paragraphRefs.map((line) => {
+      const text = normalizeCaptureLineText(line.text);
+      const start = cursor;
+      const end = start + text.length;
+      cursor = end + 1;
+      return { ...line, text, start, end };
+    }).filter((line) => line.text.length > 0);
+    if (segments.length === 0) return;
+
+    const paragraphText = segments.map((line) => line.text).join(' ');
+    const currentSegment = segments.find((line) =>
+      line.pageIndex === ctx.pageIndex && line.lineIndex === ctx.lineIndex
+    ) ?? segments[Math.floor(segments.length / 2)];
+    const anchorChar = currentSegment.start + Math.max(0, Math.floor((currentSegment.end - currentSegment.start) / 2));
+
+    const tokenMatches = [...paragraphText.matchAll(/\S+/g)].map((match) => ({
+      text: match[0],
+      start: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    }));
+    if (tokenMatches.length === 0) return;
+
+    let anchorTokenIndex = tokenMatches.findIndex((token) => anchorChar >= token.start && anchorChar < token.end);
+    if (anchorTokenIndex < 0) {
+      anchorTokenIndex = tokenMatches.findIndex((token) => token.start >= anchorChar);
+      if (anchorTokenIndex < 0) anchorTokenIndex = tokenMatches.length - 1;
+    }
+
+    const sentenceChunks = tokenMatches.map((token) => ({
+      text: token.text,
+      wordCount: 1,
+      orpIndex: 0,
+    }));
+
+    let sentenceStartTokenIndex = 0;
+    for (let i = anchorTokenIndex - 1; i >= 0; i--) {
+      if (isSentenceBoundaryChunk(sentenceChunks, i)) {
+        sentenceStartTokenIndex = i + 1;
+        break;
+      }
+    }
+
+    let sentenceEndTokenIndex = tokenMatches.length - 1;
+    for (let i = anchorTokenIndex; i < tokenMatches.length; i++) {
+      if (isSentenceBoundaryChunk(sentenceChunks, i)) {
+        sentenceEndTokenIndex = i;
+        break;
+      }
+    }
+
+    const sentenceStartChar = tokenMatches[sentenceStartTokenIndex].start;
+    const sentenceEndChar = tokenMatches[sentenceEndTokenIndex].end;
+    const sentenceText = paragraphText.slice(sentenceStartChar, sentenceEndChar).trim();
+    const sentenceLines = segments.filter((line) => line.end > sentenceStartChar && line.start < sentenceEndChar);
+    capturePassageFromLines('sentence', sentenceLines, sentenceText);
+  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines, getContiguousNonBlankLineRange]);
 
   const handleCaptureParagraph = useCallback(() => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return;
-    const lines = ctx.page.lines;
-    let start = ctx.lineIndex;
-    let end = ctx.lineIndex;
-
-    while (start > 0 && lines[start - 1].type !== 'blank') {
-      start -= 1;
-    }
-    while (end < lines.length - 1 && lines[end + 1].type !== 'blank') {
-      end += 1;
-    }
-
-    const indices: number[] = [];
-    for (let i = start; i <= end; i++) {
-      if (lines[i].type !== 'blank') indices.push(i);
-    }
-    capturePassageFromLineIndices('paragraph', indices);
-  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+    const paragraphRange = getContiguousNonBlankLineRange(ctx.globalLineIndex);
+    if (!paragraphRange) return;
+    const [start, end] = paragraphRange;
+    const paragraphLines = flatSaccadeLines.slice(start, end + 1).filter((line) => line.type !== 'blank');
+    capturePassageFromLines('paragraph', paragraphLines);
+  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines, getContiguousNonBlankLineRange]);
 
   const handleCaptureLastLines = useCallback(() => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return;
-    const lines = ctx.page.lines;
-    const selected: number[] = [];
-
-    for (let i = ctx.lineIndex; i >= 0 && selected.length < PASSAGE_CAPTURE_LAST_LINE_COUNT; i--) {
-      if (lines[i].type === 'blank') continue;
-      selected.push(i);
+    const selected: typeof flatSaccadeLines = [];
+    for (let i = ctx.globalLineIndex; i >= 0 && selected.length < PASSAGE_CAPTURE_LAST_LINE_COUNT; i--) {
+      const line = flatSaccadeLines[i];
+      if (line.pageIndex !== ctx.pageIndex) break;
+      if (line.type === 'blank') continue;
+      if (normalizeCaptureLineText(line.text).length === 0) continue;
+      selected.push(line);
     }
-
-    capturePassageFromLineIndices('last-lines', selected.reverse());
-  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+    capturePassageFromLines('last-lines', selected.reverse());
+  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
 
   const reviewQueue = useMemo(() => {
     return passages
@@ -624,11 +785,12 @@ export function App() {
     setActivePassageId(passage.id);
     refreshPassagesFromStorage();
     setIsPassageWorkspaceOpen(false);
+    syncWpmForActivity('active-recall');
 
     rsvp.pause();
     rsvp.loadArticle(passageArticle, { displayMode: mode === 'recall' ? 'recall' : 'prediction' });
     setViewState({ screen: 'active-exercise' });
-  }, [articles, refreshPassagesFromStorage, rsvp]);
+  }, [articles, refreshPassagesFromStorage, rsvp, syncWpmForActivity]);
 
   // --- Navigation handlers ---
 
@@ -641,12 +803,14 @@ export function App() {
   }, []);
 
   const handleSelectActivity = useCallback((activity: Activity) => {
+    syncWpmForActivity(activity);
     navigate({ screen: 'content-browser', activity });
-  }, [navigate]);
+  }, [navigate, syncWpmForActivity]);
 
   const handleStartDrill = useCallback(() => {
+    syncWpmForActivity('training');
     navigate({ screen: 'active-training' });
-  }, [navigate]);
+  }, [navigate, syncWpmForActivity]);
 
   const handleStartDaily = useCallback(async () => {
     const today = getTodayUTC();
@@ -657,6 +821,7 @@ export function App() {
       const existing = articles.find(a => a.id === daily.articleId);
       if (existing) {
         clearSessionSnapshot();
+        syncWpmForActivity('paced-reading');
         rsvp.loadArticle(existing, { displayMode: 'saccade' });
         saveLastSession(existing.id, 'paced-reading', 'saccade');
         setViewState({ screen: 'active-reader' });
@@ -711,6 +876,7 @@ export function App() {
 
       saveDailyInfo(today, article.id);
       clearSessionSnapshot();
+      syncWpmForActivity('paced-reading');
       rsvp.loadArticle(article, { displayMode: 'saccade' });
       saveLastSession(article.id, 'paced-reading', 'saccade');
       setDailyStatus('idle');
@@ -720,7 +886,7 @@ export function App() {
       setDailyStatus('error');
       setDailyError(err instanceof Error ? err.message : 'Failed to fetch daily article');
     }
-  }, [articles, rsvp, saveLastSession]);
+  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
 
   const handleStartRandom = useCallback(async () => {
     setRandomStatus('loading');
@@ -767,6 +933,7 @@ export function App() {
         saveArticles(updated);
       }
 
+      syncWpmForActivity('paced-reading');
       rsvp.loadArticle(article, { displayMode: 'saccade' });
       clearSessionSnapshot();
       saveLastSession(article.id, 'paced-reading', 'saccade');
@@ -777,7 +944,7 @@ export function App() {
       setRandomStatus('error');
       setRandomError(err instanceof Error ? err.message : 'Failed to fetch article');
     }
-  }, [articles, rsvp, saveLastSession]);
+  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
 
   // Content browser → article selected → preview
   const handleContentBrowserSelectArticle = useCallback((article: Article) => {
@@ -797,7 +964,7 @@ export function App() {
     if (viewState.screen !== 'preview') return;
     const activity = viewState.activity;
 
-    rsvp.setWpm(wpm);
+    setActivityWpm(activity, wpm);
 
     if (activity === 'paced-reading') {
       clearSessionSnapshot();
@@ -811,7 +978,7 @@ export function App() {
       saveLastSession(article.id, 'active-recall', 'prediction');
       setViewState({ screen: 'active-exercise' });
     }
-  }, [rsvp, viewState, saveLastSession]);
+  }, [rsvp, saveLastSession, setActivityWpm, viewState]);
 
   // Continue from home screen
   const continueInfo = useMemo(() => {
@@ -824,6 +991,7 @@ export function App() {
 
   const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
     clearSessionSnapshot();
+    syncWpmForActivity(info.activity);
     rsvp.loadArticle(info.article, { displayMode: info.displayMode });
 
     if (info.activity === 'paced-reading') {
@@ -834,7 +1002,7 @@ export function App() {
     } else if (info.activity === 'training') {
       setViewState({ screen: 'active-training', article: info.article });
     }
-  }, [rsvp]);
+  }, [rsvp, syncWpmForActivity]);
 
   // --- Computed values ---
 
@@ -873,7 +1041,7 @@ export function App() {
 
   // --- Render helpers ---
 
-  const renderReaderControls = (allowedModes: DisplayMode[]) => (
+  const renderReaderControls = (allowedModes: DisplayMode[], activity: Activity) => (
     <ReaderControls
       isPlaying={rsvp.isPlaying}
       wpm={rsvp.wpm}
@@ -890,7 +1058,7 @@ export function App() {
       onPrev={rsvp.prev}
       onReset={rsvp.reset}
       onSkipToEnd={() => rsvp.goToIndex(rsvp.chunks.length - 1)}
-      onWpmChange={rsvp.setWpm}
+      onWpmChange={(nextWpm) => setActivityWpm(activity, nextWpm)}
       onModeChange={rsvp.setMode}
       onDisplayModeChange={rsvp.setDisplayMode}
       onShowPacerChange={rsvp.setShowPacer}
@@ -969,11 +1137,11 @@ export function App() {
         <div className="passage-capture-actions">
           <button
             className="control-btn"
-            onClick={handleCaptureCurrentLine}
+            onClick={handleCaptureSentence}
             disabled={!canCapture}
-            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save current line'}
+            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save sentence at current focus'}
           >
-            Save Line
+            Save Sentence
           </button>
           <button
             className="control-btn"
@@ -1134,7 +1302,7 @@ export function App() {
         {viewState.screen === 'preview' && (
           <ArticlePreview
             article={viewState.article}
-            initialWpm={rsvp.wpm}
+            initialWpm={getActivityWpm(viewState.activity)}
             initialMode={rsvp.mode}
             onStart={handleStartReading}
             onClose={() => navigate({ screen: 'content-browser', activity: viewState.activity })}
@@ -1162,7 +1330,7 @@ export function App() {
             />
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
-            {renderReaderControls(['rsvp', 'saccade'])}
+            {renderReaderControls(['rsvp', 'saccade'], 'paced-reading')}
             {renderPassageWorkspace()}
           </>
         )}
@@ -1203,13 +1371,13 @@ export function App() {
                   stats={rsvp.predictionStats}
                   wpm={rsvp.wpm}
                   goToIndex={rsvp.goToIndex}
-                  onWpmChange={rsvp.setWpm}
+                  onWpmChange={(nextWpm) => setActivityWpm('active-recall', nextWpm)}
                   previewMode={displaySettings.predictionPreviewMode}
                   previewSentenceCount={displaySettings.predictionPreviewSentenceCount}
                 />
               </div>
             )}
-            {renderReaderControls(['prediction', 'recall'])}
+            {renderReaderControls(['prediction', 'recall'], 'active-recall')}
           </>
         )}
 
@@ -1218,7 +1386,7 @@ export function App() {
           <div className="training-container">
             <TrainingReader
               article={viewState.article}
-              initialWpm={rsvp.wpm}
+              initialWpm={getActivityWpm('training')}
               saccadeShowOVP={displaySettings.saccadeShowOVP}
               saccadeShowSweep={displaySettings.saccadeShowSweep}
               saccadePacerStyle={displaySettings.saccadePacerStyle}
@@ -1226,7 +1394,7 @@ export function App() {
               saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
               saccadeLength={displaySettings.saccadeLength}
               onClose={goHome}
-              onWpmChange={rsvp.setWpm}
+              onWpmChange={(nextWpm) => setActivityWpm('training', nextWpm)}
               onSelectArticle={() => navigate({ screen: 'content-browser', activity: 'training' })}
             />
           </div>
