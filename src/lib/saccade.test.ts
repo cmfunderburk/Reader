@@ -254,6 +254,18 @@ describe('figure handling', () => {
     expect(chunks[0].wordCount).toBeGreaterThan(0);
   });
 
+  it('parses direct figure URLs for remote image sources', () => {
+    const text = '[FIGURE_URL:https://upload.wikimedia.org/example.jpg]\n\n[FIGURE Example lead image.]';
+    const lines = flowTextIntoLines(text, 80);
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      type: 'figure',
+      figureSrc: 'https://upload.wikimedia.org/example.jpg',
+      figureCaption: 'Example lead image.',
+    });
+  });
+
   it('converts figure lines to blanks in recall mode', () => {
     const text = '[FIGURE:fig3_1]\n\n[FIGURE 3.1. Prior and posterior.]';
     const { pages, chunks } = tokenizeRecall(text, 15);

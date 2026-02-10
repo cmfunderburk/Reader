@@ -16,6 +16,9 @@ html, body, #root {
   --success:        #7ab87a;
   --text-color-a:   #8ec8a0;
   --text-color-b:   #b4a0c4;
+  --saccade-ovp-color: #e0b038;
+  --saccade-ovp-active-color: #e9be66;
+  --saccade-focus-highlight: rgba(224, 176, 56, 0.16);
   --noise-opacity:   0.025;
 }
 
@@ -32,6 +35,9 @@ html[data-theme='dark'] {
   --success:        #7ab87a;
   --text-color-a:   #8ec8a0;
   --text-color-b:   #b4a0c4;
+  --saccade-ovp-color: #e0b038;
+  --saccade-ovp-active-color: #e9be66;
+  --saccade-focus-highlight: rgba(224, 176, 56, 0.16);
 }
 
 html[data-theme='light'] {
@@ -47,6 +53,9 @@ html[data-theme='light'] {
   --success:        #2f8f4f;
   --text-color-a:   #2d7f61;
   --text-color-b:   #6c5897;
+  --saccade-ovp-color: #915214;
+  --saccade-ovp-active-color: #b4671c;
+  --saccade-focus-highlight: rgba(145, 82, 20, 0.15);
   --noise-opacity:  0.015;
 }
 
@@ -368,7 +377,7 @@ button {
 
 /* Inline fixation-point highlights */
 .saccade-fixation {
-  color: rgba(212, 160, 74, 0.85);
+  color: var(--saccade-ovp-color);
   font-weight: 600;
 }
 
@@ -388,8 +397,8 @@ button {
 }
 
 @keyframes fixation-active {
-  0%, 100% { color: rgba(212, 160, 74, 0.85); }
-  1%, 99% { color: #e0b45e; }
+  0%, 100% { color: var(--saccade-ovp-color); }
+  1%, 99% { color: var(--saccade-ovp-active-color); }
 }
 
 /* Line sweep pacer — stepped to align with fixation positions */

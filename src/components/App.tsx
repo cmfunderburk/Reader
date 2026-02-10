@@ -35,7 +35,13 @@ import {
 } from '../lib/storage';
 import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
-import { fetchDailyArticle, fetchRandomFeaturedArticle, getTodayUTC } from '../lib/wikipedia';
+import {
+  fetchDailyArticle,
+  fetchRandomFeaturedArticle,
+  getTodayUTC,
+  isWikipediaSource,
+  normalizeWikipediaContentForReader,
+} from '../lib/wikipedia';
 import type {
   Article,
   Feed,
@@ -112,6 +118,14 @@ export function App() {
     let needsUpdate = false;
     const migrated = loaded.map(article => {
       let updated = article;
+      if (isWikipediaSource(updated.source)) {
+        const normalized = normalizeWikipediaContentForReader(updated.content);
+        if (normalized && normalized !== updated.content) {
+          needsUpdate = true;
+          const metrics = measureTextMetrics(normalized);
+          updated = { ...updated, content: normalized, ...metrics };
+        }
+      }
       if (updated.charCount == null || updated.wordCount == null) {
         needsUpdate = true;
         const metrics = measureTextMetrics(updated.content);
@@ -552,6 +566,18 @@ export function App() {
       });
   }, [passages]);
 
+  useEffect(() => {
+    if (reviewQueue.length === 0 && isPassageWorkspaceOpen) {
+      setIsPassageWorkspaceOpen(false);
+    }
+  }, [isPassageWorkspaceOpen, reviewQueue.length]);
+
+  useEffect(() => {
+    if (activePassageId && !reviewQueue.some((passage) => passage.id === activePassageId)) {
+      setActivePassageId(null);
+    }
+  }, [activePassageId, reviewQueue]);
+
   const refreshPassagesFromStorage = useCallback(() => {
     setPassages(loadPassages());
   }, []);
@@ -648,7 +674,22 @@ export function App() {
       const existing = articles.find(a => a.url === url);
       let article: Article;
       if (existing) {
-        article = existing;
+        if (existing.title !== title || existing.content !== content) {
+          const metrics = measureTextMetrics(content);
+          article = {
+            ...existing,
+            title,
+            content,
+            source: 'Wikipedia Daily',
+            group: 'Wikipedia',
+            ...metrics,
+          };
+          const updated = articles.map((a) => (a.id === existing.id ? article : a));
+          setArticles(updated);
+          saveArticles(updated);
+        } else {
+          article = existing;
+        }
       } else {
         const metrics = measureTextMetrics(content);
         article = {
@@ -691,7 +732,22 @@ export function App() {
       const existing = articles.find(a => a.url === url);
       let article: Article;
       if (existing) {
-        article = existing;
+        if (existing.title !== title || existing.content !== content) {
+          const metrics = measureTextMetrics(content);
+          article = {
+            ...existing,
+            title,
+            content,
+            source: 'Wikipedia Featured',
+            group: 'Wikipedia',
+            ...metrics,
+          };
+          const updated = articles.map((a) => (a.id === existing.id ? article : a));
+          setArticles(updated);
+          saveArticles(updated);
+        } else {
+          article = existing;
+        }
       } else {
         const metrics = measureTextMetrics(content);
         article = {
@@ -897,9 +953,14 @@ export function App() {
           <button
             className={`control-btn passage-workspace-toggle ${isPassageWorkspaceOpen ? 'control-btn-active' : ''}`}
             onClick={() => setIsPassageWorkspaceOpen((open) => !open)}
-            title={isPassageWorkspaceOpen ? 'Hide passage queue' : 'Show passage queue'}
+            title={queueItems.length === 0
+              ? 'Capture passages to enable queue review'
+              : isPassageWorkspaceOpen
+                ? 'Hide passage queue'
+                : 'Show passage queue'}
             aria-expanded={isPassageWorkspaceOpen}
             aria-controls="passage-queue-panel"
+            disabled={queueItems.length === 0}
           >
             {isPassageWorkspaceOpen ? 'Hide Queue' : 'Show Queue'}
           </button>
@@ -949,43 +1010,39 @@ export function App() {
           </div>
         )}
 
-        {isPassageWorkspaceOpen && (
+        {isPassageWorkspaceOpen && queueItems.length > 0 && (
           <div id="passage-queue-panel" className="passage-workspace-panel">
-            {queueItems.length === 0 ? (
-              <div className="passage-queue-empty">No passages saved yet.</div>
-            ) : (
-              <div className="passage-queue-list">
-                {queueItems.map((passage) => (
-                  <article
-                    key={passage.id}
-                    className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
-                  >
-                    <div className="passage-queue-meta">
-                      <span>{passage.articleTitle}</span>
-                      <span>{passage.captureKind} • {passage.reviewState}</span>
-                    </div>
-                    <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
-                    <div className="passage-queue-actions">
-                      <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
-                        Recall
-                      </button>
-                      <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
-                        Predict
-                      </button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
-                        Hard
-                      </button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
-                        Easy
-                      </button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
-                        Done
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
+            <div className="passage-queue-list">
+              {queueItems.map((passage) => (
+                <article
+                  key={passage.id}
+                  className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
+                >
+                  <div className="passage-queue-meta">
+                    <span>{passage.articleTitle}</span>
+                    <span>{passage.captureKind} • {passage.reviewState}</span>
+                  </div>
+                  <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
+                  <div className="passage-queue-actions">
+                    <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
+                      Recall
+                    </button>
+                    <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
+                      Predict
+                    </button>
+                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
+                      Hard
+                    </button>
+                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
+                      Easy
+                    </button>
+                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
+                      Done
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
         )}
       </section>

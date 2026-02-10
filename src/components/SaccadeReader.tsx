@@ -43,23 +43,33 @@ export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeS
     const availableHeight = readerEl.clientHeight;
     if (availableHeight <= 0) return;
 
+    const getOuterHeight = (el: HTMLElement | null): number => {
+      if (!el) return 0;
+      const rectHeight = el.getBoundingClientRect().height;
+      const styles = window.getComputedStyle(el);
+      const marginTop = Number.parseFloat(styles.marginTop || '0') || 0;
+      const marginBottom = Number.parseFloat(styles.marginBottom || '0') || 0;
+      return rectHeight + marginTop + marginBottom;
+    };
+
     let nonFigureHeight = 0;
     let figureChromeHeight = 0;
 
     for (const lineEl of lineElements) {
-      const lineHeight = lineEl.getBoundingClientRect().height;
+      const lineHeight = getOuterHeight(lineEl);
       if (!lineEl.classList.contains('saccade-line-figure')) {
         nonFigureHeight += lineHeight;
         continue;
       }
 
       const imageEl = lineEl.querySelector<HTMLElement>('.saccade-figure-image');
-      const imageHeight = imageEl ? imageEl.getBoundingClientRect().height : 0;
+      const imageHeight = imageEl ? getOuterHeight(imageEl) : 0;
       figureChromeHeight += Math.max(0, lineHeight - imageHeight);
     }
 
-    const remainingHeight = availableHeight - nonFigureHeight - figureChromeHeight - 8;
-    const perFigureBudget = Math.floor(remainingHeight / figureElements.length);
+    const remainingHeight = availableHeight - nonFigureHeight - figureChromeHeight - 12;
+    const currentOverflow = Math.max(0, pageEl.scrollHeight - availableHeight);
+    const perFigureBudget = Math.floor(remainingHeight / figureElements.length) - Math.ceil(currentOverflow / figureElements.length);
     const nextMaxHeight = Math.max(72, Math.min(520, perFigureBudget));
 
     setFigureMaxHeightPx((prev) => (prev === nextMaxHeight ? prev : nextMaxHeight));
@@ -345,7 +355,7 @@ export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying,
  * Uses paired keyframes with a 0.01% gap for sharp transitions.
  */
 function generateDecolorKeyframes(lineIndex: number, fixations: number[], textLength: number): string {
-  const amber = 'color: rgba(224, 176, 56, 0.85); font-weight: 600';
+  const amber = 'color: var(--saccade-ovp-color); font-weight: 600';
   const plain = 'color: var(--text-primary); font-weight: normal';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);
@@ -363,7 +373,7 @@ function generateFocusDecolorKeyframes(
   focusTargets: Array<{ startChar: number; endChar: number }>,
   focusTimings: Array<{ startPct: number; endPct: number }>,
 ): string {
-  const amber = 'color: rgba(224, 176, 56, 0.85); font-weight: 600';
+  const amber = 'color: var(--saccade-ovp-color); font-weight: 600';
   const plain = 'color: var(--text-primary); font-weight: normal';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);
@@ -393,7 +403,7 @@ function generateFocusKeyframes(
   lineIndex: number,
   focusTimings: Array<{ startPct: number; endPct: number }>
 ): string {
-  const active = 'background: rgba(224, 176, 56, 0.16)';
+  const active = 'background: var(--saccade-focus-highlight)';
   const inactive = 'background: transparent';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);

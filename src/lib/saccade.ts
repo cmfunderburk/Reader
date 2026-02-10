@@ -311,6 +311,7 @@ export function computeFocusTargetTimings(
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
 const FIGURE_MARKER_PATTERN = /^\[FIGURE:([^\]]+)\]$/i;
+const FIGURE_URL_PATTERN = /^\[FIGURE_URL:(.+)\]$/i;
 const FIGURE_CAPTION_PATTERN = /^\[FIGURE\s+(.+)\]$/i;
 
 /**
@@ -380,12 +381,14 @@ export function flowTextIntoLines(
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
     const figureMarker = block.match(FIGURE_MARKER_PATTERN);
+    const figureUrlMarker = block.match(FIGURE_URL_PATTERN);
 
-    if (figureMarker) {
-      const figureId = figureMarker[1].trim();
+    if (figureMarker || figureUrlMarker) {
+      const figureId = figureMarker ? figureMarker[1].trim() : undefined;
+      const figureSrc = figureUrlMarker ? figureUrlMarker[1].trim() : undefined;
       let figureCaption: string | undefined;
 
-      if (i + 1 < blocks.length && !FIGURE_MARKER_PATTERN.test(blocks[i + 1])) {
+      if (i + 1 < blocks.length && !FIGURE_MARKER_PATTERN.test(blocks[i + 1]) && !FIGURE_URL_PATTERN.test(blocks[i + 1])) {
         const captionMatch = blocks[i + 1].match(FIGURE_CAPTION_PATTERN);
         if (captionMatch) {
           figureCaption = captionMatch[1].trim();
@@ -394,10 +397,10 @@ export function flowTextIntoLines(
       }
 
       lines.push({
-        text: figureCaption || `Figure ${figureId}`,
+        text: figureCaption || (figureId ? `Figure ${figureId}` : 'Figure'),
         type: 'figure',
         figureId,
-        figureSrc: buildFigureSrc(figureAssetBaseUrl, figureId),
+        figureSrc: figureSrc || buildFigureSrc(figureAssetBaseUrl, figureId),
         figureCaption,
       });
 
@@ -446,8 +449,8 @@ export function flowTextIntoLines(
   return lines;
 }
 
-function buildFigureSrc(assetBaseUrl: string | undefined, figureId: string): string | undefined {
-  if (!assetBaseUrl) return undefined;
+function buildFigureSrc(assetBaseUrl: string | undefined, figureId?: string): string | undefined {
+  if (!assetBaseUrl || !figureId) return undefined;
   const normalizedBase = assetBaseUrl.endsWith('/') ? assetBaseUrl : `${assetBaseUrl}/`;
 
   try {
