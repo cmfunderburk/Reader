@@ -1,4 +1,4 @@
-import type { TokenMode, DisplayMode } from '../types';
+import type { TokenMode, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
@@ -32,8 +32,10 @@ interface ReaderControlsProps {
   onShowORPChange: (enabled: boolean) => void;
   saccadeShowOVP: boolean;
   onSaccadeShowOVPChange: (enabled: boolean) => void;
-  saccadeShowSweep: boolean;
-  onSaccadeShowSweepChange: (enabled: boolean) => void;
+  saccadePacerStyle: SaccadePacerStyle;
+  onSaccadePacerStyleChange: (style: SaccadePacerStyle) => void;
+  saccadeFocusTarget: SaccadeFocusTarget;
+  onSaccadeFocusTargetChange: (target: SaccadeFocusTarget) => void;
   saccadeLength: number;
   onSaccadeLengthChange: (length: number) => void;
 }
@@ -70,8 +72,10 @@ export function ReaderControls({
   onShowORPChange,
   saccadeShowOVP,
   onSaccadeShowOVPChange,
-  saccadeShowSweep,
-  onSaccadeShowSweepChange,
+  saccadePacerStyle,
+  onSaccadePacerStyleChange,
+  saccadeFocusTarget,
+  onSaccadeFocusTargetChange,
   saccadeLength,
   onSaccadeLengthChange,
 }: ReaderControlsProps) {
@@ -233,15 +237,34 @@ export function ReaderControls({
               />
               <span className="control-label">OVP</span>
             </label>
-            <label className="control-group control-checkbox">
-              <input
-                type="checkbox"
-                checked={saccadeShowSweep}
-                onChange={e => onSaccadeShowSweepChange(e.target.checked)}
-              />
-              <span className="control-label">Sweep</span>
-            </label>
-            {saccadeShowOVP && (
+            {showPacer && (
+              <label className="control-group">
+                <span className="control-label">Pacer style:</span>
+                <select
+                  value={saccadePacerStyle}
+                  onChange={e => onSaccadePacerStyleChange(e.target.value as SaccadePacerStyle)}
+                  className="control-select"
+                >
+                  <option value="sweep">Sweep</option>
+                  <option value="focus">Focus</option>
+                </select>
+              </label>
+            )}
+            {showPacer && saccadePacerStyle === 'focus' && (
+              <label className="control-group">
+                <span className="control-label">Focus by:</span>
+                <select
+                  value={saccadeFocusTarget}
+                  onChange={e => onSaccadeFocusTargetChange(e.target.value as SaccadeFocusTarget)}
+                  className="control-select"
+                >
+                  <option value="fixation">Fixation</option>
+                  <option value="word">Word</option>
+                </select>
+              </label>
+            )}
+            {(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'fixation')
+              || (saccadeShowOVP && !(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'word')) ? (
               <label className="control-group">
                 <span className="control-label">Saccade:</span>
                 <input
@@ -255,7 +278,7 @@ export function ReaderControls({
                 />
                 <span className="control-value">{saccadeLength}ch</span>
               </label>
-            )}
+            ) : null}
           </>
         )}
 

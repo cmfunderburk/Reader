@@ -1,4 +1,4 @@
-import type { Article, Feed, TokenMode, PredictionLineWidth, RampCurve, Activity, DisplayMode } from '../types';
+import type { Article, Feed, TokenMode, PredictionLineWidth, RampCurve, Activity, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
 
 const STORAGE_KEYS = {
   articles: 'speedread_articles',
@@ -25,6 +25,8 @@ export interface Settings {
   rsvpShowORP: boolean;
   saccadeShowOVP: boolean;
   saccadeShowSweep: boolean;
+  saccadePacerStyle: SaccadePacerStyle;
+  saccadeFocusTarget: SaccadeFocusTarget;
   saccadeLength: number;
   lastSession?: { articleId: string; activity: Activity; displayMode: DisplayMode };
 }
@@ -46,6 +48,8 @@ const DEFAULT_SETTINGS: Settings = {
   rsvpShowORP: true,
   saccadeShowOVP: true,
   saccadeShowSweep: true,
+  saccadePacerStyle: 'sweep',
+  saccadeFocusTarget: 'fixation',
   saccadeLength: 10,
 };
 
@@ -93,7 +97,12 @@ export function saveFeeds(feeds: Feed[]): void {
 export function loadSettings(): Settings {
   try {
     const data = localStorage.getItem(STORAGE_KEYS.settings);
-    const settings = data ? { ...DEFAULT_SETTINGS, ...JSON.parse(data) } : DEFAULT_SETTINGS;
+    const parsed = data ? JSON.parse(data) : null;
+    const settings = parsed ? { ...DEFAULT_SETTINGS, ...parsed } : { ...DEFAULT_SETTINGS };
+    // Backfill pacer style from legacy sweep toggle.
+    if (!parsed || !('saccadePacerStyle' in parsed)) {
+      settings.saccadePacerStyle = settings.saccadeShowSweep === false ? 'focus' : 'sweep';
+    }
     // Clamp values that may have been saved under old wider ranges
     settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
     settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));

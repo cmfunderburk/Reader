@@ -209,6 +209,14 @@ button {
   font-weight: 600;
 }
 
+.saccade-line-focus {
+  position: relative;
+}
+
+.saccade-focus-target {
+  background: transparent;
+}
+
 /* Active fixation target — amber pulse, flows through ORPs via staggered delays */
 .saccade-fixation-active {
   animation-name: fixation-active;

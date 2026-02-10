@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSaccadeLineDuration, computeLineFixations, segmentIntoParagraphs, tokenizeParagraphSaccade, tokenizeParagraphRecall } from './saccade';
+import { calculateSaccadeLineDuration, computeFocusTargetTimings, computeFocusTargets, computeLineFixations, computeWordFixations, computeWordTargets, segmentIntoParagraphs, tokenizeParagraphSaccade, tokenizeParagraphRecall } from './saccade';
 
 describe('calculateSaccadeLineDuration', () => {
   it('returns 0 for empty text or zero WPM', () => {
@@ -92,6 +92,99 @@ describe('computeLineFixations', () => {
     expect(fixations.length).toBe(1);
     // Fixation should be on "pharmaceutical", not "a"
     expect(fixations[0]).toBeGreaterThan(1);
+  });
+});
+
+describe('computeFocusTargets', () => {
+  it('returns empty array for empty text or fixations', () => {
+    expect(computeFocusTargets('', [1, 2])).toEqual([]);
+    expect(computeFocusTargets('hello world', [])).toEqual([]);
+  });
+
+  it('builds ranges from the start of each fixation word', () => {
+    const text = 'Alpha beta gamma delta';
+    const fixations = computeLineFixations(text, 8);
+    const ranges = computeFocusTargets(text, fixations);
+
+    expect(ranges.length).toBeGreaterThan(0);
+    expect(ranges[0].startChar).toBe(0);
+    expect(ranges[ranges.length - 1].endChar).toBe(text.length);
+  });
+
+  it('deduplicates repeated fixation words', () => {
+    const text = 'alpha beta';
+    const ranges = computeFocusTargets(text, [1, 2, 7]);
+    expect(ranges).toEqual([
+      { startChar: 0, endChar: 6 },
+      { startChar: 6, endChar: text.length },
+    ]);
+  });
+});
+
+describe('computeWordTargets', () => {
+  it('returns one range per token', () => {
+    const text = 'Read this line.';
+    expect(computeWordTargets(text)).toEqual([
+      { startChar: 0, endChar: 4 },
+      { startChar: 5, endChar: 9 },
+      { startChar: 10, endChar: 15 },
+    ]);
+  });
+
+  it('returns empty for empty text', () => {
+    expect(computeWordTargets('')).toEqual([]);
+  });
+});
+
+describe('computeWordFixations', () => {
+  it('returns one fixation per token', () => {
+    const text = 'Alpha beta gamma';
+    const fixations = computeWordFixations(text);
+    expect(fixations.length).toBe(3);
+    expect(fixations[0]).toBeGreaterThanOrEqual(0);
+    expect(fixations[2]).toBeLessThan(text.length);
+  });
+
+  it('returns empty for empty text', () => {
+    expect(computeWordFixations('')).toEqual([]);
+  });
+});
+
+describe('computeFocusTargetTimings', () => {
+  it('uses equal dwell in word mode when no punctuation is present', () => {
+    const text = 'alpha beta gamma';
+    const targets = computeWordTargets(text);
+    const timings = computeFocusTargetTimings(text, targets, 'word');
+    expect(timings.length).toBe(3);
+    const d0 = timings[0].endPct - timings[0].startPct;
+    const d1 = timings[1].endPct - timings[1].startPct;
+    const d2 = timings[2].endPct - timings[2].startPct;
+    expect(Math.abs(d0 - d1)).toBeLessThan(0.01);
+    expect(Math.abs(d1 - d2)).toBeLessThan(0.01);
+  });
+
+  it('adds punctuation pause bonus in word mode', () => {
+    const text = 'alpha, beta gamma.';
+    const targets = computeWordTargets(text);
+    const timings = computeFocusTargetTimings(text, targets, 'word');
+    const d0 = timings[0].endPct - timings[0].startPct; // comma
+    const d1 = timings[1].endPct - timings[1].startPct; // plain
+    const d2 = timings[2].endPct - timings[2].startPct; // sentence end
+    expect(d0).toBeGreaterThan(d1);
+    expect(d2).toBeGreaterThan(d1);
+  });
+
+  it('uses character span in char mode', () => {
+    const text = 'alpha beta';
+    const targets = [
+      { startChar: 0, endChar: 5 },
+      { startChar: 6, endChar: 10 },
+    ];
+    const timings = computeFocusTargetTimings(text, targets, 'char');
+    expect(timings[0].startPct).toBe(0);
+    expect(timings[0].endPct).toBe(50);
+    expect(timings[1].startPct).toBe(60);
+    expect(timings[1].endPct).toBe(100);
   });
 });
 

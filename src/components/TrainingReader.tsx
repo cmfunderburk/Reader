@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
-import type { Article, Chunk, TrainingParagraphResult } from '../types';
+import type { Article, Chunk, TrainingParagraphResult, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
 import type { CorpusArticle, CorpusInfo, CorpusTier } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import { isExactMatch, isWordKnown, isDetailWord } from '../lib/levenshtein';
@@ -64,6 +64,8 @@ interface TrainingReaderProps {
   initialWpm: number;
   saccadeShowOVP?: boolean;
   saccadeShowSweep?: boolean;
+  saccadePacerStyle?: SaccadePacerStyle;
+  saccadeFocusTarget?: SaccadeFocusTarget;
   saccadeLength?: number;
   onClose: () => void;
   onWpmChange: (wpm: number) => void;
@@ -93,6 +95,8 @@ export function TrainingReader({
   initialWpm,
   saccadeShowOVP,
   saccadeShowSweep,
+  saccadePacerStyle,
+  saccadeFocusTarget,
   saccadeLength,
   onClose,
   onWpmChange,
@@ -1017,6 +1021,8 @@ export function TrainingReader({
               wpm={wpm}
               saccadeShowOVP={saccadeShowOVP}
               saccadeShowSweep={saccadeShowSweep}
+              saccadePacerStyle={saccadePacerStyle}
+              saccadeFocusTarget={saccadeFocusTarget}
               saccadeLength={saccadeLength}
             />
           ))}

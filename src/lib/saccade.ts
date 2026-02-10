@@ -88,6 +88,133 @@ export function computeLineFixations(lineText: string, saccadeLength: number): n
   return fixations;
 }
 
+export interface FocusTargetRange {
+  startChar: number;
+  endChar: number;
+}
+
+export interface FocusTargetTiming {
+  startPct: number;
+  endPct: number;
+}
+
+/**
+ * Convert fixation ORP positions into progressive highlight ranges.
+ *
+ * Each range starts at the beginning of the fixation's word and ends at the
+ * beginning of the next fixation's word (or line end for the final fixation).
+ */
+export function computeFocusTargets(lineText: string, fixations: number[]): FocusTargetRange[] {
+  if (!lineText || fixations.length === 0) return [];
+
+  const words: Array<{ start: number; end: number }> = [];
+  const regex = /\S+/g;
+  let m;
+  while ((m = regex.exec(lineText)) !== null) {
+    words.push({ start: m.index, end: m.index + m[0].length });
+  }
+  if (words.length === 0) return [];
+
+  const wordStartForChar = (idx: number): number => {
+    for (const word of words) {
+      if (idx >= word.start && idx < word.end) return word.start;
+    }
+    return Math.max(0, Math.min(lineText.length - 1, idx));
+  };
+
+  const boundaries: number[] = [];
+  for (const fixation of fixations) {
+    const start = wordStartForChar(fixation);
+    if (boundaries.length === 0 || start > boundaries[boundaries.length - 1]) {
+      boundaries.push(start);
+    }
+  }
+
+  const ranges: FocusTargetRange[] = [];
+  for (let i = 0; i < boundaries.length; i++) {
+    const startChar = boundaries[i];
+    const endChar = i < boundaries.length - 1 ? boundaries[i + 1] : lineText.length;
+    if (endChar > startChar) {
+      ranges.push({ startChar, endChar });
+    }
+  }
+
+  return ranges;
+}
+
+/**
+ * Return one focus target per visible token (word-like sequence).
+ */
+export function computeWordTargets(lineText: string): FocusTargetRange[] {
+  if (!lineText) return [];
+  const targets: FocusTargetRange[] = [];
+  const regex = /\S+/g;
+  let m;
+  while ((m = regex.exec(lineText)) !== null) {
+    targets.push({ startChar: m.index, endChar: m.index + m[0].length });
+  }
+  return targets;
+}
+
+/**
+ * Return one ORP fixation per visible token.
+ */
+export function computeWordFixations(lineText: string): number[] {
+  if (!lineText) return [];
+  const fixations: number[] = [];
+  const regex = /\S+/g;
+  let m;
+  while ((m = regex.exec(lineText)) !== null) {
+    fixations.push(m.index + calculateORP(m[0]));
+  }
+  return fixations;
+}
+
+function punctuationPauseUnits(token: string): number {
+  const trimmed = token.trim();
+  if (!trimmed) return 0;
+
+  // Add a small dwell bonus at phrase and sentence boundaries.
+  if (/[.!?]["')\]]*$/.test(trimmed)) return 0.65;
+  if (/[,;:]["')\]]*$/.test(trimmed)) return 0.35;
+  return 0;
+}
+
+/**
+ * Build normalized timing windows for focus targets.
+ * - `char`: durations scale with character span.
+ * - `word`: equal base dwell per word + punctuation pause bonus.
+ */
+export function computeFocusTargetTimings(
+  lineText: string,
+  targets: FocusTargetRange[],
+  mode: 'char' | 'word'
+): FocusTargetTiming[] {
+  if (!lineText || targets.length === 0) return [];
+
+  if (mode === 'char') {
+    const len = Math.max(1, lineText.length);
+    return targets.map(target => ({
+      startPct: (target.startChar / len) * 100,
+      endPct: (target.endChar / len) * 100,
+    }));
+  }
+
+  const units = targets.map(target => {
+    const token = lineText.slice(target.startChar, target.endChar);
+    return 1 + punctuationPauseUnits(token);
+  });
+  const totalUnits = Math.max(0.0001, units.reduce((sum, u) => sum + u, 0));
+
+  let acc = 0;
+  return units.map((u, i) => {
+    const startPct = (acc / totalUnits) * 100;
+    acc += u;
+    const endPct = i === units.length - 1 ? 100 : (acc / totalUnits) * 100;
+    return { startPct, endPct };
+  });
+}
+
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
 

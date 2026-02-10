@@ -19,7 +19,7 @@ import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSetti
 import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
 import { fetchDailyArticle, fetchRandomFeaturedArticle, getTodayUTC } from '../lib/wikipedia';
-import type { Article, Feed, TokenMode, Activity, DisplayMode } from '../types';
+import type { Article, Feed, TokenMode, Activity, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 import { formatBookName } from './Library';
@@ -271,9 +271,17 @@ export function App() {
     });
   }, []);
 
-  const handleSaccadeShowSweepChange = useCallback((enabled: boolean) => {
+  const handleSaccadePacerStyleChange = useCallback((style: SaccadePacerStyle) => {
     setDisplaySettings(prev => {
-      const next = { ...prev, saccadeShowSweep: enabled };
+      const next = { ...prev, saccadePacerStyle: style, saccadeShowSweep: style === 'sweep' };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
+  const handleSaccadeFocusTargetChange = useCallback((target: SaccadeFocusTarget) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, saccadeFocusTarget: target };
       saveSettings(next);
       return next;
     });
@@ -530,8 +538,10 @@ export function App() {
       onShowORPChange={handleShowORPChange}
       saccadeShowOVP={displaySettings.saccadeShowOVP}
       onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
-      saccadeShowSweep={displaySettings.saccadeShowSweep}
-      onSaccadeShowSweepChange={handleSaccadeShowSweepChange}
+      saccadePacerStyle={displaySettings.saccadePacerStyle}
+      onSaccadePacerStyleChange={handleSaccadePacerStyleChange}
+      saccadeFocusTarget={displaySettings.saccadeFocusTarget}
+      onSaccadeFocusTargetChange={handleSaccadeFocusTargetChange}
       saccadeLength={displaySettings.saccadeLength}
       onSaccadeLengthChange={handleSaccadeLengthChange}
     />
@@ -634,6 +644,8 @@ export function App() {
               showORP={displaySettings.rsvpShowORP}
               saccadeShowOVP={displaySettings.saccadeShowOVP}
               saccadeShowSweep={displaySettings.saccadeShowSweep}
+              saccadePacerStyle={displaySettings.saccadePacerStyle}
+              saccadeFocusTarget={displaySettings.saccadeFocusTarget}
               saccadeLength={displaySettings.saccadeLength}
             />
             <ProgressBar progress={progress} onChange={handleProgressChange} />
@@ -689,6 +701,8 @@ export function App() {
               initialWpm={rsvp.wpm}
               saccadeShowOVP={displaySettings.saccadeShowOVP}
               saccadeShowSweep={displaySettings.saccadeShowSweep}
+              saccadePacerStyle={displaySettings.saccadePacerStyle}
+              saccadeFocusTarget={displaySettings.saccadeFocusTarget}
               saccadeLength={displaySettings.saccadeLength}
               onClose={goHome}
               onWpmChange={rsvp.setWpm}
