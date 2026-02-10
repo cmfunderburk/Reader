@@ -16,13 +16,14 @@ interface ReaderProps {
   saccadeShowSweep?: boolean;
   saccadePacerStyle?: SaccadePacerStyle;
   saccadeFocusTarget?: SaccadeFocusTarget;
+  saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
 }
 
-export function Reader({ chunk, isPlaying, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeLength }: ReaderProps) {
+export function Reader({ chunk, isPlaying, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength }: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
-    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadePacerStyle={saccadePacerStyle} saccadeFocusTarget={saccadeFocusTarget} saccadeLength={saccadeLength} />;
+    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadePacerStyle={saccadePacerStyle} saccadeFocusTarget={saccadeFocusTarget} saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords} saccadeLength={saccadeLength} />;
   }
   // No article loaded
   if (!chunk) {

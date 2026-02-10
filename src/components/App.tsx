@@ -287,6 +287,14 @@ export function App() {
     });
   }, []);
 
+  const handleSaccadeMergeShortFunctionWordsChange = useCallback((enabled: boolean) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, saccadeMergeShortFunctionWords: enabled };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleSaccadeLengthChange = useCallback((length: number) => {
     setDisplaySettings(prev => {
       const next = { ...prev, saccadeLength: length };
@@ -437,8 +445,8 @@ export function App() {
     rsvp.setWpm(wpm);
 
     if (activity === 'paced-reading') {
-      rsvp.loadArticle(article, { mode, displayMode: 'rsvp' });
-      saveLastSession(article.id, 'paced-reading', 'rsvp');
+      rsvp.loadArticle(article, { mode, displayMode: 'saccade' });
+      saveLastSession(article.id, 'paced-reading', 'saccade');
       setViewState({ screen: 'active-reader' });
       setTimeout(() => rsvp.play(), 100);
     } else if (activity === 'active-recall') {
@@ -542,6 +550,8 @@ export function App() {
       onSaccadePacerStyleChange={handleSaccadePacerStyleChange}
       saccadeFocusTarget={displaySettings.saccadeFocusTarget}
       onSaccadeFocusTargetChange={handleSaccadeFocusTargetChange}
+      saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
+      onSaccadeMergeShortFunctionWordsChange={handleSaccadeMergeShortFunctionWordsChange}
       saccadeLength={displaySettings.saccadeLength}
       onSaccadeLengthChange={handleSaccadeLengthChange}
     />
@@ -646,6 +656,7 @@ export function App() {
               saccadeShowSweep={displaySettings.saccadeShowSweep}
               saccadePacerStyle={displaySettings.saccadePacerStyle}
               saccadeFocusTarget={displaySettings.saccadeFocusTarget}
+              saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
               saccadeLength={displaySettings.saccadeLength}
             />
             <ProgressBar progress={progress} onChange={handleProgressChange} />
@@ -703,6 +714,7 @@ export function App() {
               saccadeShowSweep={displaySettings.saccadeShowSweep}
               saccadePacerStyle={displaySettings.saccadePacerStyle}
               saccadeFocusTarget={displaySettings.saccadeFocusTarget}
+              saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
               saccadeLength={displaySettings.saccadeLength}
               onClose={goHome}
               onWpmChange={rsvp.setWpm}

@@ -84,6 +84,8 @@ export function Library({ onAdd, onOpenSettings }: LibraryProps) {
           title: content.title,
           content: content.content,
           source: 'Library',
+          sourcePath: content.sourcePath,
+          assetBaseUrl: content.assetBaseUrl,
           group: item.parentDir ? formatBookName(item.parentDir) : undefined,
         });
       } catch (err) {

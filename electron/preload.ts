@@ -16,6 +16,8 @@ export interface LibraryItem {
 export interface ExtractedContent {
   title: string
   content: string
+  sourcePath?: string
+  assetBaseUrl?: string
   pageCount?: number
   chapters?: Array<{ title: string; content: string }>
 }

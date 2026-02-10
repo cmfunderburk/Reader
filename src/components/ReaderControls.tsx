@@ -36,6 +36,8 @@ interface ReaderControlsProps {
   onSaccadePacerStyleChange: (style: SaccadePacerStyle) => void;
   saccadeFocusTarget: SaccadeFocusTarget;
   onSaccadeFocusTargetChange: (target: SaccadeFocusTarget) => void;
+  saccadeMergeShortFunctionWords: boolean;
+  onSaccadeMergeShortFunctionWordsChange: (enabled: boolean) => void;
   saccadeLength: number;
   onSaccadeLengthChange: (length: number) => void;
 }
@@ -76,6 +78,8 @@ export function ReaderControls({
   onSaccadePacerStyleChange,
   saccadeFocusTarget,
   onSaccadeFocusTargetChange,
+  saccadeMergeShortFunctionWords,
+  onSaccadeMergeShortFunctionWordsChange,
   saccadeLength,
   onSaccadeLengthChange,
 }: ReaderControlsProps) {
@@ -261,6 +265,16 @@ export function ReaderControls({
                   <option value="fixation">Fixation</option>
                   <option value="word">Word</option>
                 </select>
+              </label>
+            )}
+            {showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'word' && (
+              <label className="control-group control-checkbox">
+                <input
+                  type="checkbox"
+                  checked={saccadeMergeShortFunctionWords}
+                  onChange={e => onSaccadeMergeShortFunctionWordsChange(e.target.checked)}
+                />
+                <span className="control-label">Merge short function words</span>
               </label>
             )}
             {(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'fixation')

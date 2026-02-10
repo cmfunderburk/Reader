@@ -27,6 +27,7 @@ export interface Settings {
   saccadeShowSweep: boolean;
   saccadePacerStyle: SaccadePacerStyle;
   saccadeFocusTarget: SaccadeFocusTarget;
+  saccadeMergeShortFunctionWords: boolean;
   saccadeLength: number;
   lastSession?: { articleId: string; activity: Activity; displayMode: DisplayMode };
 }
@@ -50,6 +51,7 @@ const DEFAULT_SETTINGS: Settings = {
   saccadeShowSweep: true,
   saccadePacerStyle: 'sweep',
   saccadeFocusTarget: 'fixation',
+  saccadeMergeShortFunctionWords: false,
   saccadeLength: 10,
 };
 

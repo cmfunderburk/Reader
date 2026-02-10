@@ -66,6 +66,7 @@ interface TrainingReaderProps {
   saccadeShowSweep?: boolean;
   saccadePacerStyle?: SaccadePacerStyle;
   saccadeFocusTarget?: SaccadeFocusTarget;
+  saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
   onClose: () => void;
   onWpmChange: (wpm: number) => void;
@@ -97,6 +98,7 @@ export function TrainingReader({
   saccadeShowSweep,
   saccadePacerStyle,
   saccadeFocusTarget,
+  saccadeMergeShortFunctionWords,
   saccadeLength,
   onClose,
   onWpmChange,
@@ -1023,6 +1025,7 @@ export function TrainingReader({
               saccadeShowSweep={saccadeShowSweep}
               saccadePacerStyle={saccadePacerStyle}
               saccadeFocusTarget={saccadeFocusTarget}
+              saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords}
               saccadeLength={saccadeLength}
             />
           ))}

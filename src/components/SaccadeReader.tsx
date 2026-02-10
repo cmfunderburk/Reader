@@ -1,5 +1,7 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import type { Chunk, SaccadePage, SaccadeLine, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
-import { computeLineFixations, calculateSaccadeLineDuration, computeFocusTargets, computeFocusTargetTimings, computeWordFixations, computeWordTargets } from '../lib/saccade';
+import { computeLineFixations, calculateSaccadeLineDuration, computeFocusTargets, computeFocusTargetTimings, computeWordFocusTargetsAndFixations } from '../lib/saccade';
 
 interface SaccadeReaderProps {
   page: SaccadePage | null;
@@ -11,10 +13,103 @@ interface SaccadeReaderProps {
   saccadeShowSweep?: boolean;
   saccadePacerStyle?: SaccadePacerStyle;
   saccadeFocusTarget?: SaccadeFocusTarget;
+  saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
 }
 
-export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeLength }: SaccadeReaderProps) {
+export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength }: SaccadeReaderProps) {
+  const readerRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [figureMaxHeightPx, setFigureMaxHeightPx] = useState<number | null>(null);
+  const [magnifiedFigure, setMagnifiedFigure] = useState<{
+    src: string;
+    alt: string;
+    caption?: string;
+  } | null>(null);
+
+  const recalculateFigureHeight = useCallback(() => {
+    const readerEl = readerRef.current;
+    const pageEl = pageRef.current;
+    if (!readerEl || !pageEl) return;
+
+    const lineElements = Array.from(pageEl.querySelectorAll<HTMLElement>(':scope > .saccade-line'));
+    const figureElements = lineElements.filter((lineEl) => lineEl.classList.contains('saccade-line-figure'));
+
+    if (figureElements.length === 0) {
+      setFigureMaxHeightPx((prev) => (prev === null ? prev : null));
+      return;
+    }
+
+    const availableHeight = readerEl.clientHeight;
+    if (availableHeight <= 0) return;
+
+    let nonFigureHeight = 0;
+    let figureChromeHeight = 0;
+
+    for (const lineEl of lineElements) {
+      const lineHeight = lineEl.getBoundingClientRect().height;
+      if (!lineEl.classList.contains('saccade-line-figure')) {
+        nonFigureHeight += lineHeight;
+        continue;
+      }
+
+      const imageEl = lineEl.querySelector<HTMLElement>('.saccade-figure-image');
+      const imageHeight = imageEl ? imageEl.getBoundingClientRect().height : 0;
+      figureChromeHeight += Math.max(0, lineHeight - imageHeight);
+    }
+
+    const remainingHeight = availableHeight - nonFigureHeight - figureChromeHeight - 8;
+    const perFigureBudget = Math.floor(remainingHeight / figureElements.length);
+    const nextMaxHeight = Math.max(72, Math.min(520, perFigureBudget));
+
+    setFigureMaxHeightPx((prev) => (prev === nextMaxHeight ? prev : nextMaxHeight));
+  }, []);
+
+  useEffect(() => {
+    recalculateFigureHeight();
+
+    const readerEl = readerRef.current;
+    if (!readerEl) return;
+
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(() => {
+        recalculateFigureHeight();
+      })
+      : null;
+    resizeObserver?.observe(readerEl);
+
+    const imageElements = Array.from(readerEl.querySelectorAll<HTMLImageElement>('.saccade-figure-image'));
+    imageElements.forEach((img) => img.addEventListener('load', recalculateFigureHeight));
+
+    const rafId = requestAnimationFrame(() => {
+      recalculateFigureHeight();
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      resizeObserver?.disconnect();
+      imageElements.forEach((img) => img.removeEventListener('load', recalculateFigureHeight));
+    };
+  }, [page, recalculateFigureHeight]);
+
+  useEffect(() => {
+    if (isPlaying && magnifiedFigure) {
+      setMagnifiedFigure(null);
+    }
+  }, [isPlaying, magnifiedFigure]);
+
+  useEffect(() => {
+    if (!magnifiedFigure) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMagnifiedFigure(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [magnifiedFigure]);
+
   if (!page) {
     return (
       <div className="reader saccade-reader">
@@ -26,10 +121,13 @@ export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeS
   }
 
   const currentLineIndex = chunk?.saccade?.lineIndex ?? -1;
+  const pageStyle = figureMaxHeightPx !== null
+    ? ({ '--saccade-figure-max-height': `${figureMaxHeightPx}px` } as CSSProperties)
+    : undefined;
 
   return (
-    <div className="reader saccade-reader">
-      <div className="saccade-page">
+    <div className="reader saccade-reader" ref={readerRef}>
+      <div className="saccade-page" ref={pageRef} style={pageStyle}>
         {page.lines.map((line, lineIndex) => (
           <SaccadeLineComponent
             key={lineIndex}
@@ -44,10 +142,34 @@ export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeS
             saccadeShowSweep={saccadeShowSweep}
             saccadePacerStyle={saccadePacerStyle}
             saccadeFocusTarget={saccadeFocusTarget}
+            saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords}
             saccadeLength={saccadeLength}
+            onOpenFigure={(figure) => setMagnifiedFigure(figure)}
           />
         ))}
       </div>
+      {magnifiedFigure && (
+        <div className="saccade-figure-lightbox" onClick={() => setMagnifiedFigure(null)}>
+          <div className="saccade-figure-lightbox-dialog" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="saccade-figure-lightbox-close"
+              onClick={() => setMagnifiedFigure(null)}
+              aria-label="Close figure"
+            >
+              ×
+            </button>
+            <img
+              src={magnifiedFigure.src}
+              alt={magnifiedFigure.alt}
+              className="saccade-figure-lightbox-image"
+            />
+            {magnifiedFigure.caption && (
+              <div className="saccade-figure-lightbox-caption">{magnifiedFigure.caption}</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -64,14 +186,60 @@ export interface SaccadeLineProps {
   saccadeShowSweep?: boolean;
   saccadePacerStyle?: SaccadePacerStyle;
   saccadeFocusTarget?: SaccadeFocusTarget;
+  saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
+  onOpenFigure?: (figure: { src: string; alt: string; caption?: string }) => void;
 }
 
-export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeLength }: SaccadeLineProps) {
+export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength, onOpenFigure }: SaccadeLineProps) {
   if (line.type === 'blank') {
     return (
       <div className="saccade-line">
         <span>{'\u00A0'}</span>
+      </div>
+    );
+  }
+
+  if (line.type === 'figure') {
+    const figureClassName = [
+      'saccade-line',
+      'saccade-line-figure',
+      isActiveLine && 'saccade-line-figure-active',
+    ].filter(Boolean).join(' ');
+
+    return (
+      <div className={figureClassName}>
+        {line.figureSrc ? (
+          <button
+            type="button"
+            className="saccade-figure-button"
+            onClick={() => {
+              if (isPlaying) return;
+              if (!line.figureSrc) return;
+              onOpenFigure?.({
+                src: line.figureSrc,
+                alt: line.figureCaption || `Figure ${line.figureId || ''}`,
+                caption: line.figureCaption,
+              });
+            }}
+            disabled={isPlaying}
+            title={isPlaying ? undefined : 'Click to enlarge'}
+          >
+            <img
+              src={line.figureSrc}
+              alt={line.figureCaption || `Figure ${line.figureId || ''}`}
+              className="saccade-figure-image"
+              loading="lazy"
+            />
+          </button>
+        ) : (
+          <div className="saccade-figure-missing">
+            [Missing figure {line.figureId ? `: ${line.figureId}` : ''}]
+          </div>
+        )}
+        {line.figureCaption && (
+          <div className="saccade-figure-caption">{line.figureCaption}</div>
+        )}
       </div>
     );
   }
@@ -83,24 +251,33 @@ export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying,
   const lineDuration = calculateSaccadeLineDuration(textLength, wpm);
   const pacerStyle = saccadePacerStyle ?? (saccadeShowSweep === false ? 'focus' : 'sweep');
   const focusTarget = saccadeFocusTarget ?? 'fixation';
+  const useWordFocus = pacerStyle === 'focus' && focusTarget === 'word';
 
   const fixationBasedFixations = (saccadeLength && line.text)
     ? computeLineFixations(line.text, saccadeLength)
     : [];
-  const wordBasedFixations = computeWordFixations(line.text);
-  const fixations = pacerStyle === 'focus' && focusTarget === 'word'
-    ? wordBasedFixations
+  const wordFocusData = useWordFocus
+    ? computeWordFocusTargetsAndFixations(line.text, saccadeMergeShortFunctionWords ?? false)
+    : { targets: [], fixations: [] };
+  const fixations = useWordFocus
+    ? wordFocusData.fixations
     : fixationBasedFixations;
 
   const focusTargets = pacerStyle !== 'focus'
     ? []
-    : focusTarget === 'word'
-      ? computeWordTargets(line.text)
+    : useWordFocus
+      ? wordFocusData.targets
       : computeFocusTargets(line.text, fixations);
   const useSweepBar = showPacer && pacerStyle === 'sweep' && isActiveLine && lineDuration > 0;
   const useFocusTargets = showPacer && pacerStyle === 'focus' && isActiveLine && lineDuration > 0 && focusTargets.length > 0;
+  const focusTimingTargets = useFocusTargets && focusTarget !== 'word'
+    ? computeFixationTimingTargets(line.text, focusTargets)
+    : focusTargets;
   const focusTimings = useFocusTargets
-    ? computeFocusTargetTimings(line.text, focusTargets, focusTarget === 'word' ? 'word' : 'char')
+    ? computeFocusTargetTimings(line.text, focusTimingTargets, focusTarget === 'word' ? 'word' : 'char')
+    : [];
+  const focusSegments = useFocusTargets
+    ? computeFocusRenderSegments(line.text, focusTargets, focusTimings)
     : [];
 
   // Sweep-synced ORP decoloring: ORPs start amber, turn plain as sweep passes
@@ -127,12 +304,14 @@ export function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying,
   if (focusDecolors) {
     keyframeBlocks.push(generateFocusDecolorKeyframes(lineIndex, fixations, focusTargets, focusTimings));
   }
-  if (useFocusTargets) {
-    keyframeBlocks.push(generateFocusKeyframes(lineIndex, focusTimings));
+  if (useFocusTargets && focusSegments.length > 0) {
+    keyframeBlocks.push(generateFocusKeyframes(lineIndex, focusSegments.map(({ startPct, endPct }) => ({ startPct, endPct }))));
   }
 
   const decolorConfig = (sweepDecolors || focusDecolors) ? { lineIndex, lineDuration, isPlaying } : undefined;
-  const focusConfig = useFocusTargets ? { lineIndex, lineDuration, isPlaying, focusTargets } : undefined;
+  const focusConfig = useFocusTargets && focusSegments.length > 0
+    ? { lineIndex, lineDuration, isPlaying, focusSegments }
+    : undefined;
 
   const lineClasses = [
     'saccade-line',
@@ -190,7 +369,14 @@ function generateFocusDecolorKeyframes(
   const fmt = (v: number) => v.toFixed(2);
 
   return fixations.map((charIdx, i) => {
-    let targetIndex = focusTargets.findIndex(t => charIdx >= t.startChar && charIdx < t.endChar);
+    let targetIndex = -1;
+    for (let j = focusTargets.length - 1; j >= 0; j--) {
+      const target = focusTargets[j];
+      if (charIdx >= target.startChar && charIdx < target.endChar) {
+        targetIndex = j;
+        break;
+      }
+    }
     if (targetIndex === -1 && focusTargets.length > 0) {
       targetIndex = focusTargets.findIndex(t => charIdx < t.endChar);
       if (targetIndex === -1) targetIndex = focusTargets.length - 1;
@@ -226,6 +412,73 @@ function generateFocusKeyframes(
   }).join(' ');
 }
 
+interface FocusRenderSegment {
+  startChar: number;
+  endChar: number;
+  startPct: number;
+  endPct: number;
+}
+
+function computeFixationTimingTargets(
+  text: string,
+  overlapTargets: Array<{ startChar: number; endChar: number }>
+): Array<{ startChar: number; endChar: number }> {
+  if (!text || overlapTargets.length === 0) return [];
+
+  return overlapTargets.map((target, i) => ({
+    startChar: target.startChar,
+    endChar: i < overlapTargets.length - 1 ? overlapTargets[i + 1].startChar : text.length,
+  }));
+}
+
+function computeFocusRenderSegments(
+  text: string,
+  focusTargets: Array<{ startChar: number; endChar: number }>,
+  focusTimings: Array<{ startPct: number; endPct: number }>
+): FocusRenderSegment[] {
+  if (!text || focusTargets.length === 0 || focusTimings.length === 0) return [];
+
+  const targetCount = Math.min(focusTargets.length, focusTimings.length);
+  const normalizedTargets = focusTargets
+    .slice(0, targetCount)
+    .map((target, i) => ({
+      startChar: Math.max(0, Math.min(text.length, target.startChar)),
+      endChar: Math.max(0, Math.min(text.length, target.endChar)),
+      timing: focusTimings[i],
+    }))
+    .filter(target => target.endChar > target.startChar);
+  if (normalizedTargets.length === 0) return [];
+
+  const boundaries = Array.from(
+    new Set(normalizedTargets.flatMap(target => [target.startChar, target.endChar]))
+  ).sort((a, b) => a - b);
+  if (boundaries.length < 2) return [];
+
+  const segments: FocusRenderSegment[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const startChar = boundaries[i];
+    const endChar = boundaries[i + 1];
+    if (endChar <= startChar) continue;
+
+    const coveredTargets: Array<{ timing: { startPct: number; endPct: number } }> = [];
+    for (let targetIndex = 0; targetIndex < normalizedTargets.length; targetIndex++) {
+      const target = normalizedTargets[targetIndex];
+      if (startChar < target.endChar && endChar > target.startChar) {
+        coveredTargets.push({ timing: target.timing });
+      }
+    }
+    if (coveredTargets.length === 0) continue;
+
+    const startPct = coveredTargets[0].timing.startPct;
+    const endPct = coveredTargets[coveredTargets.length - 1].timing.endPct;
+    if (endPct <= startPct) continue;
+
+    segments.push({ startChar, endChar, startPct, endPct });
+  }
+
+  return segments;
+}
+
 function renderLineTextWithFocus(
   text: string,
   isHeading: boolean,
@@ -235,22 +488,22 @@ function renderLineTextWithFocus(
     lineIndex: number;
     lineDuration: number;
     isPlaying: boolean;
-    focusTargets: Array<{ startChar: number; endChar: number }>;
+    focusSegments: FocusRenderSegment[];
   },
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
 ): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
 
-  if (!text || focusConfig.focusTargets.length === 0) {
+  if (!text || focusConfig.focusSegments.length === 0) {
     return renderLineText(text, isHeading, showOVP, fixations, decolorConfig);
   }
 
   const segments: JSX.Element[] = [];
   let cursor = 0;
 
-  for (let i = 0; i < focusConfig.focusTargets.length; i++) {
-    const target = focusConfig.focusTargets[i];
-    const start = Math.max(0, Math.min(text.length, target.startChar));
+  for (let i = 0; i < focusConfig.focusSegments.length; i++) {
+    const target = focusConfig.focusSegments[i];
+    const start = Math.max(cursor, Math.min(text.length, target.startChar));
     const end = Math.max(start, Math.min(text.length, target.endChar));
 
     if (start > cursor) {
@@ -289,7 +542,7 @@ function renderLineTextWithFocus(
       );
     }
 
-    cursor = Math.max(cursor, end);
+    cursor = end;
   }
 
   if (cursor < text.length) {

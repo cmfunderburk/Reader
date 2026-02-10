@@ -19,12 +19,15 @@ export const PREDICTION_LINE_WIDTHS: Record<PredictionLineWidth, number> = {
   wide: 85,
 };
 
-export type SaccadeLineType = 'body' | 'heading' | 'blank';
+export type SaccadeLineType = 'body' | 'heading' | 'blank' | 'figure';
 
 export interface SaccadeLine {
   text: string;
   type: SaccadeLineType;
   level?: number;  // 1-6 for headings
+  figureId?: string;
+  figureSrc?: string;
+  figureCaption?: string;
 }
 
 export interface SaccadePage {
@@ -51,6 +54,8 @@ export interface Article {
   title: string;
   content: string;
   source: string;
+  sourcePath?: string;
+  assetBaseUrl?: string;
   url?: string;
   addedAt: number;
   readPosition: number; // chunk index for RSVP/saccade

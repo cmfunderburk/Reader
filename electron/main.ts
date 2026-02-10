@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
+import { fileURLToPath, pathToFileURL } from 'url'
 import { getConfiguredSources, scanDirectory, addSource, removeSource, loadSources, saveSources, LibrarySource } from './lib/library'
 import { extractPdfText } from './lib/pdf'
 import { extractEpubText } from './lib/epub'
@@ -10,6 +10,18 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 let mainWindow: BrowserWindow | null = null
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'reader-asset',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+    },
+  },
+])
 
 // ---------------------------------------------------------------------------
 // Corpus cache — loaded lazily per tier, held in memory for sampling
@@ -149,6 +161,28 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  protocol.handle('reader-asset', (request) => {
+    try {
+      const requestUrl = new URL(request.url)
+      const fileUrl = requestUrl.searchParams.get('fileUrl')
+      if (!fileUrl) {
+        return new Response('Missing fileUrl query parameter', { status: 400 })
+      }
+
+      const parsedFileUrl = new URL(fileUrl)
+      if (parsedFileUrl.protocol !== 'file:') {
+        return new Response('Unsupported asset protocol', { status: 400 })
+      }
+
+      const requestedPath = fileURLToPath(parsedFileUrl)
+      const allowedPath = resolveAllowedLibraryPath(requestedPath)
+      return net.fetch(pathToFileURL(allowedPath).toString())
+    } catch (err) {
+      console.error('Failed to serve reader asset:', err)
+      return new Response('Asset not found', { status: 404 })
+    }
+  })
+
   // Initialize default library sources on first run, or reset if all paths are stale
   const sources = loadSources()
   const libraryRoot = getResourcePath('library')
@@ -197,17 +231,19 @@ ipcMain.handle('library:openBook', async (_, filePath: string) => {
     if (ext === '.pdf') {
       const result = await extractPdfText(allowedPath)
       console.log(`PDF extracted: ${result.title}, ${result.content.length} chars`)
-      return result
+      return { ...result, sourcePath: allowedPath }
     } else if (ext === '.epub') {
       const result = await extractEpubText(allowedPath)
       console.log(`EPUB extracted: ${result.title}, ${result.content.length} chars`)
-      return result
+      return { ...result, sourcePath: allowedPath }
     } else if (ext === '.txt') {
       // Pre-processed text files - read directly
       const content = fs.readFileSync(allowedPath, 'utf-8')
       const title = path.basename(allowedPath, '.txt').replace(/-/g, ' ')
+      const dirPath = path.dirname(allowedPath)
+      const assetBaseUrl = pathToFileURL(`${dirPath}${path.sep}`).toString()
       console.log(`TXT loaded: ${title}, ${content.length} chars`)
-      return { title, content }
+      return { title, content, sourcePath: allowedPath, assetBaseUrl }
     }
     throw new Error(`Unsupported file type: ${ext}`)
   } catch (err) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSaccadeLineDuration, computeFocusTargetTimings, computeFocusTargets, computeLineFixations, computeWordFixations, computeWordTargets, segmentIntoParagraphs, tokenizeParagraphSaccade, tokenizeParagraphRecall } from './saccade';
+import { calculateSaccadeLineDuration, computeFocusTargetTimings, computeFocusTargets, computeLineFixations, computeWordFixations, computeWordFocusTargetsAndFixations, computeWordTargets, flowTextIntoLines, segmentIntoParagraphs, tokenizeParagraphSaccade, tokenizeParagraphRecall, tokenizeRecall, tokenizeSaccade } from './saccade';
 
 describe('calculateSaccadeLineDuration', () => {
   it('returns 0 for empty text or zero WPM', () => {
@@ -101,21 +101,23 @@ describe('computeFocusTargets', () => {
     expect(computeFocusTargets('hello world', [])).toEqual([]);
   });
 
-  it('builds ranges from the start of each fixation word', () => {
+  it('builds one-word-overlap ranges using the next fixation word end', () => {
     const text = 'Alpha beta gamma delta';
-    const fixations = computeLineFixations(text, 8);
-    const ranges = computeFocusTargets(text, fixations);
+    const ranges = computeFocusTargets(text, [1, 7, 12, 18]);
 
-    expect(ranges.length).toBeGreaterThan(0);
-    expect(ranges[0].startChar).toBe(0);
-    expect(ranges[ranges.length - 1].endChar).toBe(text.length);
+    expect(ranges).toEqual([
+      { startChar: 0, endChar: 10 },
+      { startChar: 6, endChar: 16 },
+      { startChar: 11, endChar: 22 },
+      { startChar: 17, endChar: text.length },
+    ]);
   });
 
   it('deduplicates repeated fixation words', () => {
     const text = 'alpha beta';
     const ranges = computeFocusTargets(text, [1, 2, 7]);
     expect(ranges).toEqual([
-      { startChar: 0, endChar: 6 },
+      { startChar: 0, endChar: 10 },
       { startChar: 6, endChar: text.length },
     ]);
   });
@@ -147,6 +149,45 @@ describe('computeWordFixations', () => {
 
   it('returns empty for empty text', () => {
     expect(computeWordFixations('')).toEqual([]);
+  });
+});
+
+describe('computeWordFocusTargetsAndFixations', () => {
+  it('matches plain word targets when merge is disabled', () => {
+    const text = 'to the river bank';
+    const grouped = computeWordFocusTargetsAndFixations(text, false);
+    expect(grouped.targets).toEqual(computeWordTargets(text));
+    expect(grouped.fixations).toEqual(computeWordFixations(text));
+  });
+
+  it('merges short function-word prefixes into the next anchor token', () => {
+    const text = 'to the river bank';
+    const grouped = computeWordFocusTargetsAndFixations(text, true);
+    expect(grouped.targets).toEqual([
+      { startChar: 0, endChar: 12 },   // "to the river"
+      { startChar: 13, endChar: 17 },  // "bank"
+    ]);
+    expect(grouped.fixations.length).toBe(2);
+    expect(grouped.fixations[0]).toBe(8);  // ORP on "river"
+  });
+
+  it('does not merge across punctuation boundaries', () => {
+    const text = 'and, then move';
+    const grouped = computeWordFocusTargetsAndFixations(text, true);
+    expect(grouped.targets).toEqual([
+      { startChar: 0, endChar: 4 },   // "and,"
+      { startChar: 5, endChar: 9 },   // "then"
+      { startChar: 10, endChar: 14 }, // "move"
+    ]);
+  });
+
+  it('keeps trailing function words as standalone targets', () => {
+    const text = 'we go to';
+    const grouped = computeWordFocusTargetsAndFixations(text, true);
+    expect(grouped.targets).toEqual([
+      { startChar: 0, endChar: 5 }, // "we go"
+      { startChar: 6, endChar: 8 }, // "to"
+    ]);
   });
 });
 
@@ -185,6 +226,63 @@ describe('computeFocusTargetTimings', () => {
     expect(timings[0].endPct).toBe(50);
     expect(timings[1].startPct).toBe(60);
     expect(timings[1].endPct).toBe(100);
+  });
+});
+
+describe('figure handling', () => {
+  it('parses figure blocks with captions and asset URLs', () => {
+    const text = '[FIGURE:fig1_1]\n\n[FIGURE 1.1. Example figure caption.]';
+    const lines = flowTextIntoLines(text, 80, 'file:///tmp/statistical/');
+
+    expect(lines.length).toBe(1);
+    expect(lines[0]).toMatchObject({
+      type: 'figure',
+      figureId: 'fig1_1',
+      figureCaption: '1.1. Example figure caption.',
+      figureSrc: 'reader-asset://local?fileUrl=file%3A%2F%2F%2Ftmp%2Fstatistical%2Fimages%2Ffig1_1.jpg',
+    });
+  });
+
+  it('uses figure caption text for saccade chunks', () => {
+    const text = '[FIGURE:fig2_3]\n\n[FIGURE 2.3. Posterior predictive check.]';
+    const { pages, chunks } = tokenizeSaccade(text, 15, 'file:///tmp/statistical/');
+
+    expect(pages.length).toBe(1);
+    expect(pages[0].lines[0].type).toBe('figure');
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].text).toBe('2.3. Posterior predictive check.');
+    expect(chunks[0].wordCount).toBeGreaterThan(0);
+  });
+
+  it('converts figure lines to blanks in recall mode', () => {
+    const text = '[FIGURE:fig3_1]\n\n[FIGURE 3.1. Prior and posterior.]';
+    const { pages, chunks } = tokenizeRecall(text, 15);
+
+    expect(pages.length).toBe(1);
+    expect(pages[0].lines[0].type).toBe('blank');
+    expect(chunks).toHaveLength(0);
+  });
+
+  it('pushes following text to later pages when a figure appears near page end', () => {
+    const text = [
+      'Alpha line one.',
+      '',
+      'Beta line two.',
+      '',
+      '[FIGURE:fig4_1]',
+      '',
+      '[FIGURE 4.1. Caption]',
+      '',
+      'Gamma after figure.',
+      '',
+      'Delta after figure.',
+    ].join('\n');
+    const { pages } = tokenizeSaccade(text, 6, 'file:///tmp/statistical/');
+
+    expect(pages.length).toBeGreaterThanOrEqual(3);
+    expect(pages[0].lines.some((line) => line.type === 'figure')).toBe(false);
+    expect(pages[1].lines.some((line) => line.type === 'figure')).toBe(true);
+    expect(pages[1].lines.some((line) => line.text.includes('Gamma after figure.'))).toBe(false);
   });
 });
 

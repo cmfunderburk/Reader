@@ -1,8 +1,11 @@
 import type { Chunk, SaccadePage, SaccadeLine } from '../types';
-import { normalizeText, calculateORP, wordPenalty } from './tokenizer';
+import { normalizeText, calculateORP, wordPenalty, FUNCTION_WORDS } from './tokenizer';
 
 export const SACCADE_LINE_WIDTH = 80;
 export const SACCADE_LINES_PER_PAGE = 15;
+export const SACCADE_FIGURE_MIN_LINE_SPAN_RATIO = 0.28;
+export const SACCADE_FIGURE_MIN_LINE_SPAN_FLOOR = 5;
+export const SACCADE_FIGURE_CAPTION_EXTRA_SPAN_MAX = 3;
 
 /**
  * Calculate how long a saccade line should be displayed, in milliseconds.
@@ -101,8 +104,9 @@ export interface FocusTargetTiming {
 /**
  * Convert fixation ORP positions into progressive highlight ranges.
  *
- * Each range starts at the beginning of the fixation's word and ends at the
- * beginning of the next fixation's word (or line end for the final fixation).
+ * Each range starts at the beginning of the fixation's word and extends
+ * through the end of the next fixation word. This creates a one-word overlap
+ * between consecutive ranges. The final range extends to the end of the line.
  */
 export function computeFocusTargets(lineText: string, fixations: number[]): FocusTargetRange[] {
   if (!lineText || fixations.length === 0) return [];
@@ -115,25 +119,30 @@ export function computeFocusTargets(lineText: string, fixations: number[]): Focu
   }
   if (words.length === 0) return [];
 
-  const wordStartForChar = (idx: number): number => {
-    for (const word of words) {
-      if (idx >= word.start && idx < word.end) return word.start;
+  const wordIndexForChar = (idx: number): number => {
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      if (idx >= word.start && idx < word.end) return i;
+      if (idx < word.start) return Math.max(0, i - 1);
     }
-    return Math.max(0, Math.min(lineText.length - 1, idx));
+    return words.length - 1;
   };
 
-  const boundaries: number[] = [];
+  const fixationWordIndices: number[] = [];
   for (const fixation of fixations) {
-    const start = wordStartForChar(fixation);
-    if (boundaries.length === 0 || start > boundaries[boundaries.length - 1]) {
-      boundaries.push(start);
+    const wordIdx = wordIndexForChar(fixation);
+    if (fixationWordIndices.length === 0 || wordIdx > fixationWordIndices[fixationWordIndices.length - 1]) {
+      fixationWordIndices.push(wordIdx);
     }
   }
 
   const ranges: FocusTargetRange[] = [];
-  for (let i = 0; i < boundaries.length; i++) {
-    const startChar = boundaries[i];
-    const endChar = i < boundaries.length - 1 ? boundaries[i + 1] : lineText.length;
+  for (let i = 0; i < fixationWordIndices.length; i++) {
+    const startWordIdx = fixationWordIndices[i];
+    const startChar = words[startWordIdx].start;
+    const endChar = i < fixationWordIndices.length - 1
+      ? words[fixationWordIndices[i + 1]].end
+      : lineText.length;
     if (endChar > startChar) {
       ranges.push({ startChar, endChar });
     }
@@ -168,6 +177,90 @@ export function computeWordFixations(lineText: string): number[] {
     fixations.push(m.index + calculateORP(m[0]));
   }
   return fixations;
+}
+
+interface WordTargetToken {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function isMergeableFunctionWord(token: WordTargetToken): boolean {
+  const normalized = token.text.toLowerCase().replace(/[^a-z]/g, '');
+  if (normalized.length === 0 || normalized.length > 3) return false;
+  if (!FUNCTION_WORDS.has(normalized)) return false;
+  // Keep short function words with terminal punctuation as standalone targets.
+  return !/[.!?;:,]["')\]]*$/.test(token.text);
+}
+
+function tokenizeWordTargets(lineText: string): WordTargetToken[] {
+  if (!lineText) return [];
+  const tokens: WordTargetToken[] = [];
+  const regex = /\S+/g;
+  let m;
+  while ((m = regex.exec(lineText)) !== null) {
+    tokens.push({
+      text: m[0],
+      start: m.index,
+      end: m.index + m[0].length,
+    });
+  }
+  return tokens;
+}
+
+/**
+ * Compute word-based focus ranges and OVP positions.
+ *
+ * When `mergeShortFunctionWords` is enabled, up to two short function words
+ * (<=3 letters) are merged into the following anchor token, and the fixation
+ * remains on that anchor token's OVP.
+ */
+export function computeWordFocusTargetsAndFixations(
+  lineText: string,
+  mergeShortFunctionWords: boolean
+): { targets: FocusTargetRange[]; fixations: number[] } {
+  if (!lineText) return { targets: [], fixations: [] };
+  if (!mergeShortFunctionWords) {
+    return {
+      targets: computeWordTargets(lineText),
+      fixations: computeWordFixations(lineText),
+    };
+  }
+
+  const tokens = tokenizeWordTargets(lineText);
+  if (tokens.length === 0) return { targets: [], fixations: [] };
+
+  const targets: FocusTargetRange[] = [];
+  const fixations: number[] = [];
+  const pendingPrefix: WordTargetToken[] = [];
+  const maxPrefixMerge = 2;
+
+  const flushPrefixStandalone = (count: number): void => {
+    for (let i = 0; i < count && pendingPrefix.length > 0; i++) {
+      const token = pendingPrefix.shift()!;
+      targets.push({ startChar: token.start, endChar: token.end });
+      fixations.push(token.start + calculateORP(token.text));
+    }
+  };
+
+  for (const token of tokens) {
+    if (isMergeableFunctionWord(token)) {
+      if (pendingPrefix.length >= maxPrefixMerge) {
+        flushPrefixStandalone(1);
+      }
+      pendingPrefix.push(token);
+      continue;
+    }
+
+    const startChar = pendingPrefix.length > 0 ? pendingPrefix[0].start : token.start;
+    targets.push({ startChar, endChar: token.end });
+    fixations.push(token.start + calculateORP(token.text));
+    pendingPrefix.length = 0;
+  }
+
+  flushPrefixStandalone(pendingPrefix.length);
+
+  return { targets, fixations };
 }
 
 function punctuationPauseUnits(token: string): number {
@@ -217,6 +310,8 @@ export function computeFocusTargetTimings(
 
 // Markdown heading pattern: # Heading, ## Heading, etc.
 const HEADING_PATTERN = /^(#{1,6})\s+(.+)$/;
+const FIGURE_MARKER_PATTERN = /^\[FIGURE:([^\]]+)\]$/i;
+const FIGURE_CAPTION_PATTERN = /^\[FIGURE\s+(.+)\]$/i;
 
 /**
  * Detect if a line is a markdown heading.
@@ -267,7 +362,11 @@ function wrapParagraph(text: string, lineWidth: number): SaccadeLine[] {
  * Respects paragraph breaks (double newlines) and markdown headings.
  * Collapses single newlines into spaces to reflow ragged PDF extractions.
  */
-export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[] {
+export function flowTextIntoLines(
+  text: string,
+  lineWidth: number,
+  figureAssetBaseUrl?: string
+): SaccadeLine[] {
   const normalized = normalizeText(text);
 
   // Split into blocks (paragraphs/headings separated by blank lines)
@@ -280,6 +379,33 @@ export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
+    const figureMarker = block.match(FIGURE_MARKER_PATTERN);
+
+    if (figureMarker) {
+      const figureId = figureMarker[1].trim();
+      let figureCaption: string | undefined;
+
+      if (i + 1 < blocks.length && !FIGURE_MARKER_PATTERN.test(blocks[i + 1])) {
+        const captionMatch = blocks[i + 1].match(FIGURE_CAPTION_PATTERN);
+        if (captionMatch) {
+          figureCaption = captionMatch[1].trim();
+          i += 1;
+        }
+      }
+
+      lines.push({
+        text: figureCaption || `Figure ${figureId}`,
+        type: 'figure',
+        figureId,
+        figureSrc: buildFigureSrc(figureAssetBaseUrl, figureId),
+        figureCaption,
+      });
+
+      if (i < blocks.length - 1 && lines.length > 0 && lines[lines.length - 1].type !== 'blank') {
+        lines.push({ text: '', type: 'blank' });
+      }
+      continue;
+    }
 
     // Check if first line is a heading
     const firstLine = block.split('\n')[0].trim();
@@ -320,16 +446,70 @@ export function flowTextIntoLines(text: string, lineWidth: number): SaccadeLine[
   return lines;
 }
 
+function buildFigureSrc(assetBaseUrl: string | undefined, figureId: string): string | undefined {
+  if (!assetBaseUrl) return undefined;
+  const normalizedBase = assetBaseUrl.endsWith('/') ? assetBaseUrl : `${assetBaseUrl}/`;
+
+  try {
+    const fileUrl = new URL(`images/${encodeURIComponent(figureId)}.jpg`, normalizedBase).toString();
+    if (fileUrl.startsWith('file://')) {
+      return `reader-asset://local?fileUrl=${encodeURIComponent(fileUrl)}`;
+    }
+    return fileUrl;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Group lines into raw pages.
  */
-function groupIntoPages(lines: SaccadeLine[], linesPerPage: number): { lines: SaccadeLine[] }[] {
-  const pages: { lines: SaccadeLine[] }[] = [];
+function estimateFigureLineSpan(
+  line: SaccadeLine,
+  figureBaseLineSpan: number
+): number {
+  if (line.type !== 'figure') return 1;
 
-  for (let i = 0; i < lines.length; i += linesPerPage) {
-    pages.push({
-      lines: lines.slice(i, i + linesPerPage),
-    });
+  // Reserve extra page budget for long captions so trailing text
+  // is pushed to the next page instead of being clipped at viewport bottom.
+  const captionText = (line.figureCaption || line.text || '').trim();
+  const estimatedCaptionLines = captionText.length > 0
+    ? Math.ceil(captionText.length / SACCADE_LINE_WIDTH)
+    : 1;
+  const captionExtraSpan = Math.min(
+    SACCADE_FIGURE_CAPTION_EXTRA_SPAN_MAX,
+    Math.max(0, estimatedCaptionLines - 1)
+  );
+
+  return Math.max(1, figureBaseLineSpan + captionExtraSpan);
+}
+
+function groupIntoPages(
+  lines: SaccadeLine[],
+  linesPerPage: number,
+  figureBaseLineSpan: number = 1
+): { lines: SaccadeLine[] }[] {
+  const pages: { lines: SaccadeLine[] }[] = [];
+  if (linesPerPage <= 0 || lines.length === 0) return pages;
+
+  let currentPage: SaccadeLine[] = [];
+  let usedSpan = 0;
+
+  for (const line of lines) {
+    const span = estimateFigureLineSpan(line, figureBaseLineSpan);
+
+    if (currentPage.length > 0 && usedSpan + span > linesPerPage) {
+      pages.push({ lines: currentPage });
+      currentPage = [];
+      usedSpan = 0;
+    }
+
+    currentPage.push(line);
+    usedSpan += span;
+  }
+
+  if (currentPage.length > 0) {
+    pages.push({ lines: currentPage });
   }
 
   return pages;
@@ -351,10 +531,15 @@ export function countWords(text: string): number {
  */
 export function tokenizeSaccade(
   text: string,
-  linesPerPage: number = SACCADE_LINES_PER_PAGE
+  linesPerPage: number = SACCADE_LINES_PER_PAGE,
+  figureAssetBaseUrl?: string
 ): { pages: SaccadePage[]; chunks: Chunk[] } {
-  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
-  const rawPages = groupIntoPages(lines, linesPerPage);
+  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH, figureAssetBaseUrl);
+  const figureMinLineSpan = Math.max(
+    SACCADE_FIGURE_MIN_LINE_SPAN_FLOOR,
+    Math.round(linesPerPage * SACCADE_FIGURE_MIN_LINE_SPAN_RATIO)
+  );
+  const rawPages = groupIntoPages(lines, linesPerPage, figureMinLineSpan);
 
   const allChunks: Chunk[] = [];
   const pages: SaccadePage[] = [];
@@ -372,15 +557,19 @@ export function tokenizeSaccade(
         continue;
       }
 
+      const chunkText = line.type === 'figure'
+        ? (line.figureCaption || `Figure ${line.figureId || ''}`).trim()
+        : line.text;
+
       const chunk: Chunk = {
-        text: line.text,
-        wordCount: countWords(line.text),
+        text: chunkText.length > 0 ? chunkText : 'Figure',
+        wordCount: countWords(chunkText),
         orpIndex: 0,
         saccade: {
           pageIndex,
           lineIndex,
           startChar: 0,
-          endChar: line.text.length,
+          endChar: chunkText.length,
         },
       };
 
@@ -415,9 +604,14 @@ export function tokenizeRecall(
   for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
     const rawPage = rawPages[pageIndex];
     const pageLineChunks: Chunk[][] = [];
+    const pageLines: SaccadeLine[] = rawPage.lines.map(line =>
+      line.type === 'figure'
+        ? { text: '', type: 'blank' }
+        : line
+    );
 
-    for (let lineIndex = 0; lineIndex < rawPage.lines.length; lineIndex++) {
-      const line = rawPage.lines[lineIndex];
+    for (let lineIndex = 0; lineIndex < pageLines.length; lineIndex++) {
+      const line = pageLines[lineIndex];
 
       if (line.type === 'blank' || line.text.trim().length === 0) {
         pageLineChunks.push([]);
@@ -449,7 +643,7 @@ export function tokenizeRecall(
     }
 
     pages.push({
-      lines: rawPage.lines,
+      lines: pageLines,
       lineChunks: pageLineChunks,
     });
   }
