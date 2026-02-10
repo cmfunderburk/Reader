@@ -15,11 +15,41 @@ import { TrainingReader } from './TrainingReader';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
-import { loadArticles, saveArticles, loadFeeds, saveFeeds, generateId, loadSettings, saveSettings, loadDailyInfo, saveDailyInfo } from '../lib/storage';
+import {
+  loadArticles,
+  saveArticles,
+  loadFeeds,
+  saveFeeds,
+  generateId,
+  loadSettings,
+  saveSettings,
+  loadDailyInfo,
+  saveDailyInfo,
+  loadPassages,
+  upsertPassage,
+  updatePassageReviewState,
+  touchPassageReview,
+  loadSessionSnapshot,
+  saveSessionSnapshot,
+  clearSessionSnapshot,
+} from '../lib/storage';
 import type { Settings } from '../lib/storage';
 import { fetchFeed } from '../lib/feeds';
 import { fetchDailyArticle, fetchRandomFeaturedArticle, getTodayUTC } from '../lib/wikipedia';
-import type { Article, Feed, TokenMode, Activity, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type {
+  Article,
+  Feed,
+  TokenMode,
+  Activity,
+  DisplayMode,
+  SaccadePacerStyle,
+  SaccadeFocusTarget,
+  Passage,
+  PassageCaptureKind,
+  PassageReviewMode,
+  PassageReviewState,
+  SessionSnapshot,
+} from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 import { formatBookName } from './Library';
@@ -45,6 +75,25 @@ const ACTIVITY_LABELS: Record<Activity, string> = {
   'active-recall': 'Active Recall',
   'training': 'Training',
 };
+
+const PASSAGE_QUEUE_PREVIEW_LIMIT = 8;
+const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
+
+function clipPassagePreview(text: string, maxChars: number = 180): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1)}...`;
+}
+
+function passageStatePriority(state: PassageReviewState): number {
+  switch (state) {
+    case 'hard': return 0;
+    case 'new': return 1;
+    case 'easy': return 2;
+    case 'done': return 3;
+    default: return 4;
+  }
+}
 
 export function App() {
   const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
@@ -103,7 +152,7 @@ export function App() {
         return prev;
       });
     })();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
   const [viewState, setViewState] = useState<ViewState>(getInitialView);
@@ -112,6 +161,9 @@ export function App() {
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [randomStatus, setRandomStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [randomError, setRandomError] = useState<string | null>(null);
+  const [passages, setPassages] = useState<Passage[]>(() => loadPassages());
+  const [captureNotice, setCaptureNotice] = useState<string | null>(null);
+  const [activePassageId, setActivePassageId] = useState<string | null>(null);
 
   const rsvp = useRSVP({
     initialWpm: settings.defaultWpm,
@@ -136,6 +188,32 @@ export function App() {
     setViewState({ screen: 'home' });
   }, [rsvp]);
 
+  const closeActiveExercise = useCallback(() => {
+    const snapshot = loadSessionSnapshot();
+    if (snapshot?.reading) {
+      const sourceArticle = articles.find((article) => article.id === snapshot.reading!.articleId);
+      if (sourceArticle) {
+        const targetDisplayMode = snapshot.reading.displayMode === 'saccade' || snapshot.reading.displayMode === 'rsvp'
+          ? snapshot.reading.displayMode
+          : 'saccade';
+        rsvp.loadArticle(sourceArticle, { displayMode: targetDisplayMode });
+        setViewState({ screen: 'active-reader' });
+        window.setTimeout(() => {
+          rsvp.goToIndex(snapshot.reading!.chunkIndex);
+        }, 0);
+        saveSessionSnapshot({
+          ...snapshot,
+          training: undefined,
+          lastTransition: 'return-to-reading',
+          updatedAt: Date.now(),
+        });
+        return;
+      }
+      clearSessionSnapshot();
+    }
+    goHome();
+  }, [articles, goHome, rsvp]);
+
   // Keyboard shortcuts
   const isActiveView = viewState.screen === 'active-reader' || viewState.screen === 'active-exercise' || viewState.screen === 'active-training';
 
@@ -148,7 +226,9 @@ export function App() {
     onBracketRight: isActiveView ? () => rsvp.setWpm(Math.min(800, rsvp.wpm + 10)) : undefined,
     onEscape: () => {
       if (viewState.screen === 'home') return;
-      if (isActiveView) {
+      if (viewState.screen === 'active-exercise') {
+        closeActiveExercise();
+      } else if (isActiveView) {
         goHome();
       } else if (viewState.screen === 'content-browser' || viewState.screen === 'preview' ||
                  viewState.screen === 'settings' || viewState.screen === 'library-settings' || viewState.screen === 'add') {
@@ -156,6 +236,12 @@ export function App() {
       }
     },
   });
+
+  useEffect(() => {
+    if (!captureNotice) return;
+    const timer = window.setTimeout(() => setCaptureNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [captureNotice]);
 
   // --- Article / Feed handlers (unchanged) ---
 
@@ -308,6 +394,181 @@ export function App() {
     rsvp.goToIndex(newIndex);
   }, [rsvp]);
 
+  const currentSaccadeCaptureContext = useMemo(() => {
+    if (rsvp.displayMode !== 'saccade') return null;
+    if (!rsvp.article || !rsvp.currentChunk?.saccade || !rsvp.currentSaccadePage) return null;
+
+    const currentSac = rsvp.currentChunk.saccade;
+    const lineIndex = currentSac.lineIndex;
+    const line = rsvp.currentSaccadePage.lines[lineIndex];
+    if (!line || line.type === 'blank') return null;
+
+    return {
+      article: rsvp.article,
+      pageIndex: currentSac.pageIndex,
+      lineIndex,
+      page: rsvp.currentSaccadePage,
+      currentChunkIndex: rsvp.currentChunkIndex,
+    };
+  }, [rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.currentSaccadePage, rsvp.displayMode]);
+
+  const collectChunkIndicesForLines = useCallback((pageIndex: number, lineIndices: Set<number>): number[] => {
+    const collected: number[] = [];
+    for (let i = 0; i < rsvp.chunks.length; i++) {
+      const sac = rsvp.chunks[i].saccade;
+      if (!sac) continue;
+      if (sac.pageIndex !== pageIndex) continue;
+      if (!lineIndices.has(sac.lineIndex)) continue;
+      collected.push(i);
+    }
+    return collected;
+  }, [rsvp.chunks]);
+
+  const capturePassageFromLineIndices = useCallback((
+    captureKind: PassageCaptureKind,
+    lineIndices: number[]
+  ): Passage | null => {
+    const ctx = currentSaccadeCaptureContext;
+    if (!ctx) return null;
+
+    const sortedIndices = [...new Set(lineIndices)]
+      .filter((lineIndex) => lineIndex >= 0 && lineIndex < ctx.page.lines.length)
+      .sort((a, b) => a - b);
+    if (sortedIndices.length === 0) return null;
+
+    const lines = sortedIndices
+      .map((lineIndex) => ctx.page.lines[lineIndex])
+      .filter((line) => line.type !== 'blank')
+      .map((line) => line.text.trim())
+      .filter(Boolean);
+    const text = lines.join('\n').trim();
+    if (!text) return null;
+
+    const now = Date.now();
+    const chunkIndices = collectChunkIndicesForLines(ctx.pageIndex, new Set(sortedIndices));
+    const passage: Passage = {
+      id: generateId(),
+      articleId: ctx.article.id,
+      articleTitle: ctx.article.title,
+      sourceMode: 'saccade',
+      captureKind,
+      text,
+      createdAt: now,
+      updatedAt: now,
+      sourceChunkIndex: chunkIndices[0] ?? ctx.currentChunkIndex,
+      sourcePageIndex: ctx.pageIndex,
+      sourceLineIndex: sortedIndices[0],
+      reviewState: 'new',
+      reviewCount: 0,
+    };
+
+    upsertPassage(passage);
+    setPassages((prev) => [passage, ...prev.filter((existing) => existing.id !== passage.id)]);
+    setCaptureNotice(`Saved ${captureKind === 'line' ? 'line' : captureKind === 'paragraph' ? 'paragraph' : 'lines'} to passage queue`);
+    return passage;
+  }, [collectChunkIndicesForLines, currentSaccadeCaptureContext]);
+
+  const handleCaptureCurrentLine = useCallback(() => {
+    if (!currentSaccadeCaptureContext) return;
+    capturePassageFromLineIndices('line', [currentSaccadeCaptureContext.lineIndex]);
+  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+
+  const handleCaptureParagraph = useCallback(() => {
+    const ctx = currentSaccadeCaptureContext;
+    if (!ctx) return;
+    const lines = ctx.page.lines;
+    let start = ctx.lineIndex;
+    let end = ctx.lineIndex;
+
+    while (start > 0 && lines[start - 1].type !== 'blank') {
+      start -= 1;
+    }
+    while (end < lines.length - 1 && lines[end + 1].type !== 'blank') {
+      end += 1;
+    }
+
+    const indices: number[] = [];
+    for (let i = start; i <= end; i++) {
+      if (lines[i].type !== 'blank') indices.push(i);
+    }
+    capturePassageFromLineIndices('paragraph', indices);
+  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+
+  const handleCaptureLastLines = useCallback(() => {
+    const ctx = currentSaccadeCaptureContext;
+    if (!ctx) return;
+    const lines = ctx.page.lines;
+    const selected: number[] = [];
+
+    for (let i = ctx.lineIndex; i >= 0 && selected.length < PASSAGE_CAPTURE_LAST_LINE_COUNT; i--) {
+      if (lines[i].type === 'blank') continue;
+      selected.push(i);
+    }
+
+    capturePassageFromLineIndices('last-lines', selected.reverse());
+  }, [capturePassageFromLineIndices, currentSaccadeCaptureContext]);
+
+  const reviewQueue = useMemo(() => {
+    return passages
+      .filter((passage) => passage.reviewState !== 'done')
+      .sort((a, b) => {
+        const byState = passageStatePriority(a.reviewState) - passageStatePriority(b.reviewState);
+        if (byState !== 0) return byState;
+        return b.updatedAt - a.updatedAt;
+      });
+  }, [passages]);
+
+  const refreshPassagesFromStorage = useCallback(() => {
+    setPassages(loadPassages());
+  }, []);
+
+  const markPassageReviewState = useCallback((passageId: string, reviewState: PassageReviewState) => {
+    updatePassageReviewState(passageId, reviewState);
+    refreshPassagesFromStorage();
+  }, [refreshPassagesFromStorage]);
+
+  const startPassageReview = useCallback((passage: Passage, mode: PassageReviewMode) => {
+    const readingSnapshot = rsvp.article ? {
+      articleId: rsvp.article.id,
+      chunkIndex: rsvp.currentChunkIndex,
+      displayMode: rsvp.displayMode,
+    } : undefined;
+    const snapshot: SessionSnapshot = {
+      reading: readingSnapshot,
+      training: {
+        passageId: passage.id,
+        mode,
+        startedAt: Date.now(),
+      },
+      lastTransition: mode === 'recall' ? 'read-to-recall' : 'read-to-prediction',
+      updatedAt: Date.now(),
+    };
+    saveSessionSnapshot(snapshot);
+
+    const sourceArticle = articles.find((article) => article.id === passage.articleId);
+    const passageMetrics = measureTextMetrics(passage.text);
+    const passageArticle: Article = {
+      id: `passage-${passage.id}`,
+      title: `Passage: ${passage.articleTitle}`,
+      content: passage.text,
+      source: `Passage Review • ${sourceArticle?.source || 'Saved passage'}`,
+      sourcePath: sourceArticle?.sourcePath,
+      assetBaseUrl: sourceArticle?.assetBaseUrl,
+      addedAt: Date.now(),
+      readPosition: 0,
+      isRead: false,
+      ...passageMetrics,
+    };
+
+    touchPassageReview(passage.id, mode);
+    setActivePassageId(passage.id);
+    refreshPassagesFromStorage();
+
+    rsvp.pause();
+    rsvp.loadArticle(passageArticle, { displayMode: mode === 'recall' ? 'recall' : 'prediction' });
+    setViewState({ screen: 'active-exercise' });
+  }, [articles, refreshPassagesFromStorage, rsvp]);
+
   // --- Navigation handlers ---
 
   const saveLastSession = useCallback((articleId: string, activity: Activity, displayMode: DisplayMode) => {
@@ -334,6 +595,7 @@ export function App() {
     if (daily && daily.date === today) {
       const existing = articles.find(a => a.id === daily.articleId);
       if (existing) {
+        clearSessionSnapshot();
         rsvp.loadArticle(existing, { displayMode: 'saccade' });
         saveLastSession(existing.id, 'paced-reading', 'saccade');
         setViewState({ screen: 'active-reader' });
@@ -372,6 +634,7 @@ export function App() {
       }
 
       saveDailyInfo(today, article.id);
+      clearSessionSnapshot();
       rsvp.loadArticle(article, { displayMode: 'saccade' });
       saveLastSession(article.id, 'paced-reading', 'saccade');
       setDailyStatus('idle');
@@ -414,6 +677,7 @@ export function App() {
       }
 
       rsvp.loadArticle(article, { displayMode: 'saccade' });
+      clearSessionSnapshot();
       saveLastSession(article.id, 'paced-reading', 'saccade');
       setRandomStatus('idle');
       setViewState({ screen: 'active-reader' });
@@ -445,11 +709,13 @@ export function App() {
     rsvp.setWpm(wpm);
 
     if (activity === 'paced-reading') {
+      clearSessionSnapshot();
       rsvp.loadArticle(article, { mode, displayMode: 'saccade' });
       saveLastSession(article.id, 'paced-reading', 'saccade');
       setViewState({ screen: 'active-reader' });
       setTimeout(() => rsvp.play(), 100);
     } else if (activity === 'active-recall') {
+      clearSessionSnapshot();
       rsvp.loadArticle(article, { displayMode: 'prediction' });
       saveLastSession(article.id, 'active-recall', 'prediction');
       setViewState({ screen: 'active-exercise' });
@@ -466,6 +732,7 @@ export function App() {
   }, [settings.lastSession, articles]);
 
   const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
+    clearSessionSnapshot();
     rsvp.loadArticle(info.article, { displayMode: info.displayMode });
 
     if (info.activity === 'paced-reading') {
@@ -510,6 +777,7 @@ export function App() {
   })();
 
   const showBackButton = viewState.screen !== 'home';
+  const headerBackAction = viewState.screen === 'active-exercise' ? closeActiveExercise : goHome;
 
   // --- Render helpers ---
 
@@ -576,6 +844,101 @@ export function App() {
     </div>
   );
 
+  const renderPassageWorkspace = () => {
+    const canCapture = viewState.screen === 'active-reader'
+      && rsvp.displayMode === 'saccade'
+      && !rsvp.isPlaying
+      && !!currentSaccadeCaptureContext;
+    const queueItems = reviewQueue.slice(0, PASSAGE_QUEUE_PREVIEW_LIMIT);
+
+    return (
+      <section className="passage-workspace">
+        <div className="passage-workspace-header">
+          <strong>Passage Workspace</strong>
+          <span className="passage-workspace-count">{reviewQueue.length} queued</span>
+        </div>
+
+        <div className="passage-capture-actions">
+          <button
+            className="control-btn"
+            onClick={handleCaptureCurrentLine}
+            disabled={!canCapture}
+            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save current line'}
+          >
+            Save Line
+          </button>
+          <button
+            className="control-btn"
+            onClick={handleCaptureParagraph}
+            disabled={!canCapture}
+            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save current paragraph'}
+          >
+            Save Paragraph
+          </button>
+          <button
+            className="control-btn"
+            onClick={handleCaptureLastLines}
+            disabled={!canCapture}
+            title={!canCapture ? 'Pause Saccade reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}
+          >
+            Save Last {PASSAGE_CAPTURE_LAST_LINE_COUNT}
+          </button>
+          <button
+            className="control-btn"
+            onClick={() => {
+              if (reviewQueue.length === 0) return;
+              startPassageReview(reviewQueue[0], 'recall');
+            }}
+            disabled={reviewQueue.length === 0}
+            title="Start quick recall with the highest-priority queued passage"
+          >
+            Review Next
+          </button>
+        </div>
+
+        {captureNotice && (
+          <div className="passage-capture-notice">{captureNotice}</div>
+        )}
+
+        {queueItems.length === 0 ? (
+          <div className="passage-queue-empty">No passages saved yet.</div>
+        ) : (
+          <div className="passage-queue-list">
+            {queueItems.map((passage) => (
+              <article
+                key={passage.id}
+                className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
+              >
+                <div className="passage-queue-meta">
+                  <span>{passage.articleTitle}</span>
+                  <span>{passage.captureKind} • {passage.reviewState}</span>
+                </div>
+                <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
+                <div className="passage-queue-actions">
+                  <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
+                    Recall
+                  </button>
+                  <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
+                    Predict
+                  </button>
+                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
+                    Hard
+                  </button>
+                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
+                    Easy
+                  </button>
+                  <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
+                    Done
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  };
+
   return (
     <div className="app" style={{
       '--rsvp-font-size': `${displaySettings.rsvpFontSize}rem`,
@@ -586,7 +949,7 @@ export function App() {
       <header className="app-header">
         <div className="app-header-left">
           {showBackButton && (
-            <button className="control-btn app-back-btn" onClick={goHome}>Home</button>
+            <button className="control-btn app-back-btn" onClick={headerBackAction}>Home</button>
           )}
           <h1>{headerTitle}</h1>
         </div>
@@ -662,12 +1025,18 @@ export function App() {
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
             {renderReaderControls(['rsvp', 'saccade'])}
+            {renderPassageWorkspace()}
           </>
         )}
 
         {/* Active Recall: Prediction / Recall */}
         {viewState.screen === 'active-exercise' && (
           <>
+            <div className="exercise-return-bar">
+              <button className="control-btn" onClick={closeActiveExercise}>
+                Return to Reading
+              </button>
+            </div>
             {rsvp.displayMode === 'recall' ? (
               <div className="recall-container">
                 <PredictionStats stats={rsvp.predictionStats} />
@@ -678,7 +1047,7 @@ export function App() {
                   onAdvance={rsvp.advanceSelfPaced}
                   onPredictionResult={rsvp.handlePredictionResult}
                   onReset={rsvp.resetPredictionStats}
-                  onClose={goHome}
+                  onClose={closeActiveExercise}
                   stats={rsvp.predictionStats}
                   goToIndex={rsvp.goToIndex}
                 />
@@ -692,7 +1061,7 @@ export function App() {
                   onAdvance={rsvp.advanceSelfPaced}
                   onPredictionResult={rsvp.handlePredictionResult}
                   onReset={rsvp.resetPredictionStats}
-                  onClose={goHome}
+                  onClose={closeActiveExercise}
                   stats={rsvp.predictionStats}
                   wpm={rsvp.wpm}
                   goToIndex={rsvp.goToIndex}

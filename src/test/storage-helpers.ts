@@ -59,6 +59,8 @@ export function clearStorage(): void {
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('speedread_feeds');
   localStorage.removeItem('speedread_settings');
+  localStorage.removeItem('speedread_passages');
+  localStorage.removeItem('speedread_session_snapshot');
 }
 
 /**

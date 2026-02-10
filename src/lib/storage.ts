@@ -1,9 +1,25 @@
-import type { Article, Feed, TokenMode, PredictionLineWidth, RampCurve, Activity, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type {
+  Article,
+  Feed,
+  TokenMode,
+  PredictionLineWidth,
+  RampCurve,
+  Activity,
+  DisplayMode,
+  SaccadePacerStyle,
+  SaccadeFocusTarget,
+  Passage,
+  PassageReviewMode,
+  PassageReviewState,
+  SessionSnapshot,
+} from '../types';
 
 const STORAGE_KEYS = {
   articles: 'speedread_articles',
   feeds: 'speedread_feeds',
   settings: 'speedread_settings',
+  passages: 'speedread_passages',
+  sessionSnapshot: 'speedread_session_snapshot',
   dailyDate: 'speedread_daily_date',
   dailyArticleId: 'speedread_daily_article_id',
 } as const;
@@ -94,6 +110,78 @@ export function saveFeeds(feeds: Feed[]): void {
 }
 
 /**
+ * Load saved passages from localStorage.
+ */
+export function loadPassages(): Passage[] {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.passages);
+    const parsed = data ? JSON.parse(data) as Passage[] : [];
+    return parsed
+      .map((passage) => ({
+        ...passage,
+        reviewState: normalizePassageReviewState(passage.reviewState),
+        reviewCount: Math.max(0, passage.reviewCount ?? 0),
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save passages to localStorage.
+ */
+export function savePassages(passages: Passage[]): void {
+  localStorage.setItem(STORAGE_KEYS.passages, JSON.stringify(passages));
+}
+
+/**
+ * Insert or update a single passage.
+ */
+export function upsertPassage(passage: Passage): void {
+  const existing = loadPassages();
+  const idx = existing.findIndex((p) => p.id === passage.id);
+  if (idx === -1) {
+    existing.unshift(passage);
+  } else {
+    existing[idx] = passage;
+  }
+  savePassages(existing);
+}
+
+/**
+ * Update a passage review state.
+ */
+export function updatePassageReviewState(passageId: string, reviewState: PassageReviewState): void {
+  const passages = loadPassages();
+  const idx = passages.findIndex((p) => p.id === passageId);
+  if (idx === -1) return;
+  passages[idx] = {
+    ...passages[idx],
+    reviewState: normalizePassageReviewState(reviewState),
+    updatedAt: Date.now(),
+  };
+  savePassages(passages);
+}
+
+/**
+ * Mark a passage review attempt for queue prioritization/analytics.
+ */
+export function touchPassageReview(passageId: string, mode: PassageReviewMode): void {
+  const passages = loadPassages();
+  const idx = passages.findIndex((p) => p.id === passageId);
+  if (idx === -1) return;
+  passages[idx] = {
+    ...passages[idx],
+    reviewCount: passages[idx].reviewCount + 1,
+    lastReviewedAt: Date.now(),
+    lastReviewMode: mode,
+    updatedAt: Date.now(),
+  };
+  savePassages(passages);
+}
+
+/**
  * Load settings from localStorage.
  */
 export function loadSettings(): Settings {
@@ -125,6 +213,32 @@ export function loadSettings(): Settings {
  */
 export function saveSettings(settings: Settings): void {
   localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(settings));
+}
+
+/**
+ * Load session continuity snapshot.
+ */
+export function loadSessionSnapshot(): SessionSnapshot | null {
+  try {
+    const data = localStorage.getItem(STORAGE_KEYS.sessionSnapshot);
+    return data ? JSON.parse(data) as SessionSnapshot : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save session continuity snapshot.
+ */
+export function saveSessionSnapshot(snapshot: SessionSnapshot): void {
+  localStorage.setItem(STORAGE_KEYS.sessionSnapshot, JSON.stringify(snapshot));
+}
+
+/**
+ * Clear saved session continuity snapshot.
+ */
+export function clearSessionSnapshot(): void {
+  localStorage.removeItem(STORAGE_KEYS.sessionSnapshot);
 }
 
 /**
@@ -238,4 +352,15 @@ export function saveDailyInfo(date: string, articleId: string): void {
  */
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+function normalizePassageReviewState(state: PassageReviewState | string | undefined): PassageReviewState {
+  switch (state) {
+    case 'hard':
+    case 'easy':
+    case 'done':
+      return state;
+    default:
+      return 'new';
+  }
 }

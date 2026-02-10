@@ -95,3 +95,40 @@ export interface Feed {
   title: string;
   lastFetched: number;
 }
+
+export type PassageCaptureKind = 'line' | 'paragraph' | 'last-lines';
+export type PassageReviewState = 'new' | 'hard' | 'easy' | 'done';
+export type PassageReviewMode = 'recall' | 'prediction';
+
+export interface Passage {
+  id: string;
+  articleId: string;
+  articleTitle: string;
+  sourceMode: DisplayMode;
+  captureKind: PassageCaptureKind;
+  text: string;
+  createdAt: number;
+  updatedAt: number;
+  sourceChunkIndex: number;
+  sourcePageIndex?: number;
+  sourceLineIndex?: number;
+  reviewState: PassageReviewState;
+  reviewCount: number;
+  lastReviewedAt?: number;
+  lastReviewMode?: PassageReviewMode;
+}
+
+export interface SessionSnapshot {
+  reading?: {
+    articleId: string;
+    chunkIndex: number;
+    displayMode: DisplayMode;
+  };
+  training?: {
+    passageId: string;
+    mode: PassageReviewMode;
+    startedAt: number;
+  };
+  lastTransition?: 'read-to-recall' | 'read-to-prediction' | 'return-to-reading';
+  updatedAt: number;
+}

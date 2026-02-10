@@ -429,6 +429,88 @@ button {
   align-items: center;
 }
 
+.passage-workspace {
+  width: min(1100px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.passage-workspace-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+}
+
+.passage-workspace-count {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.passage-capture-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.passage-capture-notice {
+  color: var(--success);
+  font-size: 0.85rem;
+}
+
+.passage-queue-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.passage-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.passage-queue-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.55rem;
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.passage-queue-item.active {
+  border-color: var(--accent);
+}
+
+.passage-queue-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.passage-queue-text {
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.passage-queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
 .controls-transport {
   display: flex;
   gap: 0.5rem;
@@ -1472,6 +1554,12 @@ button {
   max-width: var(--prediction-line-width, 65ch);
   margin: 0 auto;
   padding: 1rem;
+}
+
+.exercise-return-bar {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.5rem;
 }
 
 .prediction-stats-bar {
