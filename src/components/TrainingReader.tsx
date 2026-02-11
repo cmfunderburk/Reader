@@ -151,6 +151,21 @@ export function TrainingReader({
       // Ignore storage failures (private mode, quota).
     }
   }, []);
+  // Recall scaffold toggle: first-letter hints on/off.
+  const [showFirstLetterScaffold, setShowFirstLetterScaffoldState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('speedread_training_scaffold');
+      return saved == null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const setShowFirstLetterScaffold = useCallback((on: boolean) => {
+    setShowFirstLetterScaffoldState(on);
+    try { localStorage.setItem('speedread_training_scaffold', String(on)); } catch {
+      // Ignore storage failures (private mode, quota).
+    }
+  }, []);
 
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
 
@@ -419,8 +434,86 @@ export function TrainingReader({
     setPhase('feedback');
   }, [isDrill, currentParagraphIndex, wpm, charLimit, sessionHistory, onWpmChange, articleId, sentenceMode, currentSentenceIndex, sentenceChunks.length, scoreDetails]);
 
+  const processRecallTokens = useCallback((tokens: string[]) => {
+    if (tokens.length === 0) return false;
+
+    const nextCompleted = new Map(completedWords);
+    let nextStats = { ...paragraphStats };
+    let nextRecallIndex = recallWordIndex;
+
+    for (const token of tokens) {
+      const chunk = recallData.chunks[nextRecallIndex];
+      if (!chunk) break;
+
+      const actual = chunk.text;
+      const known = isWordKnown(token, actual);
+      const exact = isExactMatch(token, actual);
+      const detail = isChunkDetail(nextRecallIndex);
+
+      const key = makeWordKey(
+        chunk.saccade!.lineIndex,
+        chunk.saccade!.startChar
+      );
+
+      nextCompleted.set(key, { text: actual, correct: known });
+      nextStats = {
+        totalWords: nextStats.totalWords + 1,
+        exactMatches: nextStats.exactMatches + (exact ? 1 : 0),
+        knownWords: nextStats.knownWords + (known ? 1 : 0),
+        detailTotal: nextStats.detailTotal + (detail ? 1 : 0),
+        detailKnown: nextStats.detailKnown + (known && detail ? 1 : 0),
+      };
+      nextRecallIndex += 1;
+    }
+
+    setCompletedWords(nextCompleted);
+    setParagraphStats(nextStats);
+
+    if (nextRecallIndex >= recallData.chunks.length) {
+      setRecallWordIndex(recallData.chunks.length);
+      finishRecallPhase(nextStats, null);
+      return true;
+    }
+
+    setRecallWordIndex(nextRecallIndex);
+    return false;
+  }, [completedWords, paragraphStats, recallWordIndex, recallData.chunks, finishRecallPhase, isChunkDetail]);
+
+  const handleRecallInputChange = useCallback((value: string) => {
+    // Scaffold mode remains single-token input (no spaces).
+    if (showFirstLetterScaffold) {
+      setRecallInput(value.replace(/\s/g, ''));
+      return;
+    }
+
+    // No-scaffold mode: consume complete space-delimited tokens immediately.
+    const endsWithSpace = /\s$/.test(value);
+    const parts = value.split(/\s+/);
+    const completeTokens = (endsWithSpace ? parts : parts.slice(0, -1)).filter(Boolean);
+    const pendingToken = endsWithSpace ? '' : (parts[parts.length - 1] || '');
+
+    if (completeTokens.length > 0) {
+      const finished = processRecallTokens(completeTokens);
+      if (finished) {
+        setRecallInput('');
+        return;
+      }
+    }
+
+    setRecallInput(pendingToken);
+  }, [showFirstLetterScaffold, processRecallTokens]);
+
   const handleRecallSubmit = useCallback(() => {
     if (!currentRecallChunk || recallInput.trim() === '') return;
+
+    // No-scaffold mode: submit current in-progress token (prediction-style flow).
+    if (!showFirstLetterScaffold) {
+      processRecallTokens([recallInput.trim()]);
+      setRecallInput('');
+      setLastMissResult(null);
+      setShowingMiss(false);
+      return;
+    }
 
     const actual = currentRecallChunk.text;
     const known = isWordKnown(recallInput, actual);
@@ -476,7 +569,18 @@ export function TrainingReader({
         setShowingMiss(true);
       }
     }
-  }, [recallInput, currentRecallChunk, recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail, isDrill]);
+  }, [
+    recallInput,
+    currentRecallChunk,
+    recallWordIndex,
+    recallData.chunks,
+    paragraphStats,
+    finishRecallPhase,
+    isChunkDetail,
+    isDrill,
+    showFirstLetterScaffold,
+    processRecallTokens,
+  ]);
 
   const handleGiveUp = useCallback(() => {
     // Score all remaining words (including current) as misses
@@ -518,7 +622,10 @@ export function TrainingReader({
   }, [recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === ' ' || e.key === 'Enter') {
+    // Scaffold mode keeps per-word flow (Space/Enter submit).
+    // No-scaffold mode allows spaces for full-sentence typing (Enter submit).
+    const submitOnSpace = showFirstLetterScaffold;
+    if ((submitOnSpace && e.key === ' ') || e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
       handleRecallSubmit();
@@ -526,7 +633,7 @@ export function TrainingReader({
       e.preventDefault();
       handleGiveUp();
     }
-  }, [handleRecallSubmit, handleGiveUp]);
+  }, [handleRecallSubmit, handleGiveUp, showFirstLetterScaffold]);
 
   // Global key listener for miss state
   useEffect(() => {
@@ -783,6 +890,14 @@ export function TrainingReader({
                 />
                 <span className="control-label">Score names/dates</span>
               </label>
+              <label className="training-setup-sentence">
+                <input
+                  type="checkbox"
+                  checked={showFirstLetterScaffold}
+                  onChange={e => setShowFirstLetterScaffold(e.target.checked)}
+                />
+                <span className="control-label">Show first-letter scaffolds</span>
+              </label>
               <div className="training-setup-info">
                 {tierInfo?.totalArticles.toLocaleString() ?? 0} articles
               </div>
@@ -820,6 +935,14 @@ export function TrainingReader({
                   onChange={e => setScoreDetails(e.target.checked)}
                 />
                 <span className="control-label">Score names/dates</span>
+              </label>
+              <label className="training-setup-sentence">
+                <input
+                  type="checkbox"
+                  checked={showFirstLetterScaffold}
+                  onChange={e => setShowFirstLetterScaffold(e.target.checked)}
+                />
+                <span className="control-label">Show first-letter scaffolds</span>
               </label>
               <div className="training-setup-info">
                 {paragraphs.length} paragraph{paragraphs.length !== 1 ? 's' : ''}
@@ -1108,10 +1231,11 @@ export function TrainingReader({
                 lineChunks={lineChunks}
                 currentChunk={currentRecallChunk}
                 completedWords={completedWords}
+                showFirstLetterScaffold={showFirstLetterScaffold}
                 isHeading={isHeading}
                 showingMiss={showingMiss}
                 input={recallInput}
-                setInput={setRecallInput}
+                setInput={handleRecallInputChange}
                 onKeyDown={handleKeyDown}
                 inputRef={inputRef}
                 inputContainerRef={inputContainerRef}
@@ -1151,6 +1275,7 @@ interface TrainingRecallLineProps {
   lineChunks: Chunk[];
   currentChunk: Chunk | null;
   completedWords: Map<WordKey, CompletedWord>;
+  showFirstLetterScaffold: boolean;
   isHeading: boolean;
   showingMiss: boolean;
   input: string;
@@ -1165,6 +1290,7 @@ function TrainingRecallLine({
   lineChunks,
   currentChunk,
   completedWords,
+  showFirstLetterScaffold,
   isHeading,
   showingMiss,
   input,
@@ -1213,20 +1339,30 @@ function TrainingRecallLine({
       const rest = word.slice(1);
       elements.push(
         <span key={`word-${i}`} ref={inputContainerRef} className="recall-input-word">
-          <span className="recall-scaffold-first">{firstLetter}</span>
-          <span className="recall-scaffold-rest">{rest}</span>
+          {showFirstLetterScaffold ? (
+            <>
+              <span className="recall-scaffold-first">{firstLetter}</span>
+              <span className="recall-scaffold-rest">{rest}</span>
+            </>
+          ) : (
+            <span className="recall-scaffold-rest">{word}</span>
+          )}
           <input
             ref={inputRef}
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value.replace(/\s/g, ''))}
+            onChange={(e) => setInput(
+              showFirstLetterScaffold
+                ? e.target.value.replace(/\s/g, '')
+                : e.target.value
+            )}
             onKeyDown={onKeyDown}
             className="recall-input"
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
             spellCheck={false}
-            style={{ width: `${word.length}ch` }}
+            style={{ width: `${Math.max(word.length, input.length || 1)}ch` }}
           />
         </span>
       );
@@ -1237,8 +1373,14 @@ function TrainingRecallLine({
       const cls = isHeading ? 'saccade-heading' : '';
       elements.push(
         <span key={`word-${i}`} className={cls}>
-          <span className="recall-scaffold-first">{firstLetter}</span>
-          <span className="recall-scaffold-rest">{rest}</span>
+          {showFirstLetterScaffold ? (
+            <>
+              <span className="recall-scaffold-first">{firstLetter}</span>
+              <span className="recall-scaffold-rest">{rest}</span>
+            </>
+          ) : (
+            <span className="recall-scaffold-rest">{word}</span>
+          )}
         </span>
       );
     }
