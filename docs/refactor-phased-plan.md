@@ -30,7 +30,9 @@ Exit criteria:
 - No direct `localStorage` access outside storage layer for app-owned keys.
 
 ## Phase 3: State Orchestration Split
-- Extract `App` navigation/session transitions into a reducer/state module.
+- [x] Extract `App` view-state transitions into a reducer module.
+- [x] Extract close-active-exercise transition planning into pure transition logic.
+- [ ] Continue extracting remaining `App` navigation/session transitions from component callbacks.
 - Extract `TrainingReader` phase transitions into pure state logic.
 - Keep rendering components focused on view concerns.
 

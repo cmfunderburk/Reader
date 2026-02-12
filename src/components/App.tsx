@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useReducer, useCallback, useMemo, useEffect } from 'react';
 import { Reader } from './Reader';
 import { ReaderControls } from './ReaderControls';
 import { ProgressBar } from './ProgressBar';
@@ -61,22 +61,9 @@ import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 import { formatBookName } from './Library';
 import { isSentenceBoundaryChunk } from '../lib/predictionPreview';
-
-type ViewState =
-  | { screen: 'home' }
-  | { screen: 'content-browser'; activity: Activity }
-  | { screen: 'preview'; activity: Activity; article: Article }
-  | { screen: 'active-reader' }
-  | { screen: 'active-exercise' }
-  | { screen: 'active-training'; article?: Article }
-  | { screen: 'settings' }
-  | { screen: 'library-settings' }
-  | { screen: 'add' }; // bookmarklet import
-
-function getInitialView(): ViewState {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('import') === '1' ? { screen: 'add' } : { screen: 'home' };
-}
+import { appViewStateReducer, getInitialViewState, viewStateToAction } from '../lib/appViewState';
+import { planCloseActiveExercise } from '../lib/sessionTransitions';
+import type { ViewState } from '../lib/appViewState';
 
 const ACTIVITY_LABELS: Record<Activity, string> = {
   'paced-reading': 'Paced Reading',
@@ -203,7 +190,14 @@ export function App() {
   }, []);
 
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
-  const [viewState, setViewState] = useState<ViewState>(getInitialView);
+  const [viewState, dispatchViewState] = useReducer(
+    appViewStateReducer,
+    window.location.search,
+    getInitialViewState
+  );
+  const setViewState = useCallback((next: ViewState) => {
+    dispatchViewState(viewStateToAction(next));
+  }, []);
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
   const [dailyStatus, setDailyStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [dailyError, setDailyError] = useState<string | null>(null);
@@ -281,39 +275,34 @@ export function App() {
   const navigate = useCallback((next: ViewState) => {
     rsvp.pause();
     setViewState(next);
-  }, [rsvp]);
+  }, [rsvp, setViewState]);
 
   const goHome = useCallback(() => {
     rsvp.pause();
     setViewState({ screen: 'home' });
-  }, [rsvp]);
+  }, [rsvp, setViewState]);
 
   const closeActiveExercise = useCallback(() => {
     const snapshot = loadSessionSnapshot();
-    if (snapshot?.reading) {
-      const sourceArticle = articles.find((article) => article.id === snapshot.reading!.articleId);
-      if (sourceArticle) {
-        syncWpmForActivity('paced-reading');
-        const targetDisplayMode = snapshot.reading.displayMode === 'saccade' || snapshot.reading.displayMode === 'rsvp'
-          ? snapshot.reading.displayMode
-          : 'saccade';
-        rsvp.loadArticle(sourceArticle, { displayMode: targetDisplayMode });
-        setViewState({ screen: 'active-reader' });
-        window.setTimeout(() => {
-          rsvp.goToIndex(snapshot.reading!.chunkIndex);
-        }, 0);
-        saveSessionSnapshot({
-          ...snapshot,
-          training: undefined,
-          lastTransition: 'return-to-reading',
-          updatedAt: Date.now(),
-        });
-        return;
-      }
+    const closePlan = planCloseActiveExercise(snapshot, articles, Date.now());
+
+    if (closePlan.type === 'resume-reading') {
+      syncWpmForActivity('paced-reading');
+      rsvp.loadArticle(closePlan.plan.article, { displayMode: closePlan.plan.displayMode });
+      setViewState({ screen: 'active-reader' });
+      window.setTimeout(() => {
+        rsvp.goToIndex(closePlan.plan.chunkIndex);
+      }, 0);
+      saveSessionSnapshot(closePlan.plan.snapshot);
+      return;
+    }
+
+    if (closePlan.clearSnapshot) {
       clearSessionSnapshot();
     }
+
     goHome();
-  }, [articles, goHome, rsvp, syncWpmForActivity]);
+  }, [articles, goHome, rsvp, setViewState, syncWpmForActivity]);
 
   // Keyboard shortcuts
   const isActiveView = viewState.screen === 'active-reader' || viewState.screen === 'active-exercise' || viewState.screen === 'active-training';
@@ -374,7 +363,7 @@ export function App() {
     if (viewState.screen === 'add') {
       setViewState({ screen: 'home' });
     }
-  }, [articles, viewState.screen]);
+  }, [articles, setViewState, viewState.screen]);
 
   const handleRemoveArticle = useCallback((id: string) => {
     const updated = articles.filter(a => a.id !== id);
@@ -790,7 +779,7 @@ export function App() {
     rsvp.pause();
     rsvp.loadArticle(passageArticle, { displayMode: mode === 'recall' ? 'recall' : 'prediction' });
     setViewState({ screen: 'active-exercise' });
-  }, [articles, refreshPassagesFromStorage, rsvp, syncWpmForActivity]);
+  }, [articles, refreshPassagesFromStorage, rsvp, setViewState, syncWpmForActivity]);
 
   // --- Navigation handlers ---
 
@@ -886,7 +875,7 @@ export function App() {
       setDailyStatus('error');
       setDailyError(err instanceof Error ? err.message : 'Failed to fetch daily article');
     }
-  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
+  }, [articles, rsvp, saveLastSession, setViewState, syncWpmForActivity]);
 
   const handleStartRandom = useCallback(async () => {
     setRandomStatus('loading');
@@ -944,7 +933,7 @@ export function App() {
       setRandomStatus('error');
       setRandomError(err instanceof Error ? err.message : 'Failed to fetch article');
     }
-  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
+  }, [articles, rsvp, saveLastSession, setViewState, syncWpmForActivity]);
 
   // Content browser → article selected → preview
   const handleContentBrowserSelectArticle = useCallback((article: Article) => {
@@ -978,7 +967,7 @@ export function App() {
       saveLastSession(article.id, 'active-recall', 'prediction');
       setViewState({ screen: 'active-exercise' });
     }
-  }, [rsvp, saveLastSession, setActivityWpm, viewState]);
+  }, [rsvp, saveLastSession, setActivityWpm, setViewState, viewState]);
 
   // Continue from home screen
   const continueInfo = useMemo(() => {
@@ -1002,7 +991,7 @@ export function App() {
     } else if (info.activity === 'training') {
       setViewState({ screen: 'active-training', article: info.article });
     }
-  }, [rsvp, syncWpmForActivity]);
+  }, [rsvp, setViewState, syncWpmForActivity]);
 
   // --- Computed values ---
 
