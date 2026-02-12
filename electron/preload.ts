@@ -1,86 +1,36 @@
 import { contextBridge, ipcRenderer } from 'electron'
-
-export interface LibrarySource {
-  name: string
-  path: string
-}
-
-export interface LibraryItem {
-  name: string
-  path: string
-  type: 'pdf' | 'epub' | 'txt'
-  size: number
-  modifiedAt: number
-}
-
-export interface ExtractedContent {
-  title: string
-  content: string
-  sourcePath?: string
-  assetBaseUrl?: string
-  pageCount?: number
-  chapters?: Array<{ title: string; content: string }>
-}
-
-export interface LibraryExportResult {
-  status: 'cancelled' | 'exported'
-  path?: string
-  sourceCount?: number
-  entryCount?: number
-}
-
-export interface LibraryImportSourceResult {
-  sourceName: string
-  status: 'added' | 'existing' | 'missing'
-  resolvedPath?: string
-  message: string
-}
-
-export interface LibraryImportResult {
-  status: 'cancelled' | 'imported'
-  manifestPath?: string
-  sharedRootPath?: string
-  added?: number
-  existing?: number
-  missing?: number
-  results?: LibraryImportSourceResult[]
-}
+import type { CorpusAPI, LibraryAPI } from '../shared/electron-contract'
 
 contextBridge.exposeInMainWorld('corpus', {
-  getInfo: (): Promise<Record<string, Record<string, { available: boolean; totalArticles: number }>>> =>
+  getInfo: () =>
     ipcRenderer.invoke('corpus:getInfo'),
 
-  sampleArticle: (
-    familyOrTier: string,
-    tier?: string,
-  ): Promise<{ title: string; text: string; domain: string; fk_grade: number; words: number; sentences: number } | null> =>
-    tier
-      ? ipcRenderer.invoke('corpus:sampleArticle', familyOrTier, tier)
-      : ipcRenderer.invoke('corpus:sampleArticle', familyOrTier),
-})
+  sampleArticle: (family, tier) =>
+    ipcRenderer.invoke('corpus:sampleArticle', family, tier),
+} satisfies CorpusAPI)
 
 contextBridge.exposeInMainWorld('library', {
-  getSources: (): Promise<LibrarySource[]> =>
+  getSources: () =>
     ipcRenderer.invoke('library:getSources'),
 
-  listBooks: (dirPath: string): Promise<LibraryItem[]> =>
+  listBooks: (dirPath) =>
     ipcRenderer.invoke('library:listBooks', dirPath),
 
-  openBook: (filePath: string): Promise<ExtractedContent> =>
+  openBook: (filePath) =>
     ipcRenderer.invoke('library:openBook', filePath),
 
-  addSource: (source: LibrarySource): Promise<void> =>
+  addSource: (source) =>
     ipcRenderer.invoke('library:addSource', source),
 
-  removeSource: (sourcePath: string): Promise<void> =>
+  removeSource: (sourcePath) =>
     ipcRenderer.invoke('library:removeSource', sourcePath),
 
-  selectDirectory: (): Promise<string | null> =>
+  selectDirectory: () =>
     ipcRenderer.invoke('library:selectDirectory'),
 
-  exportManifest: (): Promise<LibraryExportResult> =>
+  exportManifest: () =>
     ipcRenderer.invoke('library:exportManifest'),
 
-  importManifest: (): Promise<LibraryImportResult> =>
+  importManifest: () =>
     ipcRenderer.invoke('library:importManifest'),
-})
+} satisfies LibraryAPI)

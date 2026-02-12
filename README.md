@@ -75,6 +75,7 @@ The design goal is to reduce friction between reading and retention practice by 
 npm install
 npm run dev
 npm run electron:dev
+npm run typecheck
 npm run lint
 npm run test:run
 npm run build
@@ -88,6 +89,7 @@ npm run electron:build
 
 ## Quality Gates
 Run these before commit/PR:
+- `npm run typecheck`
 - `npm run lint`
 - `npm run test:run`
 - `npm run build`

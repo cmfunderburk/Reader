@@ -3,7 +3,18 @@ import type { Article, Chunk, TrainingParagraphResult, SaccadePacerStyle, Saccad
 import type { CorpusArticle, CorpusFamily, CorpusInfo, CorpusTier } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import { isExactMatch, isWordKnown, isDetailWord } from '../lib/levenshtein';
-import { loadTrainingHistory, saveTrainingHistory, loadDrillState, saveDrillState } from '../lib/storage';
+import {
+  loadTrainingHistory,
+  saveTrainingHistory,
+  loadDrillState,
+  saveDrillState,
+  loadTrainingSentenceMode,
+  saveTrainingSentenceMode,
+  loadTrainingScoreDetails,
+  saveTrainingScoreDetails,
+  loadTrainingScaffold,
+  saveTrainingScaffold,
+} from '../lib/storage';
 import { DRILL_WPM_STEP, adjustDrillDifficulty, getDrillRound } from '../lib/trainingDrill';
 import type { TrainingHistory, DrillState } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
@@ -99,39 +110,22 @@ export function TrainingReader({
   const [paused, setPaused] = useState(false);
 
   // Sentence mode: cycle read→recall per sentence within a paragraph
-  const [sentenceMode, setSentenceModeState] = useState(() => {
-    try { return localStorage.getItem('speedread_training_sentence') === 'true'; } catch { return false; }
-  });
+  const [sentenceMode, setSentenceModeState] = useState(() => loadTrainingSentenceMode());
   const setSentenceMode = useCallback((on: boolean) => {
     setSentenceModeState(on);
-    try { localStorage.setItem('speedread_training_sentence', String(on)); } catch {
-      // Ignore storage failures (private mode, quota).
-    }
+    saveTrainingSentenceMode(on);
   }, []);
   // Score details toggle: include proper nouns / numbers in the score
-  const [scoreDetails, setScoreDetailsState] = useState(() => {
-    try { return localStorage.getItem('speedread_training_score_details') === 'true'; } catch { return false; }
-  });
+  const [scoreDetails, setScoreDetailsState] = useState(() => loadTrainingScoreDetails());
   const setScoreDetails = useCallback((on: boolean) => {
     setScoreDetailsState(on);
-    try { localStorage.setItem('speedread_training_score_details', String(on)); } catch {
-      // Ignore storage failures (private mode, quota).
-    }
+    saveTrainingScoreDetails(on);
   }, []);
   // Recall scaffold toggle: first-letter hints on/off.
-  const [showFirstLetterScaffold, setShowFirstLetterScaffoldState] = useState(() => {
-    try {
-      const saved = localStorage.getItem('speedread_training_scaffold');
-      return saved == null ? true : saved === 'true';
-    } catch {
-      return true;
-    }
-  });
+  const [showFirstLetterScaffold, setShowFirstLetterScaffoldState] = useState(() => loadTrainingScaffold());
   const setShowFirstLetterScaffold = useCallback((on: boolean) => {
     setShowFirstLetterScaffoldState(on);
-    try { localStorage.setItem('speedread_training_scaffold', String(on)); } catch {
-      // Ignore storage failures (private mode, quota).
-    }
+    saveTrainingScaffold(on);
   }, []);
 
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);

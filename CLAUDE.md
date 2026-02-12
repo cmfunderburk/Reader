@@ -17,6 +17,7 @@ src/
                   feeds, wikipedia, storage, trainingDrill
   types/          shared app/electron types
 electron/         main.ts, preload.ts, lib/ (pdf, epub, library, cleanup)
+shared/           Electron IPC contract types shared by preload + renderer
 ```
 
 ## Main Data Flow
@@ -51,6 +52,8 @@ electron/         main.ts, preload.ts, lib/ (pdf, epub, library, cleanup)
   switching display modes retokenizes and remaps position proportionally.
 - **Storage migration discipline**:
   when adding/changing persisted fields, keep backward compatibility in loaders and add tests.
+- **IPC contract discipline**:
+  shared preload/renderer contracts live in `shared/electron-contract.ts`; avoid duplicating interface declarations.
 
 ## Build & Test
 
