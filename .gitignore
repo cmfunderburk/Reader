@@ -17,6 +17,7 @@ release/
 # IDE
 .vscode/
 .idea/
+.codex/
 
 # OS files
 .DS_Store
@@ -55,3 +56,4 @@ CONTINUE-FROM-HERE.txt
 prediction-training-read.txt
 extract_htrab.py
 2026-01-26-plan-*.txt
+epub_*.js
