@@ -69,6 +69,12 @@ Coverage (`verify:ci`):
 - Drill-specific no-scaffold preview-forfeit (`Tab`) remains mostly planner-covered.
 - Electron packaging remains toolchain-sensitive across host environments; CI electron build remains the authoritative gate.
 
+## Future Improvement Areas (Post-PR)
+- Further decompose `App.tsx` and `TrainingReader.tsx` orchestration callbacks into smaller modules.
+- Add targeted integration tests for paragraph/last-lines capture paths.
+- Add targeted integration coverage for drill no-scaffold preview-forfeit behavior.
+- Re-evaluate storage backend when localStorage scale/performance triggers are observed.
+
 ## Reviewer Notes
 - Focus review on behavior parity in transitions and coverage adequacy for remaining moderate-risk scenarios.
 - Confirm acceptance of documented deferred items (storage backend migration, deeper orchestrator decomposition) for this PR scope.

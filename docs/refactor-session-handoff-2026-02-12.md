@@ -4,7 +4,7 @@
 - Branch: `refactor`
 - Current HEAD: `bff88b4` (`Add phase 4 coverage thresholds and CI verify gate`)
 - Relative to `origin/refactor`: ahead by 2 commits.
-- Working tree: docs updates in progress for PR-readiness planning.
+- Working tree: PR-readiness docs are synchronized for scope closure and PR packaging.
 
 ## Completed This Session
 - Added PR decision framework: `docs/refactor-pr-readiness-plan.md`.
@@ -29,9 +29,7 @@
 
 ## Workstream Status (PR Readiness)
 From `docs/refactor-pr-readiness-plan.md`:
-- Workstream A (Documentation Alignment): in progress, mostly complete.
-  - Completed: phased plan + PR-readiness plan sync.
-  - Remaining: keep docs synchronized as additional workstreams land.
+- Workstream A (Documentation Alignment): complete.
 - Workstream B (Behavior Parity Matrix): complete for current scope.
   - Completed: scenario matrix plus targeted App/Training integration coverage additions.
   - Residual accepted risk: paragraph/last-lines capture UI and drill preview-forfeit path remain primarily planner-covered.
@@ -40,14 +38,14 @@ From `docs/refactor-pr-readiness-plan.md`:
 - Workstream D (CI/Gate Hardening): complete for current scope.
   - Completed: CI Electron-change detection expanded to include shared contract/type/config surfaces.
 - Workstream E (Storage Strategy Decision): complete for this PR scope (`localStorage` decision documented).
-- Workstream F (PR Packaging And Evidence): in progress.
-  - Completed: initial PR narrative draft in `docs/refactor-pr-draft.md`.
+- Workstream F (PR Packaging And Evidence): complete for current scope.
+  - Completed: PR draft, verification evidence, and explicit residual-risk/future-pass notes.
 
 ## Suggested Next Session Sequence
-1. Finalize Workstream F: trim/adjust `docs/refactor-pr-draft.md` into final PR description.
-2. Capture explicit residual risk acceptance from Workstream B directly in PR notes.
-3. Re-run `bun run verify` and `bun run verify:ci` immediately before opening PR.
-4. Update this handoff and the PR-readiness checklist with final go/no-go status.
+1. Open PR using `docs/refactor-pr-draft.md` as the narrative base.
+2. Carry the “Future Improvement Areas” list into PR notes to preserve post-merge follow-up scope.
+3. Re-run `bun run verify` and `bun run verify:ci` immediately before merge.
+4. Continue with non-blocking refactor follow-up in a separate pass after this PR lands.
 
 ## Notes
 - Keep commits focused by workstream (docs, tests, CI, targeted orchestrator hardening).

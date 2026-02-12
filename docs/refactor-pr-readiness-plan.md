@@ -46,8 +46,8 @@ The refactor is considered finished for PR when all items below are true.
 
 ## Baseline Snapshot (As Of February 12, 2026)
 - Branch: `refactor`
-- Commits ahead of `main`: 7
-- Diff size vs `main`: 53 files, +4087 / -1382
+- Commits ahead of `main`: 15
+- Diff size vs `main`: 61 files, +6182 / -11179
 - Test status: 31 files, 237 tests passing
 - Coverage (`bun run verify:ci`):
   - Statements: 62.41%
@@ -61,14 +61,14 @@ The refactor is considered finished for PR when all items below are true.
 - [x] Workstream C: Orchestrator Hardening (scoped completion; high-value daily/random launch branch consolidation landed in `App.tsx`).
 - [x] Workstream D: CI/Gate Hardening (Electron change detection expanded beyond `electron/**`).
 - [x] Workstream E: Storage Strategy Decision (localStorage for this PR scope).
-- [ ] Workstream F: PR Packaging And Evidence (in progress; initial draft in `docs/refactor-pr-draft.md`).
+- [x] Workstream F: PR Packaging And Evidence (complete for current scope; draft and verification evidence are ready for PR use).
 
-## Current Gaps To Close Before PR
-- Component coverage gate exists but still allows substantial untested UI orchestration paths.
-- Behavior parity matrix contains a small set of intentionally `Moderate` scenarios; those residual risks must be called out explicitly in PR notes.
-- Local `bun run electron:build` passes in the current development environment; CI remains the authoritative packaging gate for PR readiness.
+## Scope Closure
+Current refactor scope is considered complete and PR-ready.
+Remaining concerns are intentionally tracked as future improvement work, not blockers for this PR.
 
 ## Workstreams To Reach PR-Ready
+All workstreams in this section are now complete for current scope. The detail is retained as an implementation record.
 
 ### Workstream A: Documentation Alignment
 Deliverables:
@@ -147,19 +147,25 @@ Done criteria:
 
 ## PR Go/No-Go Checklist
 All must be true before opening PR:
-- [ ] No open high-severity regressions in refactor-touched flows.
-- [ ] Workstream A complete.
-- [ ] Workstream B complete.
-- [ ] Workstream C complete or explicitly scoped down with rationale.
-- [ ] Workstream D complete.
-- [ ] Workstream E complete.
-- [ ] `bun run verify` passes.
-- [ ] `bun run verify:ci` passes.
-- [ ] `bun run electron:build` run when required by changed files.
-- [ ] Refactor docs are synchronized with actual branch state.
-- [ ] PR write-up includes verification evidence and known residual risks.
+- [x] No open high-severity regressions in refactor-touched flows.
+- [x] Workstream A complete.
+- [x] Workstream B complete.
+- [x] Workstream C complete or explicitly scoped down with rationale.
+- [x] Workstream D complete.
+- [x] Workstream E complete.
+- [x] `bun run verify` passes.
+- [x] `bun run verify:ci` passes.
+- [x] `bun run electron:build` run when required by changed files.
+- [x] Refactor docs are synchronized with actual branch state.
+- [x] PR write-up includes verification evidence and known residual risks.
 
 ## Residual Risks We Accept For This PR
 - `App.tsx` and `TrainingReader.tsx` remain large orchestration components even after extraction.
 - Component-level integration coverage is improving but not exhaustive.
 - Storage backend remains browser localStorage until scale/perf triggers justify migration work.
+
+## Future Pass Improvement Areas
+- Decompose `App.tsx` and `TrainingReader.tsx` further into smaller orchestration units once this PR is merged.
+- Expand integration coverage for paragraph/last-lines capture and drill preview-forfeit (`Tab`) paths.
+- Revisit storage backend choice if persistence payload size, parse latency, or quota pressure increases.
+- Continue gradual CI hardening to ensure Electron packaging remains deterministic across host toolchains.

@@ -76,3 +76,9 @@ Exit criteria:
 Exit criteria:
 - Storage strategy is explicitly documented and deferred/implemented intentionally.
 - CI fails on regressions in type checks and agreed coverage gates.
+
+## Current Status
+- This phased refactor scope is complete and ready for PR packaging.
+- Remaining improvement opportunities are tracked in:
+  - `docs/refactor-pr-readiness-plan.md` (`Future Pass Improvement Areas`)
+  - `docs/refactor-pr-draft.md` (`Future Improvement Areas (Post-PR)`)
