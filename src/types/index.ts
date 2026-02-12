@@ -136,3 +136,30 @@ export interface SessionSnapshot {
   lastTransition?: 'read-to-recall' | 'read-to-prediction' | 'return-to-reading';
   updatedAt: number;
 }
+
+// Comprehension Check types
+export type ComprehensionDimension = 'factual' | 'inference' | 'structural' | 'evaluative';
+export type ComprehensionFormat = 'multiple-choice' | 'true-false' | 'short-answer' | 'essay';
+
+export interface ComprehensionQuestionResult {
+  id: string;
+  dimension: ComprehensionDimension;
+  format: ComprehensionFormat;
+  prompt: string;
+  userAnswer: string;
+  modelAnswer: string;
+  score: number;          // 0-3
+  feedback: string;
+  correct?: boolean;      // for auto-scored MC/TF
+}
+
+export interface ComprehensionAttempt {
+  id: string;
+  articleId: string;
+  articleTitle: string;
+  entryPoint: 'post-reading' | 'launcher';
+  questions: ComprehensionQuestionResult[];
+  overallScore: number;   // 0-100
+  createdAt: number;
+  durationMs: number;
+}

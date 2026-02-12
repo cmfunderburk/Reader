@@ -14,6 +14,7 @@ import type {
   PassageReviewMode,
   PassageReviewState,
   SessionSnapshot,
+  ComprehensionAttempt,
 } from '../types';
 
 const STORAGE_KEYS = {
@@ -29,9 +30,10 @@ const STORAGE_KEYS = {
   trainingScaffold: 'speedread_training_scaffold',
   dailyDate: 'speedread_daily_date',
   dailyArticleId: 'speedread_daily_article_id',
+  comprehensionAttempts: 'speedread_comprehension_attempts',
 } as const;
 
-const CURRENT_STORAGE_SCHEMA_VERSION = 1;
+const CURRENT_STORAGE_SCHEMA_VERSION = 2;
 
 export interface Settings {
   defaultWpm: number;
@@ -195,6 +197,11 @@ function runStorageMigrations(): void {
   if (currentVersion < 1) {
     migrateSettingsToV1();
     migrateDrillStateToV1();
+  }
+
+  if (currentVersion < 2) {
+    // No-op: comprehension_attempts key didn't exist before V2.
+    // New installs and upgrades both start with empty attempts.
   }
 
   saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);
@@ -585,4 +592,47 @@ function normalizePassageReviewState(state: PassageReviewState | string | undefi
     default:
       return 'new';
   }
+}
+
+// --- Comprehension attempt persistence ---
+
+const MAX_COMPREHENSION_ATTEMPTS = 200;
+
+function isValidComprehensionAttempt(value: unknown): value is ComprehensionAttempt {
+  if (typeof value !== 'object' || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.articleId === 'string' &&
+    typeof obj.articleTitle === 'string' &&
+    Array.isArray(obj.questions) &&
+    typeof obj.overallScore === 'number' &&
+    typeof obj.createdAt === 'number'
+  );
+}
+
+export function loadComprehensionAttempts(): ComprehensionAttempt[] {
+  runStorageMigrations();
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.comprehensionAttempts);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidComprehensionAttempt);
+  } catch {
+    return [];
+  }
+}
+
+export function saveComprehensionAttempts(attempts: ComprehensionAttempt[]): void {
+  runStorageMigrations();
+  localStorage.setItem(
+    STORAGE_KEYS.comprehensionAttempts,
+    JSON.stringify(attempts.slice(0, MAX_COMPREHENSION_ATTEMPTS))
+  );
+}
+
+export function appendComprehensionAttempt(attempt: ComprehensionAttempt): void {
+  const existing = loadComprehensionAttempts();
+  saveComprehensionAttempts([attempt, ...existing]);
 }

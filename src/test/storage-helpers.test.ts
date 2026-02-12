@@ -19,8 +19,11 @@ import {
   saveTrainingScoreDetails,
   loadTrainingScaffold,
   saveTrainingScaffold,
+  loadComprehensionAttempts,
+  appendComprehensionAttempt,
+  saveComprehensionAttempts,
 } from '../lib/storage';
-import type { Passage } from '../types';
+import type { Passage, ComprehensionAttempt } from '../types';
 import {
   createTestArticle,
   seedArticles,
@@ -203,7 +206,7 @@ describe('storage-helpers with real storage functions', () => {
     const settings = loadSettings();
     const drill = loadDrillState();
 
-    expect(localStorage.getItem('speedread_schema_version')).toBe('1');
+    expect(localStorage.getItem('speedread_schema_version')).toBe('2');
     expect(settings.wpmByActivity['paced-reading']).toBe(350);
     expect(settings.lastSession?.activity).toBe('paced-reading');
     expect(drill).toEqual({
@@ -301,5 +304,127 @@ describe('storage-helpers with real storage functions', () => {
     expect(loadTrainingSentenceMode()).toBe(true);
     expect(loadTrainingScoreDetails()).toBe(true);
     expect(loadTrainingScaffold()).toBe(false);
+  });
+});
+
+function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {
+  return {
+    id: `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    articleId: 'a1',
+    articleTitle: 'Test Article',
+    entryPoint: 'post-reading',
+    questions: [],
+    overallScore: 75,
+    createdAt: Date.now(),
+    durationMs: 60000,
+    ...overrides,
+  };
+}
+
+describe('comprehension attempt storage', () => {
+  it('returns empty array when no key exists', () => {
+    expect(loadComprehensionAttempts()).toEqual([]);
+  });
+
+  it('round-trips an attempt via append + load', () => {
+    const attempt = makeAttempt({ id: 'rt-1', overallScore: 80 });
+    appendComprehensionAttempt(attempt);
+
+    const loaded = loadComprehensionAttempts();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].id).toBe('rt-1');
+    expect(loaded[0].overallScore).toBe(80);
+  });
+
+  it('filters out malformed entries on load', () => {
+    localStorage.setItem(
+      'speedread_comprehension_attempts',
+      JSON.stringify([
+        makeAttempt({ id: 'good-1' }),
+        { bad: 'entry' },
+        null,
+        42,
+        makeAttempt({ id: 'good-2' }),
+      ])
+    );
+
+    const loaded = loadComprehensionAttempts();
+    expect(loaded).toHaveLength(2);
+    expect(loaded[0].id).toBe('good-1');
+    expect(loaded[1].id).toBe('good-2');
+  });
+
+  it('caps stored attempts at 200, keeping most recent first', () => {
+    const attempts: ComprehensionAttempt[] = [];
+    for (let i = 0; i < 210; i++) {
+      attempts.push(makeAttempt({ id: `cap-${i}`, createdAt: 1000 + i }));
+    }
+    saveComprehensionAttempts(attempts);
+
+    const loaded = loadComprehensionAttempts();
+    expect(loaded).toHaveLength(200);
+    expect(loaded[0].id).toBe('cap-0');
+    expect(loaded[199].id).toBe('cap-199');
+  });
+
+  it('prepends new attempts (most recent first)', () => {
+    appendComprehensionAttempt(makeAttempt({ id: 'first' }));
+    appendComprehensionAttempt(makeAttempt({ id: 'second' }));
+
+    const loaded = loadComprehensionAttempts();
+    expect(loaded).toHaveLength(2);
+    expect(loaded[0].id).toBe('second');
+    expect(loaded[1].id).toBe('first');
+  });
+
+  it('schema migration from V1 leaves comprehension attempts empty and bumps version to 2', () => {
+    // Seed V1 state: schema version 1, no comprehension key
+    localStorage.setItem('speedread_schema_version', '1');
+    localStorage.setItem('speedread_settings', JSON.stringify({ defaultWpm: 300 }));
+
+    const loaded = loadComprehensionAttempts();
+    expect(loaded).toEqual([]);
+    expect(localStorage.getItem('speedread_schema_version')).toBe('2');
+  });
+
+  it('existing V1 migrations still work after V2 bump', () => {
+    // Seed pre-V1 state (no schema version)
+    localStorage.setItem('speedread_settings', JSON.stringify({
+      defaultWpm: 350,
+      lastSession: {
+        articleId: 'a1',
+        activity: 'speed-reading',
+        displayMode: 'saccade',
+      },
+    }));
+    localStorage.setItem('speedread_drill_state', JSON.stringify({
+      wpm: 290,
+      rollingScores: [0.7, 'bad', 0.8],
+      minWpm: 420,
+      maxWpm: 230,
+    }));
+
+    const settings = loadSettings();
+    const drill = loadDrillState();
+
+    expect(localStorage.getItem('speedread_schema_version')).toBe('2');
+    expect(settings.wpmByActivity['paced-reading']).toBe(350);
+    expect(settings.lastSession?.activity).toBe('paced-reading');
+    expect(drill).toEqual({
+      wpm: 290,
+      rollingScores: [0.7, 0.8],
+      minWpm: 230,
+      maxWpm: 420,
+    });
+  });
+
+  it('returns empty array for non-array JSON', () => {
+    localStorage.setItem('speedread_comprehension_attempts', '"not-an-array"');
+    expect(loadComprehensionAttempts()).toEqual([]);
+  });
+
+  it('returns empty array for corrupt JSON', () => {
+    localStorage.setItem('speedread_comprehension_attempts', '{broken');
+    expect(loadComprehensionAttempts()).toEqual([]);
   });
 });

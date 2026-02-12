@@ -68,6 +68,7 @@ export function clearStorage(): void {
   localStorage.removeItem('speedread_training_scaffold');
   localStorage.removeItem('speedread_daily_date');
   localStorage.removeItem('speedread_daily_article_id');
+  localStorage.removeItem('speedread_comprehension_attempts');
 }
 
 /**
