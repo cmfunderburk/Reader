@@ -2,6 +2,7 @@ appId: com.reader.app
 productName: Reader
 directories:
   output: dist-electron-build
+npmRebuild: false
 
 files:
   - dist/**/*
