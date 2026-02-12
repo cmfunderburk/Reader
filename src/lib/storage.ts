@@ -362,11 +362,14 @@ export function saveTrainingHistory(articleId: string, history: TrainingHistory)
 
 export interface DrillState {
   wpm: number;
-  charLimit: number;
   rollingScores: number[];
   corpusFamily?: 'wiki' | 'prose';
   tier?: 'easy' | 'medium' | 'hard';
+  minWpm?: number;
+  maxWpm?: number;
   autoAdjustDifficulty?: boolean;
+  // Legacy field kept for backward compatibility with old saved state.
+  charLimit?: number;
 }
 
 const DRILL_STATE_KEY = 'speedread_drill_state';
@@ -374,7 +377,24 @@ const DRILL_STATE_KEY = 'speedread_drill_state';
 export function loadDrillState(): DrillState | null {
   try {
     const data = localStorage.getItem(DRILL_STATE_KEY);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    const parsed = JSON.parse(data) as Partial<DrillState>;
+    const wpm = clampWpm(parsed.wpm, DEFAULT_SETTINGS.defaultWpm);
+    const minWpmRaw = parsed.minWpm ?? Math.max(MIN_WPM, wpm - 50);
+    const maxWpmRaw = parsed.maxWpm ?? Math.min(MAX_WPM, wpm + 50);
+    let minWpm = clampWpm(minWpmRaw, Math.max(MIN_WPM, wpm - 50));
+    let maxWpm = clampWpm(maxWpmRaw, Math.min(MAX_WPM, wpm + 50));
+    if (minWpm > maxWpm) [minWpm, maxWpm] = [maxWpm, minWpm];
+    const rollingScores = Array.isArray(parsed.rollingScores)
+      ? parsed.rollingScores.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+      : [];
+    return {
+      ...parsed,
+      wpm,
+      minWpm,
+      maxWpm,
+      rollingScores,
+    };
   } catch {
     return null;
   }

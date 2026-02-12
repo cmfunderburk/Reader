@@ -4,7 +4,7 @@ import type { CorpusArticle, CorpusFamily, CorpusInfo, CorpusTier } from '../typ
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import { isExactMatch, isWordKnown, isDetailWord } from '../lib/levenshtein';
 import { loadTrainingHistory, saveTrainingHistory, loadDrillState, saveDrillState } from '../lib/storage';
-import { adjustDrillDifficulty, getDrillRound, MIN_CHAR_LIMIT } from '../lib/trainingDrill';
+import { DRILL_WPM_STEP, adjustDrillDifficulty, getDrillRound } from '../lib/trainingDrill';
 import type { TrainingHistory, DrillState } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
 
@@ -22,6 +22,8 @@ const DRILL_FAMILIES: Array<{ id: CorpusFamily; label: string }> = [
   { id: 'wiki', label: 'Wikipedia' },
   { id: 'prose', label: 'Prose' },
 ];
+const MIN_WPM = 100;
+const MAX_WPM = 800;
 
 interface TrainingReaderProps {
   article?: Article;
@@ -156,8 +158,9 @@ export function TrainingReader({
   const [corpusInfo, setCorpusInfo] = useState<CorpusInfo | null>(null);
   const [drillArticle, setDrillArticle] = useState<CorpusArticle | null>(null);
   const [drillSentenceIndex, setDrillSentenceIndex] = useState(0);
-  const [charLimit, setCharLimit] = useState(() => savedDrill?.charLimit ?? MIN_CHAR_LIMIT);
   const [autoAdjustDifficulty, setAutoAdjustDifficulty] = useState(() => savedDrill?.autoAdjustDifficulty ?? false);
+  const [drillMinWpm, setDrillMinWpm] = useState(() => savedDrill?.minWpm ?? Math.max(MIN_WPM, (savedDrill?.wpm ?? initialWpm) - 50));
+  const [drillMaxWpm, setDrillMaxWpm] = useState(() => savedDrill?.maxWpm ?? Math.min(MAX_WPM, (savedDrill?.wpm ?? initialWpm) + 50));
   const [sessionTimeLimit, setSessionTimeLimit] = useState<number | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
   const [rollingScores, setRollingScores] = useState<number[]>(() => savedDrill?.rollingScores ?? []);
@@ -177,13 +180,14 @@ export function TrainingReader({
   useEffect(() => {
     saveDrillState({
       wpm,
-      charLimit,
       rollingScores,
       corpusFamily: drillCorpusFamily,
       tier: drillTier,
+      minWpm: drillMinWpm,
+      maxWpm: drillMaxWpm,
       autoAdjustDifficulty,
     });
-  }, [wpm, charLimit, rollingScores, drillCorpusFamily, drillTier, autoAdjustDifficulty]);
+  }, [wpm, rollingScores, drillCorpusFamily, drillTier, drillMinWpm, drillMaxWpm, autoAdjustDifficulty]);
 
   // Keep selected tier valid for the selected corpus family.
   useEffect(() => {
@@ -194,9 +198,24 @@ export function TrainingReader({
     if (fallbackTier) setDrillTier(fallbackTier);
   }, [corpusInfo, drillCorpusFamily, drillTier]);
 
+  useEffect(() => {
+    if (drillMinWpm > drillMaxWpm) {
+      setDrillMaxWpm(drillMinWpm);
+      return;
+    }
+    if (!autoAdjustDifficulty) return;
+    if (wpm < drillMinWpm) {
+      setWpm(drillMinWpm);
+      onWpmChange(drillMinWpm);
+    } else if (wpm > drillMaxWpm) {
+      setWpm(drillMaxWpm);
+      onWpmChange(drillMaxWpm);
+    }
+  }, [autoAdjustDifficulty, drillMinWpm, drillMaxWpm, wpm, onWpmChange]);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const inputContainerRef = useRef<HTMLSpanElement>(null);
-  const lastDrillAdjRef = useRef({ wpmDelta: 0, charDelta: 0 });
+  const lastDrillAdjRef = useRef({ wpmDelta: 0 });
   const lastDetailCountRef = useRef(0);
 
   const currentParagraph = paragraphs[currentParagraphIndex] ?? '';
@@ -215,9 +234,9 @@ export function TrainingReader({
 
   const { drillRoundText, drillRoundSentenceCount } = useMemo(() => {
     if (!isDrill) return { drillRoundText: '', drillRoundSentenceCount: 0 };
-    const round = getDrillRound(drillSentences, drillSentenceIndex, charLimit, autoAdjustDifficulty);
+    const round = getDrillRound(drillSentences, drillSentenceIndex);
     return { drillRoundText: round.text, drillRoundSentenceCount: round.sentenceCount };
-  }, [isDrill, drillSentences, drillSentenceIndex, charLimit, autoAdjustDifficulty]);
+  }, [isDrill, drillSentences, drillSentenceIndex]);
 
   const currentText = isDrill && drillArticle
     ? drillRoundText
@@ -369,12 +388,11 @@ export function TrainingReader({
       setRollingScores(prev => [...prev, scoreNorm]);
 
       if (autoAdjustDifficulty && (score < 90 || score >= 95)) {
-        const adjustment = adjustDrillDifficulty(wpm, charLimit, score >= 95);
-        lastDrillAdjRef.current = { wpmDelta: adjustment.wpm - wpm, charDelta: adjustment.charLimit - charLimit };
+        const adjustment = adjustDrillDifficulty(wpm, drillMinWpm, drillMaxWpm, score >= 95);
+        lastDrillAdjRef.current = { wpmDelta: adjustment.wpm - wpm };
         if (adjustment.wpm !== wpm) { setWpm(adjustment.wpm); onWpmChange(adjustment.wpm); }
-        if (adjustment.charLimit !== charLimit) setCharLimit(adjustment.charLimit);
       } else {
-        lastDrillAdjRef.current = { wpmDelta: 0, charDelta: 0 };
+        lastDrillAdjRef.current = { wpmDelta: 0 };
       }
     } else {
       // Article mode: persist to training history
@@ -408,7 +426,7 @@ export function TrainingReader({
 
     lastDetailCountRef.current = detailTotal;
     setPhase('feedback');
-  }, [isDrill, currentParagraphIndex, wpm, charLimit, autoAdjustDifficulty, sessionHistory, onWpmChange, articleId, sentenceMode, currentSentenceIndex, sentenceChunks.length, scoreDetails, currentText]);
+  }, [isDrill, currentParagraphIndex, wpm, autoAdjustDifficulty, drillMinWpm, drillMaxWpm, sessionHistory, onWpmChange, articleId, sentenceMode, currentSentenceIndex, sentenceChunks.length, scoreDetails, currentText]);
 
   const processRecallTokens = useCallback((tokens: string[]) => {
     if (tokens.length === 0) return false;
@@ -785,7 +803,7 @@ export function TrainingReader({
     const selectedFamilyInfo = corpusInfo?.[drillCorpusFamily];
     const tierInfo = selectedFamilyInfo?.[drillTier];
     const drillPacingText = autoAdjustDifficulty
-      ? 'WPM and round length adjust based on your comprehension score.'
+      ? `Auto-adjust uses ±${DRILL_WPM_STEP} WPM steps within your selected range.`
       : 'WPM stays fixed at your setting and each round is one sentence.';
     const drillDescription = drillCorpusFamily === 'wiki'
       ? (drillTier === 'easy'
@@ -832,8 +850,8 @@ export function TrainingReader({
             <span className="control-label">Speed:</span>
             <input
               type="range"
-              min="100"
-              max="800"
+              min={MIN_WPM}
+              max={MAX_WPM}
               step="10"
               value={wpm}
               onChange={e => { const v = Number(e.target.value); setWpm(v); onWpmChange(v); }}
@@ -893,9 +911,61 @@ export function TrainingReader({
                 <input
                   type="checkbox"
                   checked={autoAdjustDifficulty}
-                  onChange={e => setAutoAdjustDifficulty(e.target.checked)}
+                  onChange={e => {
+                    const next = e.target.checked;
+                    setAutoAdjustDifficulty(next);
+                    if (next) {
+                      const clamped = Math.max(drillMinWpm, Math.min(drillMaxWpm, wpm));
+                      if (clamped !== wpm) {
+                        setWpm(clamped);
+                        onWpmChange(clamped);
+                      }
+                    }
+                  }}
                 />
                 <span className="control-label">Auto-adjust drill difficulty</span>
+              </label>
+              <label className="training-setup-wpm">
+                <span className="control-label">Min WPM:</span>
+                <input
+                  type="range"
+                  min={MIN_WPM}
+                  max={MAX_WPM}
+                  step="10"
+                  value={drillMinWpm}
+                  onChange={e => {
+                    const nextMin = Number(e.target.value);
+                    setDrillMinWpm(nextMin);
+                    if (nextMin > drillMaxWpm) setDrillMaxWpm(nextMin);
+                    if (autoAdjustDifficulty && wpm < nextMin) {
+                      setWpm(nextMin);
+                      onWpmChange(nextMin);
+                    }
+                  }}
+                  className="control-slider wpm-slider"
+                />
+                <span className="control-value">{drillMinWpm}</span>
+              </label>
+              <label className="training-setup-wpm">
+                <span className="control-label">Max WPM:</span>
+                <input
+                  type="range"
+                  min={MIN_WPM}
+                  max={MAX_WPM}
+                  step="10"
+                  value={drillMaxWpm}
+                  onChange={e => {
+                    const nextMax = Number(e.target.value);
+                    setDrillMaxWpm(nextMax);
+                    if (nextMax < drillMinWpm) setDrillMinWpm(nextMax);
+                    if (autoAdjustDifficulty && wpm > nextMax) {
+                      setWpm(nextMax);
+                      onWpmChange(nextMax);
+                    }
+                  }}
+                  className="control-slider wpm-slider"
+                />
+                <span className="control-value">{drillMaxWpm}</span>
               </label>
               <label className="training-setup-sentence">
                 <input
@@ -914,7 +984,7 @@ export function TrainingReader({
                 <span className="control-label">Show first-letter scaffolds</span>
               </label>
               <div className="training-setup-info">
-                {(tierInfo?.totalArticles ?? 0).toLocaleString()} articles
+                {(tierInfo?.totalArticles ?? 0).toLocaleString()} articles · range {drillMinWpm}-{drillMaxWpm} WPM
               </div>
               <button
                 onClick={handleStart}
@@ -1088,7 +1158,7 @@ export function TrainingReader({
           <span className="training-phase-label">Feedback</span>
           <span className="training-progress">
             {isDrill
-              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · ${autoAdjustDifficulty ? `≤${charLimit}ch` : '1 sentence'}`
+              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · 1 sentence`
               : `Paragraph ${currentParagraphIndex + 1} / ${paragraphs.length}`
             }
           </span>
@@ -1119,11 +1189,6 @@ export function TrainingReader({
               {autoAdjustDifficulty && drillAdj.wpmDelta !== 0 && (
                 <div className="training-wpm-change">
                   WPM {drillAdj.wpmDelta > 0 ? '+' : ''}{drillAdj.wpmDelta} → {wpm}
-                </div>
-              )}
-              {autoAdjustDifficulty && drillAdj.charDelta !== 0 && (
-                <div className="training-wpm-change">
-                  Limit {drillAdj.charDelta > 0 ? '+' : ''}{drillAdj.charDelta} → {charLimit}ch
                 </div>
               )}
             </>
@@ -1164,7 +1229,7 @@ export function TrainingReader({
           <span className="training-phase-label">{paused ? 'Paused' : 'Read'}</span>
           <span className="training-progress">
             {isDrill
-              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · ${autoAdjustDifficulty ? `≤${charLimit}ch` : '1 sentence'}`
+              ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · 1 sentence`
               : <>Paragraph {currentParagraphIndex + 1} / {paragraphs.length}
                 {sentenceMode && sentenceChunks.length > 1 && ` · Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length}`}</>
             }
@@ -1211,7 +1276,7 @@ export function TrainingReader({
         <span className="training-phase-label">{paused ? 'Paused' : 'Recall'}</span>
         <span className="training-progress">
           {isDrill
-            ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · ${autoAdjustDifficulty ? `≤${charLimit}ch` : '1 sentence'} · ${recallWordIndex} / ${totalRecallWords} words`
+            ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · 1 sentence · ${recallWordIndex} / ${totalRecallWords} words`
             : sentenceMode && sentenceChunks.length > 1
               ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recallWordIndex} / ${totalRecallWords} words`
               : `${recallWordIndex} / ${totalRecallWords} words`

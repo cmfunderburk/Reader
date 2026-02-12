@@ -181,25 +181,27 @@ describe('storage-helpers with real storage functions', () => {
   it('drill state persists auto-adjust toggle', () => {
     saveDrillState({
       wpm: 300,
-      charLimit: 120,
       rollingScores: [0.9, 0.95],
       corpusFamily: 'prose',
       tier: 'medium',
+      minWpm: 240,
+      maxWpm: 420,
       autoAdjustDifficulty: true,
     });
 
     const loaded = loadDrillState();
     expect(loaded).toEqual({
       wpm: 300,
-      charLimit: 120,
       rollingScores: [0.9, 0.95],
       corpusFamily: 'prose',
       tier: 'medium',
+      minWpm: 240,
+      maxWpm: 420,
       autoAdjustDifficulty: true,
     });
   });
 
-  it('legacy drill state without auto-adjust toggle remains readable', () => {
+  it('legacy drill state without range settings backfills min/max WPM', () => {
     localStorage.setItem('speedread_drill_state', JSON.stringify({
       wpm: 280,
       charLimit: 80,
@@ -213,6 +215,25 @@ describe('storage-helpers with real storage functions', () => {
       charLimit: 80,
       rollingScores: [0.8],
       tier: 'hard',
+      minWpm: 230,
+      maxWpm: 330,
+    });
+  });
+
+  it('normalizes drill state with reversed min/max range', () => {
+    localStorage.setItem('speedread_drill_state', JSON.stringify({
+      wpm: 300,
+      rollingScores: [0.9],
+      minWpm: 500,
+      maxWpm: 250,
+    }));
+
+    const loaded = loadDrillState();
+    expect(loaded).toEqual({
+      wpm: 300,
+      rollingScores: [0.9],
+      minWpm: 250,
+      maxWpm: 500,
     });
   });
 });
