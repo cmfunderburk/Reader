@@ -1,4 +1,5 @@
 import type { Activity, Article, DisplayMode, SessionSnapshot, TokenMode } from '../types';
+import type { ContinueSessionInfo } from './appViewSelectors';
 import type { ViewState } from './appViewState';
 
 interface ResumeReadingPlan {
@@ -27,12 +28,6 @@ export interface SessionLaunchPlan {
   };
   nextView: ViewState;
   autoPlay: boolean;
-}
-
-export interface ContinueSessionInfo {
-  article: Article;
-  activity: Activity;
-  displayMode: DisplayMode;
 }
 
 function normalizeReadingDisplayMode(displayMode: DisplayMode): 'saccade' | 'rsvp' {
