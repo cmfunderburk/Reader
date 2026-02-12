@@ -65,10 +65,11 @@ Exit criteria:
 - Intentionally wiring-only callbacks: `handleSelectActivity`, `handleStartDrill`, `handleProgressChange`, and direct settings toggles that only dispatch UI state/storage writes without branching domain rules.
 
 ## Phase 4: Scaling + Quality Gates
-- Evaluate moving large payload storage from `localStorage` to IndexedDB/SQLite.
-- Add coverage thresholds for `components` and critical state modules.
-- Standardize CI checks to include web + Electron type checks.
-- Add a single local gate command (`npm run verify`) to run lint + tests + build consistently.
+- [ ] Evaluate moving large payload storage from `localStorage` to IndexedDB/SQLite.
+- [x] Add coverage thresholds for `components` and critical state modules.
+- [x] Standardize CI checks to include web + Electron type checks.
+- [x] Add a single local gate command (`npm run verify`) to run lint + tests + build consistently.
+- [x] Add CI gate command (`npm run verify:ci`) to enforce coverage thresholds before build.
 
 Exit criteria:
 - Storage strategy documented and implemented for large-content paths.
