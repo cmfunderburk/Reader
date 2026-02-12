@@ -13,6 +13,12 @@ import {
   saveSettings,
   loadDrillState,
   saveDrillState,
+  loadTrainingSentenceMode,
+  saveTrainingSentenceMode,
+  loadTrainingScoreDetails,
+  saveTrainingScoreDetails,
+  loadTrainingScaffold,
+  saveTrainingScaffold,
 } from '../lib/storage';
 import type { Passage } from '../types';
 import {
@@ -178,6 +184,52 @@ describe('storage-helpers with real storage functions', () => {
     expect(loaded.wpmByActivity.training).toBe(360);
   });
 
+  it('runs schema migration and persists normalized legacy settings/drill state', () => {
+    localStorage.setItem('speedread_settings', JSON.stringify({
+      defaultWpm: 350,
+      lastSession: {
+        articleId: 'a1',
+        activity: 'speed-reading',
+        displayMode: 'saccade',
+      },
+    }));
+    localStorage.setItem('speedread_drill_state', JSON.stringify({
+      wpm: 290,
+      rollingScores: [0.7, 'bad', 0.8],
+      minWpm: 420,
+      maxWpm: 230,
+    }));
+
+    const settings = loadSettings();
+    const drill = loadDrillState();
+
+    expect(localStorage.getItem('speedread_schema_version')).toBe('1');
+    expect(settings.wpmByActivity['paced-reading']).toBe(350);
+    expect(settings.lastSession?.activity).toBe('paced-reading');
+    expect(drill).toEqual({
+      wpm: 290,
+      rollingScores: [0.7, 0.8],
+      minWpm: 230,
+      maxWpm: 420,
+    });
+
+    const persistedSettings = JSON.parse(localStorage.getItem('speedread_settings') || '{}');
+    expect(persistedSettings.wpmByActivity).toEqual({
+      'paced-reading': 350,
+      'active-recall': 350,
+      training: 350,
+    });
+    expect(persistedSettings.lastSession.activity).toBe('paced-reading');
+
+    const persistedDrill = JSON.parse(localStorage.getItem('speedread_drill_state') || '{}');
+    expect(persistedDrill).toEqual({
+      wpm: 290,
+      rollingScores: [0.7, 0.8],
+      minWpm: 230,
+      maxWpm: 420,
+    });
+  });
+
   it('drill state persists auto-adjust toggle', () => {
     saveDrillState({
       wpm: 300,
@@ -235,5 +287,19 @@ describe('storage-helpers with real storage functions', () => {
       minWpm: 250,
       maxWpm: 500,
     });
+  });
+
+  it('training preference helpers persist and load values', () => {
+    expect(loadTrainingSentenceMode()).toBe(false);
+    expect(loadTrainingScoreDetails()).toBe(false);
+    expect(loadTrainingScaffold()).toBe(true);
+
+    saveTrainingSentenceMode(true);
+    saveTrainingScoreDetails(true);
+    saveTrainingScaffold(false);
+
+    expect(loadTrainingSentenceMode()).toBe(true);
+    expect(loadTrainingScoreDetails()).toBe(true);
+    expect(loadTrainingScaffold()).toBe(false);
   });
 });

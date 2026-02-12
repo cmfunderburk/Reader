@@ -56,11 +56,18 @@ export function getStoredPredictionPosition(articleId: string): number | undefin
  * Clear all app storage keys. Call in beforeEach for isolation.
  */
 export function clearStorage(): void {
+  localStorage.removeItem('speedread_schema_version');
   localStorage.removeItem(STORAGE_KEY);
   localStorage.removeItem('speedread_feeds');
   localStorage.removeItem('speedread_settings');
   localStorage.removeItem('speedread_passages');
   localStorage.removeItem('speedread_session_snapshot');
+  localStorage.removeItem('speedread_drill_state');
+  localStorage.removeItem('speedread_training_sentence');
+  localStorage.removeItem('speedread_training_score_details');
+  localStorage.removeItem('speedread_training_scaffold');
+  localStorage.removeItem('speedread_daily_date');
+  localStorage.removeItem('speedread_daily_article_id');
 }
 
 /**

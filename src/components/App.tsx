@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useReducer, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Reader } from './Reader';
 import { ReaderControls } from './ReaderControls';
 import { ProgressBar } from './ProgressBar';
@@ -54,35 +54,47 @@ import type {
   PassageCaptureKind,
   PassageReviewMode,
   PassageReviewState,
-  SessionSnapshot,
   ThemePreference,
 } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
-import { formatBookName } from './Library';
-import { isSentenceBoundaryChunk } from '../lib/predictionPreview';
-
-type ViewState =
-  | { screen: 'home' }
-  | { screen: 'content-browser'; activity: Activity }
-  | { screen: 'preview'; activity: Activity; article: Article }
-  | { screen: 'active-reader' }
-  | { screen: 'active-exercise' }
-  | { screen: 'active-training'; article?: Article }
-  | { screen: 'settings' }
-  | { screen: 'library-settings' }
-  | { screen: 'add' }; // bookmarklet import
-
-function getInitialView(): ViewState {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('import') === '1' ? { screen: 'add' } : { screen: 'home' };
-}
-
-const ACTIVITY_LABELS: Record<Activity, string> = {
-  'paced-reading': 'Paced Reading',
-  'active-recall': 'Active Recall',
-  'training': 'Training',
-};
+import { formatBookName } from '../lib/libraryFormatting';
+import { appViewStateReducer, getInitialViewState, viewStateToAction } from '../lib/appViewState';
+import {
+  planCloseActiveExercise,
+  planContinueSession,
+  planFeaturedArticleLaunch,
+  planStartReadingFromPreview,
+} from '../lib/sessionTransitions';
+import {
+  getHeaderBackAction,
+  getActiveWpmActivity,
+  getHeaderTitle,
+  isActiveView,
+  planContentBrowserArticleSelection,
+  resolveContinueSessionInfo,
+  shouldShowBackButton,
+} from '../lib/appViewSelectors';
+import type { ViewState } from '../lib/appViewState';
+import { planEscapeAction } from '../lib/appKeyboard';
+import { buildPassageReviewLaunchPlan } from '../lib/passageReviewLaunch';
+import {
+  getFeaturedFetchErrorMessage,
+  planFeaturedFetchResult,
+  resolveDailyFeaturedArticle,
+} from '../lib/featuredArticleLaunch';
+import { buildPassageReviewQueue } from '../lib/passageQueue';
+import {
+  normalizeCaptureLineText,
+  planLastLinesCapture,
+  planParagraphCapture,
+  planSentenceCapture,
+} from '../lib/passageCapture';
+import {
+  appendFeed,
+  mergeFeedArticles,
+  updateFeedLastFetched,
+} from '../lib/appFeedTransitions';
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
 const MIN_WPM = 100;
@@ -94,16 +106,6 @@ function clipPassagePreview(text: string, maxChars: number = 180): string {
   return `${normalized.slice(0, maxChars - 1)}...`;
 }
 
-function passageStatePriority(state: PassageReviewState): number {
-  switch (state) {
-    case 'hard': return 0;
-    case 'new': return 1;
-    case 'easy': return 2;
-    case 'done': return 3;
-    default: return 4;
-  }
-}
-
 function resolveThemePreference(themePreference: ThemePreference, systemTheme: 'dark' | 'light'): 'dark' | 'light' {
   if (themePreference === 'system') return systemTheme;
   return themePreference;
@@ -111,10 +113,6 @@ function resolveThemePreference(themePreference: ThemePreference, systemTheme: '
 
 function clampWpm(value: number): number {
   return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(value)));
-}
-
-function normalizeCaptureLineText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
 }
 
 function captureKindLabel(captureKind: PassageCaptureKind): string {
@@ -203,7 +201,15 @@ export function App() {
   }, []);
 
   const [feeds, setFeeds] = useState<Feed[]>(() => loadFeeds());
-  const [viewState, setViewState] = useState<ViewState>(getInitialView);
+  const articlesRef = useRef<Article[]>(articles);
+  const [viewState, dispatchViewState] = useReducer(
+    appViewStateReducer,
+    window.location.search,
+    getInitialViewState
+  );
+  const setViewState = useCallback((next: ViewState) => {
+    dispatchViewState(viewStateToAction(next));
+  }, []);
   const [isLoadingFeed, setIsLoadingFeed] = useState(false);
   const [dailyStatus, setDailyStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [dailyError, setDailyError] = useState<string | null>(null);
@@ -237,6 +243,10 @@ export function App() {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
     document.documentElement.style.colorScheme = resolvedTheme;
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    articlesRef.current = articles;
+  }, [articles]);
 
   const rsvp = useRSVP({
     initialWpm: settings.wpmByActivity['paced-reading'],
@@ -281,69 +291,55 @@ export function App() {
   const navigate = useCallback((next: ViewState) => {
     rsvp.pause();
     setViewState(next);
-  }, [rsvp]);
+  }, [rsvp, setViewState]);
 
   const goHome = useCallback(() => {
     rsvp.pause();
     setViewState({ screen: 'home' });
-  }, [rsvp]);
+  }, [rsvp, setViewState]);
 
   const closeActiveExercise = useCallback(() => {
     const snapshot = loadSessionSnapshot();
-    if (snapshot?.reading) {
-      const sourceArticle = articles.find((article) => article.id === snapshot.reading!.articleId);
-      if (sourceArticle) {
-        syncWpmForActivity('paced-reading');
-        const targetDisplayMode = snapshot.reading.displayMode === 'saccade' || snapshot.reading.displayMode === 'rsvp'
-          ? snapshot.reading.displayMode
-          : 'saccade';
-        rsvp.loadArticle(sourceArticle, { displayMode: targetDisplayMode });
-        setViewState({ screen: 'active-reader' });
-        window.setTimeout(() => {
-          rsvp.goToIndex(snapshot.reading!.chunkIndex);
-        }, 0);
-        saveSessionSnapshot({
-          ...snapshot,
-          training: undefined,
-          lastTransition: 'return-to-reading',
-          updatedAt: Date.now(),
-        });
-        return;
-      }
+    const closePlan = planCloseActiveExercise(snapshot, articles, Date.now());
+
+    if (closePlan.type === 'resume-reading') {
+      syncWpmForActivity('paced-reading');
+      rsvp.loadArticle(closePlan.plan.article, { displayMode: closePlan.plan.displayMode });
+      setViewState({ screen: 'active-reader' });
+      window.setTimeout(() => {
+        rsvp.goToIndex(closePlan.plan.chunkIndex);
+      }, 0);
+      saveSessionSnapshot(closePlan.plan.snapshot);
+      return;
+    }
+
+    if (closePlan.clearSnapshot) {
       clearSessionSnapshot();
     }
+
     goHome();
-  }, [articles, goHome, rsvp, syncWpmForActivity]);
+  }, [articles, goHome, rsvp, setViewState, syncWpmForActivity]);
 
   // Keyboard shortcuts
-  const isActiveView = viewState.screen === 'active-reader' || viewState.screen === 'active-exercise' || viewState.screen === 'active-training';
-  const activeWpmActivity: Activity | null = viewState.screen === 'active-reader'
-    ? 'paced-reading'
-    : viewState.screen === 'active-exercise'
-      ? 'active-recall'
-      : viewState.screen === 'active-training'
-        ? 'training'
-        : null;
+  const activeView = isActiveView(viewState);
+  const activeWpmActivity: Activity | null = getActiveWpmActivity(viewState);
 
   useKeyboard({
-    onSpace: isActiveView && rsvp.displayMode !== 'prediction' && rsvp.displayMode !== 'recall' && rsvp.displayMode !== 'training'
+    onSpace: activeView && rsvp.displayMode !== 'prediction' && rsvp.displayMode !== 'recall' && rsvp.displayMode !== 'training'
       ? rsvp.toggle : undefined,
-    onLeft: isActiveView ? rsvp.prev : undefined,
-    onRight: isActiveView ? rsvp.next : undefined,
-    onBracketLeft: isActiveView && activeWpmActivity
+    onLeft: activeView ? rsvp.prev : undefined,
+    onRight: activeView ? rsvp.next : undefined,
+    onBracketLeft: activeView && activeWpmActivity
       ? () => setActivityWpm(activeWpmActivity, rsvp.wpm - 10)
       : undefined,
-    onBracketRight: isActiveView && activeWpmActivity
+    onBracketRight: activeView && activeWpmActivity
       ? () => setActivityWpm(activeWpmActivity, rsvp.wpm + 10)
       : undefined,
     onEscape: () => {
-      if (viewState.screen === 'home') return;
-      if (viewState.screen === 'active-exercise') {
+      const escapeAction = planEscapeAction(viewState);
+      if (escapeAction === 'close-active-exercise') {
         closeActiveExercise();
-      } else if (isActiveView) {
-        goHome();
-      } else if (viewState.screen === 'content-browser' || viewState.screen === 'preview' ||
-                 viewState.screen === 'settings' || viewState.screen === 'library-settings' || viewState.screen === 'add') {
+      } else if (escapeAction === 'go-home') {
         goHome();
       }
     },
@@ -374,7 +370,7 @@ export function App() {
     if (viewState.screen === 'add') {
       setViewState({ screen: 'home' });
     }
-  }, [articles, viewState.screen]);
+  }, [articles, setViewState, viewState.screen]);
 
   const handleRemoveArticle = useCallback((id: string) => {
     const updated = articles.filter(a => a.id !== id);
@@ -386,21 +382,21 @@ export function App() {
     setIsLoadingFeed(true);
     try {
       const { feed, articles: feedArticles } = await fetchFeed(url);
-      const updatedFeeds = [...feeds, feed];
-      setFeeds(updatedFeeds);
-      saveFeeds(updatedFeeds);
-
-      const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
-      const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
-      if (newArticles.length > 0) {
-        const updatedArticles = [...articles, ...newArticles];
-        setArticles(updatedArticles);
-        saveArticles(updatedArticles);
-      }
+      setFeeds((prevFeeds) => {
+        const nextFeeds = appendFeed(prevFeeds, feed);
+        saveFeeds(nextFeeds);
+        return nextFeeds;
+      });
+      setArticles((prevArticles) => {
+        const articlePlan = mergeFeedArticles(prevArticles, feedArticles);
+        if (articlePlan.addedArticleCount === 0) return prevArticles;
+        saveArticles(articlePlan.nextArticles);
+        return articlePlan.nextArticles;
+      });
     } finally {
       setIsLoadingFeed(false);
     }
-  }, [feeds, articles]);
+  }, []);
 
   const handleRemoveFeed = useCallback((id: string) => {
     const updated = feeds.filter(f => f.id !== id);
@@ -412,22 +408,22 @@ export function App() {
     setIsLoadingFeed(true);
     try {
       const { articles: feedArticles } = await fetchFeed(feed.url);
-      const existingUrls = new Set(articles.map(a => a.url).filter(Boolean));
-      const newArticles = feedArticles.filter(a => !a.url || !existingUrls.has(a.url));
-      if (newArticles.length > 0) {
-        const updatedArticles = [...articles, ...newArticles];
-        setArticles(updatedArticles);
-        saveArticles(updatedArticles);
-      }
-      const updatedFeeds = feeds.map(f =>
-        f.id === feed.id ? { ...f, lastFetched: Date.now() } : f
-      );
-      setFeeds(updatedFeeds);
-      saveFeeds(updatedFeeds);
+      setArticles((prevArticles) => {
+        const articlePlan = mergeFeedArticles(prevArticles, feedArticles);
+        if (articlePlan.addedArticleCount === 0) return prevArticles;
+        saveArticles(articlePlan.nextArticles);
+        return articlePlan.nextArticles;
+      });
+      setFeeds((prevFeeds) => {
+        const feedPlan = updateFeedLastFetched(prevFeeds, feed.id, Date.now());
+        if (!feedPlan.changed) return prevFeeds;
+        saveFeeds(feedPlan.nextFeeds);
+        return feedPlan.nextFeeds;
+      });
     } finally {
       setIsLoadingFeed(false);
     }
-  }, [feeds, articles]);
+  }, []);
 
   // --- Settings handlers (unchanged) ---
 
@@ -555,22 +551,6 @@ export function App() {
     };
   }, [flatSaccadeLines, rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.displayMode]);
 
-  const getContiguousNonBlankLineRange = useCallback((centerGlobalLineIndex: number): [number, number] | null => {
-    if (centerGlobalLineIndex < 0 || centerGlobalLineIndex >= flatSaccadeLines.length) return null;
-    const centerLine = flatSaccadeLines[centerGlobalLineIndex];
-    if (centerLine.type === 'blank') return null;
-
-    let start = centerGlobalLineIndex;
-    let end = centerGlobalLineIndex;
-    while (start > 0 && flatSaccadeLines[start - 1].type !== 'blank') {
-      start -= 1;
-    }
-    while (end < flatSaccadeLines.length - 1 && flatSaccadeLines[end + 1].type !== 'blank') {
-      end += 1;
-    }
-    return [start, end];
-  }, [flatSaccadeLines]);
-
   const capturePassageFromLines = useCallback((
     captureKind: PassageCaptureKind,
     selectedLines: Array<{
@@ -627,104 +607,28 @@ export function App() {
   const handleCaptureSentence = useCallback(() => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return;
-
-    const paragraphRange = getContiguousNonBlankLineRange(ctx.globalLineIndex);
-    if (!paragraphRange) return;
-    const [paraStart, paraEnd] = paragraphRange;
-    const paragraphRefs = flatSaccadeLines.slice(paraStart, paraEnd + 1)
-      .filter((line) => line.type !== 'blank');
-    if (paragraphRefs.length === 0) return;
-
-    let cursor = 0;
-    const segments = paragraphRefs.map((line) => {
-      const text = normalizeCaptureLineText(line.text);
-      const start = cursor;
-      const end = start + text.length;
-      cursor = end + 1;
-      return { ...line, text, start, end };
-    }).filter((line) => line.text.length > 0);
-    if (segments.length === 0) return;
-
-    const paragraphText = segments.map((line) => line.text).join(' ');
-    const currentSegment = segments.find((line) =>
-      line.pageIndex === ctx.pageIndex && line.lineIndex === ctx.lineIndex
-    ) ?? segments[Math.floor(segments.length / 2)];
-    const anchorChar = currentSegment.start + Math.max(0, Math.floor((currentSegment.end - currentSegment.start) / 2));
-
-    const tokenMatches = [...paragraphText.matchAll(/\S+/g)].map((match) => ({
-      text: match[0],
-      start: match.index ?? 0,
-      end: (match.index ?? 0) + match[0].length,
-    }));
-    if (tokenMatches.length === 0) return;
-
-    let anchorTokenIndex = tokenMatches.findIndex((token) => anchorChar >= token.start && anchorChar < token.end);
-    if (anchorTokenIndex < 0) {
-      anchorTokenIndex = tokenMatches.findIndex((token) => token.start >= anchorChar);
-      if (anchorTokenIndex < 0) anchorTokenIndex = tokenMatches.length - 1;
-    }
-
-    const sentenceChunks = tokenMatches.map((token) => ({
-      text: token.text,
-      wordCount: 1,
-      orpIndex: 0,
-    }));
-
-    let sentenceStartTokenIndex = 0;
-    for (let i = anchorTokenIndex - 1; i >= 0; i--) {
-      if (isSentenceBoundaryChunk(sentenceChunks, i)) {
-        sentenceStartTokenIndex = i + 1;
-        break;
-      }
-    }
-
-    let sentenceEndTokenIndex = tokenMatches.length - 1;
-    for (let i = anchorTokenIndex; i < tokenMatches.length; i++) {
-      if (isSentenceBoundaryChunk(sentenceChunks, i)) {
-        sentenceEndTokenIndex = i;
-        break;
-      }
-    }
-
-    const sentenceStartChar = tokenMatches[sentenceStartTokenIndex].start;
-    const sentenceEndChar = tokenMatches[sentenceEndTokenIndex].end;
-    const sentenceText = paragraphText.slice(sentenceStartChar, sentenceEndChar).trim();
-    const sentenceLines = segments.filter((line) => line.end > sentenceStartChar && line.start < sentenceEndChar);
-    capturePassageFromLines('sentence', sentenceLines, sentenceText);
-  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines, getContiguousNonBlankLineRange]);
+    const sentencePlan = planSentenceCapture(flatSaccadeLines, ctx.globalLineIndex);
+    if (!sentencePlan) return;
+    capturePassageFromLines('sentence', sentencePlan.sentenceLines, sentencePlan.sentenceText);
+  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
 
   const handleCaptureParagraph = useCallback(() => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return;
-    const paragraphRange = getContiguousNonBlankLineRange(ctx.globalLineIndex);
-    if (!paragraphRange) return;
-    const [start, end] = paragraphRange;
-    const paragraphLines = flatSaccadeLines.slice(start, end + 1).filter((line) => line.type !== 'blank');
+    const paragraphLines = planParagraphCapture(flatSaccadeLines, ctx.globalLineIndex);
+    if (!paragraphLines) return;
     capturePassageFromLines('paragraph', paragraphLines);
-  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines, getContiguousNonBlankLineRange]);
+  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
 
   const handleCaptureLastLines = useCallback(() => {
     const ctx = currentSaccadeCaptureContext;
     if (!ctx) return;
-    const selected: typeof flatSaccadeLines = [];
-    for (let i = ctx.globalLineIndex; i >= 0 && selected.length < PASSAGE_CAPTURE_LAST_LINE_COUNT; i--) {
-      const line = flatSaccadeLines[i];
-      if (line.pageIndex !== ctx.pageIndex) break;
-      if (line.type === 'blank') continue;
-      if (normalizeCaptureLineText(line.text).length === 0) continue;
-      selected.push(line);
-    }
-    capturePassageFromLines('last-lines', selected.reverse());
+    const selected = planLastLinesCapture(flatSaccadeLines, ctx.globalLineIndex, PASSAGE_CAPTURE_LAST_LINE_COUNT);
+    capturePassageFromLines('last-lines', selected);
   }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
 
   const reviewQueue = useMemo(() => {
-    return passages
-      .filter((passage) => passage.reviewState !== 'done')
-      .sort((a, b) => {
-        const byState = passageStatePriority(a.reviewState) - passageStatePriority(b.reviewState);
-        if (byState !== 0) return byState;
-        return b.updatedAt - a.updatedAt;
-      });
+    return buildPassageReviewQueue(passages);
   }, [passages]);
 
   useEffect(() => {
@@ -749,37 +653,21 @@ export function App() {
   }, [refreshPassagesFromStorage]);
 
   const startPassageReview = useCallback((passage: Passage, mode: PassageReviewMode) => {
-    const readingSnapshot = rsvp.article ? {
+    const sourceArticle = articles.find((article) => article.id === passage.articleId);
+    const currentReading = rsvp.article ? {
       articleId: rsvp.article.id,
       chunkIndex: rsvp.currentChunkIndex,
       displayMode: rsvp.displayMode,
     } : undefined;
-    const snapshot: SessionSnapshot = {
-      reading: readingSnapshot,
-      training: {
-        passageId: passage.id,
-        mode,
-        startedAt: Date.now(),
-      },
-      lastTransition: mode === 'recall' ? 'read-to-recall' : 'read-to-prediction',
-      updatedAt: Date.now(),
-    };
-    saveSessionSnapshot(snapshot);
+    const launchPlan = buildPassageReviewLaunchPlan({
+      passage,
+      mode,
+      now: Date.now(),
+      currentReading,
+      sourceArticle,
+    });
 
-    const sourceArticle = articles.find((article) => article.id === passage.articleId);
-    const passageMetrics = measureTextMetrics(passage.text);
-    const passageArticle: Article = {
-      id: `passage-${passage.id}`,
-      title: `Passage: ${passage.articleTitle}`,
-      content: passage.text,
-      source: `Passage Review • ${sourceArticle?.source || 'Saved passage'}`,
-      sourcePath: sourceArticle?.sourcePath,
-      assetBaseUrl: sourceArticle?.assetBaseUrl,
-      addedAt: Date.now(),
-      readPosition: 0,
-      isRead: false,
-      ...passageMetrics,
-    };
+    saveSessionSnapshot(launchPlan.snapshot);
 
     touchPassageReview(passage.id, mode);
     setActivePassageId(passage.id);
@@ -788,9 +676,9 @@ export function App() {
     syncWpmForActivity('active-recall');
 
     rsvp.pause();
-    rsvp.loadArticle(passageArticle, { displayMode: mode === 'recall' ? 'recall' : 'prediction' });
+    rsvp.loadArticle(launchPlan.article, { displayMode: launchPlan.displayMode });
     setViewState({ screen: 'active-exercise' });
-  }, [articles, refreshPassagesFromStorage, rsvp, syncWpmForActivity]);
+  }, [articles, refreshPassagesFromStorage, rsvp, setViewState, syncWpmForActivity]);
 
   // --- Navigation handlers ---
 
@@ -802,6 +690,25 @@ export function App() {
     });
   }, []);
 
+  const applySessionLaunchPlan = useCallback((plan: ReturnType<typeof planContinueSession>) => {
+    if (plan.clearSnapshot) {
+      clearSessionSnapshot();
+    }
+    syncWpmForActivity(plan.syncWpmActivity);
+    rsvp.loadArticle(plan.article, plan.loadOptions);
+    if (plan.saveLastSession) {
+      saveLastSession(
+        plan.saveLastSession.articleId,
+        plan.saveLastSession.activity,
+        plan.saveLastSession.displayMode
+      );
+    }
+    setViewState(plan.nextView);
+    if (plan.autoPlay) {
+      setTimeout(() => rsvp.play(), 100);
+    }
+  }, [rsvp, saveLastSession, setViewState, syncWpmForActivity]);
+
   const handleSelectActivity = useCallback((activity: Activity) => {
     syncWpmForActivity(activity);
     navigate({ screen: 'content-browser', activity });
@@ -812,197 +719,107 @@ export function App() {
     navigate({ screen: 'active-training' });
   }, [navigate, syncWpmForActivity]);
 
+  const launchFeaturedArticle = useCallback(async ({
+    fetchArticle,
+    source,
+    setStatus,
+    setError,
+    fallbackError,
+    today,
+  }: {
+    fetchArticle: () => Promise<{ title: string; content: string; url: string }>;
+    source: 'Wikipedia Daily' | 'Wikipedia Featured';
+    setStatus: (status: 'idle' | 'loading' | 'error') => void;
+    setError: (message: string | null) => void;
+    fallbackError: string;
+    today?: string;
+  }) => {
+    setStatus('loading');
+    setError(null);
+
+    try {
+      const { title, content, url } = await fetchArticle();
+      const resultPlan = planFeaturedFetchResult({
+        existingArticles: articlesRef.current,
+        payload: { title, content, url },
+        source,
+        now: Date.now(),
+        generateId,
+        today,
+      });
+      if (resultPlan.upserted.changed) {
+        articlesRef.current = resultPlan.upserted.articles;
+        setArticles(resultPlan.upserted.articles);
+        saveArticles(resultPlan.upserted.articles);
+      }
+      const article = resultPlan.upserted.article;
+
+      if (resultPlan.dailyInfo) {
+        saveDailyInfo(resultPlan.dailyInfo.date, resultPlan.dailyInfo.articleId);
+      }
+      setStatus('idle');
+      applySessionLaunchPlan(planFeaturedArticleLaunch(article));
+    } catch (err) {
+      setStatus('error');
+      setError(getFeaturedFetchErrorMessage(err, fallbackError));
+    }
+  }, [applySessionLaunchPlan]);
+
   const handleStartDaily = useCallback(async () => {
     const today = getTodayUTC();
 
     // Check if we already fetched today's article
-    const daily = loadDailyInfo();
-    if (daily && daily.date === today) {
-      const existing = articles.find(a => a.id === daily.articleId);
-      if (existing) {
-        clearSessionSnapshot();
-        syncWpmForActivity('paced-reading');
-        rsvp.loadArticle(existing, { displayMode: 'saccade' });
-        saveLastSession(existing.id, 'paced-reading', 'saccade');
-        setViewState({ screen: 'active-reader' });
-        setTimeout(() => rsvp.play(), 100);
-        return;
-      }
+    const cachedDaily = resolveDailyFeaturedArticle(today, loadDailyInfo(), articlesRef.current);
+    if (cachedDaily) {
+      applySessionLaunchPlan(planFeaturedArticleLaunch(cachedDaily));
+      return;
     }
 
-    setDailyStatus('loading');
-    setDailyError(null);
-    try {
-      const { title, content, url } = await fetchDailyArticle();
-
-      // Deduplicate by URL
-      const existing = articles.find(a => a.url === url);
-      let article: Article;
-      if (existing) {
-        if (existing.title !== title || existing.content !== content) {
-          const metrics = measureTextMetrics(content);
-          article = {
-            ...existing,
-            title,
-            content,
-            source: 'Wikipedia Daily',
-            group: 'Wikipedia',
-            ...metrics,
-          };
-          const updated = articles.map((a) => (a.id === existing.id ? article : a));
-          setArticles(updated);
-          saveArticles(updated);
-        } else {
-          article = existing;
-        }
-      } else {
-        const metrics = measureTextMetrics(content);
-        article = {
-          id: generateId(),
-          title,
-          content,
-          source: 'Wikipedia Daily',
-          url,
-          addedAt: Date.now(),
-          readPosition: 0,
-          isRead: false,
-          group: 'Wikipedia',
-          ...metrics,
-        };
-        const updated = [...articles, article];
-        setArticles(updated);
-        saveArticles(updated);
-      }
-
-      saveDailyInfo(today, article.id);
-      clearSessionSnapshot();
-      syncWpmForActivity('paced-reading');
-      rsvp.loadArticle(article, { displayMode: 'saccade' });
-      saveLastSession(article.id, 'paced-reading', 'saccade');
-      setDailyStatus('idle');
-      setViewState({ screen: 'active-reader' });
-      setTimeout(() => rsvp.play(), 100);
-    } catch (err) {
-      setDailyStatus('error');
-      setDailyError(err instanceof Error ? err.message : 'Failed to fetch daily article');
-    }
-  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
+    await launchFeaturedArticle({
+      fetchArticle: fetchDailyArticle,
+      source: 'Wikipedia Daily',
+      setStatus: setDailyStatus,
+      setError: setDailyError,
+      fallbackError: 'Failed to fetch daily article',
+      today,
+    });
+  }, [applySessionLaunchPlan, launchFeaturedArticle]);
 
   const handleStartRandom = useCallback(async () => {
-    setRandomStatus('loading');
-    setRandomError(null);
-    try {
-      const { title, content, url } = await fetchRandomFeaturedArticle();
-
-      // Deduplicate by URL
-      const existing = articles.find(a => a.url === url);
-      let article: Article;
-      if (existing) {
-        if (existing.title !== title || existing.content !== content) {
-          const metrics = measureTextMetrics(content);
-          article = {
-            ...existing,
-            title,
-            content,
-            source: 'Wikipedia Featured',
-            group: 'Wikipedia',
-            ...metrics,
-          };
-          const updated = articles.map((a) => (a.id === existing.id ? article : a));
-          setArticles(updated);
-          saveArticles(updated);
-        } else {
-          article = existing;
-        }
-      } else {
-        const metrics = measureTextMetrics(content);
-        article = {
-          id: generateId(),
-          title,
-          content,
-          source: 'Wikipedia Featured',
-          url,
-          addedAt: Date.now(),
-          readPosition: 0,
-          isRead: false,
-          group: 'Wikipedia',
-          ...metrics,
-        };
-        const updated = [...articles, article];
-        setArticles(updated);
-        saveArticles(updated);
-      }
-
-      syncWpmForActivity('paced-reading');
-      rsvp.loadArticle(article, { displayMode: 'saccade' });
-      clearSessionSnapshot();
-      saveLastSession(article.id, 'paced-reading', 'saccade');
-      setRandomStatus('idle');
-      setViewState({ screen: 'active-reader' });
-      setTimeout(() => rsvp.play(), 100);
-    } catch (err) {
-      setRandomStatus('error');
-      setRandomError(err instanceof Error ? err.message : 'Failed to fetch article');
-    }
-  }, [articles, rsvp, saveLastSession, syncWpmForActivity]);
+    await launchFeaturedArticle({
+      fetchArticle: fetchRandomFeaturedArticle,
+      source: 'Wikipedia Featured',
+      setStatus: setRandomStatus,
+      setError: setRandomError,
+      fallbackError: 'Failed to fetch article',
+    });
+  }, [launchFeaturedArticle]);
 
   // Content browser → article selected → preview
   const handleContentBrowserSelectArticle = useCallback((article: Article) => {
     if (viewState.screen === 'content-browser') {
-      const activity = viewState.activity;
-      if (activity === 'training') {
-        // Training skips preview, goes directly to training setup
-        navigate({ screen: 'active-training', article });
-        return;
-      }
-      navigate({ screen: 'preview', activity, article });
+      navigate(planContentBrowserArticleSelection(viewState.activity, article));
     }
   }, [viewState, navigate]);
 
   // Preview → start reading
   const handleStartReading = useCallback((article: Article, wpm: number, mode: TokenMode) => {
     if (viewState.screen !== 'preview') return;
-    const activity = viewState.activity;
+    const launchPlan = planStartReadingFromPreview(viewState.activity, article, mode);
+    if (!launchPlan) return;
 
-    setActivityWpm(activity, wpm);
-
-    if (activity === 'paced-reading') {
-      clearSessionSnapshot();
-      rsvp.loadArticle(article, { mode, displayMode: 'saccade' });
-      saveLastSession(article.id, 'paced-reading', 'saccade');
-      setViewState({ screen: 'active-reader' });
-      setTimeout(() => rsvp.play(), 100);
-    } else if (activity === 'active-recall') {
-      clearSessionSnapshot();
-      rsvp.loadArticle(article, { displayMode: 'prediction' });
-      saveLastSession(article.id, 'active-recall', 'prediction');
-      setViewState({ screen: 'active-exercise' });
-    }
-  }, [rsvp, saveLastSession, setActivityWpm, viewState]);
+    setActivityWpm(launchPlan.syncWpmActivity, wpm);
+    applySessionLaunchPlan(launchPlan);
+  }, [applySessionLaunchPlan, setActivityWpm, viewState]);
 
   // Continue from home screen
   const continueInfo = useMemo(() => {
-    const session = settings.lastSession;
-    if (!session) return null;
-    const article = articles.find(a => a.id === session.articleId);
-    if (!article) return null;
-    return { article, activity: session.activity, displayMode: session.displayMode };
+    return resolveContinueSessionInfo(settings.lastSession, articles);
   }, [settings.lastSession, articles]);
 
   const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
-    clearSessionSnapshot();
-    syncWpmForActivity(info.activity);
-    rsvp.loadArticle(info.article, { displayMode: info.displayMode });
-
-    if (info.activity === 'paced-reading') {
-      setViewState({ screen: 'active-reader' });
-      setTimeout(() => rsvp.play(), 100);
-    } else if (info.activity === 'active-recall') {
-      setViewState({ screen: 'active-exercise' });
-    } else if (info.activity === 'training') {
-      setViewState({ screen: 'active-training', article: info.article });
-    }
-  }, [rsvp, syncWpmForActivity]);
+    applySessionLaunchPlan(planContinueSession(info));
+  }, [applySessionLaunchPlan]);
 
   // --- Computed values ---
 
@@ -1022,21 +839,10 @@ export function App() {
   const progress = calculateProgress(rsvp.currentChunkIndex, rsvp.chunks.length);
 
   // Header title based on view
-  const headerTitle = (() => {
-    switch (viewState.screen) {
-      case 'active-reader': return 'Paced Reading';
-      case 'active-exercise': return 'Active Recall';
-      case 'active-training': return 'Training';
-      case 'content-browser': return ACTIVITY_LABELS[viewState.activity];
-      case 'preview': return ACTIVITY_LABELS[viewState.activity];
-      case 'settings': return 'Settings';
-      case 'library-settings': return 'Library Settings';
-      default: return 'Reader';
-    }
-  })();
+  const headerTitle = getHeaderTitle(viewState);
 
-  const showBackButton = viewState.screen !== 'home';
-  const headerBackAction = viewState.screen === 'active-exercise' ? closeActiveExercise : goHome;
+  const showBackButton = shouldShowBackButton(viewState);
+  const headerBackAction = getHeaderBackAction(viewState);
   const appMainClassName = viewState.screen === 'active-reader' ? 'app-main app-main-active-reader' : 'app-main';
 
   // --- Render helpers ---
@@ -1227,7 +1033,12 @@ export function App() {
       <header className="app-header">
         <div className="app-header-left">
           {showBackButton && (
-            <button className="control-btn app-back-btn" onClick={headerBackAction}>Home</button>
+            <button
+              className="control-btn app-back-btn"
+              onClick={headerBackAction === 'close-active-exercise' ? closeActiveExercise : goHome}
+            >
+              Home
+            </button>
           )}
           <h1>{headerTitle}</h1>
         </div>

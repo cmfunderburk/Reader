@@ -17,14 +17,21 @@ import type {
 } from '../types';
 
 const STORAGE_KEYS = {
+  schemaVersion: 'speedread_schema_version',
   articles: 'speedread_articles',
   feeds: 'speedread_feeds',
   settings: 'speedread_settings',
   passages: 'speedread_passages',
   sessionSnapshot: 'speedread_session_snapshot',
+  drillState: 'speedread_drill_state',
+  trainingSentenceMode: 'speedread_training_sentence',
+  trainingScoreDetails: 'speedread_training_score_details',
+  trainingScaffold: 'speedread_training_scaffold',
   dailyDate: 'speedread_daily_date',
   dailyArticleId: 'speedread_daily_article_id',
 } as const;
+
+const CURRENT_STORAGE_SCHEMA_VERSION = 1;
 
 export interface Settings {
   defaultWpm: number;
@@ -94,10 +101,110 @@ function clampWpm(value: unknown, fallback: number): number {
   return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(n)));
 }
 
+function loadStorageSchemaVersion(): number {
+  const raw = localStorage.getItem(STORAGE_KEYS.schemaVersion);
+  if (!raw) return 0;
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function saveStorageSchemaVersion(version: number): void {
+  localStorage.setItem(STORAGE_KEYS.schemaVersion, String(version));
+}
+
+function migrateSettingsToV1(): void {
+  const raw = localStorage.getItem(STORAGE_KEYS.settings);
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown> & {
+      defaultWpm?: unknown;
+      wpmByActivity?: Partial<Record<Activity, unknown>>;
+      lastSession?: { articleId?: string; activity?: string; displayMode?: DisplayMode };
+    };
+
+    const legacyDefaultWpm = clampWpm(parsed.defaultWpm, DEFAULT_SETTINGS.defaultWpm);
+    const nextWpmByActivity = {
+      'paced-reading': clampWpm(parsed.wpmByActivity?.['paced-reading'], legacyDefaultWpm),
+      'active-recall': clampWpm(parsed.wpmByActivity?.['active-recall'], legacyDefaultWpm),
+      training: clampWpm(parsed.wpmByActivity?.training, legacyDefaultWpm),
+    } satisfies Record<Activity, number>;
+
+    const nextLastSession = parsed.lastSession?.activity
+      ? {
+          ...parsed.lastSession,
+          activity:
+            parsed.lastSession.activity === 'speed-reading'
+              ? 'paced-reading'
+              : parsed.lastSession.activity === 'comprehension'
+                ? 'active-recall'
+                : parsed.lastSession.activity,
+        }
+      : undefined;
+
+    const migrated = {
+      ...parsed,
+      wpmByActivity: nextWpmByActivity,
+      defaultWpm: nextWpmByActivity['paced-reading'],
+      ...(nextLastSession ? { lastSession: nextLastSession } : {}),
+    };
+
+    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(migrated));
+  } catch {
+    // Keep existing data untouched when migration cannot parse settings.
+  }
+}
+
+function normalizeDrillState(parsed: Partial<DrillState>): DrillState {
+  const wpm = clampWpm(parsed.wpm, DEFAULT_SETTINGS.defaultWpm);
+  const minWpmRaw = parsed.minWpm ?? Math.max(MIN_WPM, wpm - 50);
+  const maxWpmRaw = parsed.maxWpm ?? Math.min(MAX_WPM, wpm + 50);
+  let minWpm = clampWpm(minWpmRaw, Math.max(MIN_WPM, wpm - 50));
+  let maxWpm = clampWpm(maxWpmRaw, Math.min(MAX_WPM, wpm + 50));
+  if (minWpm > maxWpm) [minWpm, maxWpm] = [maxWpm, minWpm];
+  const rollingScores = Array.isArray(parsed.rollingScores)
+    ? parsed.rollingScores.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
+    : [];
+
+  return {
+    ...parsed,
+    wpm,
+    minWpm,
+    maxWpm,
+    rollingScores,
+  };
+}
+
+function migrateDrillStateToV1(): void {
+  const raw = localStorage.getItem(STORAGE_KEYS.drillState);
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<DrillState>;
+    localStorage.setItem(STORAGE_KEYS.drillState, JSON.stringify(normalizeDrillState(parsed)));
+  } catch {
+    // Keep existing data untouched when migration cannot parse drill state.
+  }
+}
+
+function runStorageMigrations(): void {
+  const currentVersion = loadStorageSchemaVersion();
+  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) return;
+
+  if (currentVersion < 1) {
+    migrateSettingsToV1();
+    migrateDrillStateToV1();
+  }
+
+  saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);
+}
+
 /**
  * Load articles from localStorage.
  */
 export function loadArticles(): Article[] {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(STORAGE_KEYS.articles);
     return data ? JSON.parse(data) : [];
@@ -110,6 +217,7 @@ export function loadArticles(): Article[] {
  * Save articles to localStorage.
  */
 export function saveArticles(articles: Article[]): void {
+  runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.articles, JSON.stringify(articles));
 }
 
@@ -117,6 +225,7 @@ export function saveArticles(articles: Article[]): void {
  * Load feeds from localStorage.
  */
 export function loadFeeds(): Feed[] {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(STORAGE_KEYS.feeds);
     return data ? JSON.parse(data) : [];
@@ -129,6 +238,7 @@ export function loadFeeds(): Feed[] {
  * Save feeds to localStorage.
  */
 export function saveFeeds(feeds: Feed[]): void {
+  runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.feeds, JSON.stringify(feeds));
 }
 
@@ -136,6 +246,7 @@ export function saveFeeds(feeds: Feed[]): void {
  * Load saved passages from localStorage.
  */
 export function loadPassages(): Passage[] {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(STORAGE_KEYS.passages);
     const parsed = data ? JSON.parse(data) as Passage[] : [];
@@ -155,6 +266,7 @@ export function loadPassages(): Passage[] {
  * Save passages to localStorage.
  */
 export function savePassages(passages: Passage[]): void {
+  runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.passages, JSON.stringify(passages));
 }
 
@@ -208,6 +320,7 @@ export function touchPassageReview(passageId: string, mode: PassageReviewMode): 
  * Load settings from localStorage.
  */
 export function loadSettings(): Settings {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(STORAGE_KEYS.settings);
     const parsed = data ? JSON.parse(data) : null;
@@ -252,6 +365,7 @@ export function loadSettings(): Settings {
  * Save settings to localStorage.
  */
 export function saveSettings(settings: Settings): void {
+  runStorageMigrations();
   const normalized: Settings = {
     ...settings,
     wpmByActivity: {
@@ -271,6 +385,7 @@ export function saveSettings(settings: Settings): void {
  * Load session continuity snapshot.
  */
 export function loadSessionSnapshot(): SessionSnapshot | null {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(STORAGE_KEYS.sessionSnapshot);
     return data ? JSON.parse(data) as SessionSnapshot : null;
@@ -283,6 +398,7 @@ export function loadSessionSnapshot(): SessionSnapshot | null {
  * Save session continuity snapshot.
  */
 export function saveSessionSnapshot(snapshot: SessionSnapshot): void {
+  runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.sessionSnapshot, JSON.stringify(snapshot));
 }
 
@@ -290,6 +406,7 @@ export function saveSessionSnapshot(snapshot: SessionSnapshot): void {
  * Clear saved session continuity snapshot.
  */
 export function clearSessionSnapshot(): void {
+  runStorageMigrations();
   localStorage.removeItem(STORAGE_KEYS.sessionSnapshot);
 }
 
@@ -346,6 +463,7 @@ function trainingKey(articleId: string): string {
 }
 
 export function loadTrainingHistory(articleId: string): TrainingHistory {
+  runStorageMigrations();
   try {
     const data = localStorage.getItem(trainingKey(articleId));
     return data ? JSON.parse(data) : {};
@@ -355,7 +473,50 @@ export function loadTrainingHistory(articleId: string): TrainingHistory {
 }
 
 export function saveTrainingHistory(articleId: string, history: TrainingHistory): void {
+  runStorageMigrations();
   localStorage.setItem(trainingKey(articleId), JSON.stringify(history));
+}
+
+function loadStoredBoolean(key: string, fallback: boolean): boolean {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    return raw === 'true';
+  } catch {
+    return fallback;
+  }
+}
+
+function saveStoredBoolean(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Ignore storage failures (private mode, quota).
+  }
+}
+
+export function loadTrainingSentenceMode(): boolean {
+  return loadStoredBoolean(STORAGE_KEYS.trainingSentenceMode, false);
+}
+
+export function saveTrainingSentenceMode(enabled: boolean): void {
+  saveStoredBoolean(STORAGE_KEYS.trainingSentenceMode, enabled);
+}
+
+export function loadTrainingScoreDetails(): boolean {
+  return loadStoredBoolean(STORAGE_KEYS.trainingScoreDetails, false);
+}
+
+export function saveTrainingScoreDetails(enabled: boolean): void {
+  saveStoredBoolean(STORAGE_KEYS.trainingScoreDetails, enabled);
+}
+
+export function loadTrainingScaffold(): boolean {
+  return loadStoredBoolean(STORAGE_KEYS.trainingScaffold, true);
+}
+
+export function saveTrainingScaffold(enabled: boolean): void {
+  saveStoredBoolean(STORAGE_KEYS.trainingScaffold, enabled);
 }
 
 // --- Random drill persistence ---
@@ -372,41 +533,27 @@ export interface DrillState {
   charLimit?: number;
 }
 
-const DRILL_STATE_KEY = 'speedread_drill_state';
-
 export function loadDrillState(): DrillState | null {
+  runStorageMigrations();
   try {
-    const data = localStorage.getItem(DRILL_STATE_KEY);
+    const data = localStorage.getItem(STORAGE_KEYS.drillState);
     if (!data) return null;
     const parsed = JSON.parse(data) as Partial<DrillState>;
-    const wpm = clampWpm(parsed.wpm, DEFAULT_SETTINGS.defaultWpm);
-    const minWpmRaw = parsed.minWpm ?? Math.max(MIN_WPM, wpm - 50);
-    const maxWpmRaw = parsed.maxWpm ?? Math.min(MAX_WPM, wpm + 50);
-    let minWpm = clampWpm(minWpmRaw, Math.max(MIN_WPM, wpm - 50));
-    let maxWpm = clampWpm(maxWpmRaw, Math.min(MAX_WPM, wpm + 50));
-    if (minWpm > maxWpm) [minWpm, maxWpm] = [maxWpm, minWpm];
-    const rollingScores = Array.isArray(parsed.rollingScores)
-      ? parsed.rollingScores.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
-      : [];
-    return {
-      ...parsed,
-      wpm,
-      minWpm,
-      maxWpm,
-      rollingScores,
-    };
+    return normalizeDrillState(parsed);
   } catch {
     return null;
   }
 }
 
 export function saveDrillState(state: DrillState): void {
-  localStorage.setItem(DRILL_STATE_KEY, JSON.stringify(state));
+  runStorageMigrations();
+  localStorage.setItem(STORAGE_KEYS.drillState, JSON.stringify(state));
 }
 
 // --- Daily article persistence ---
 
 export function loadDailyInfo(): { date: string; articleId: string } | null {
+  runStorageMigrations();
   try {
     const date = localStorage.getItem(STORAGE_KEYS.dailyDate);
     const articleId = localStorage.getItem(STORAGE_KEYS.dailyArticleId);
@@ -417,6 +564,7 @@ export function loadDailyInfo(): { date: string; articleId: string } | null {
 }
 
 export function saveDailyInfo(date: string, articleId: string): void {
+  runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.dailyDate, date);
   localStorage.setItem(STORAGE_KEYS.dailyArticleId, articleId);
 }
