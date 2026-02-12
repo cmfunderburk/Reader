@@ -2,6 +2,8 @@
 
 Last updated: February 12, 2026.
 
+For PR open/close criteria and final go/no-go gates, see `docs/refactor-pr-readiness-plan.md`.
+
 ## Goals
 - Reduce feature coupling in large orchestration files.
 - Make boundaries explicit across renderer, Electron, and persistence layers.
@@ -65,12 +67,12 @@ Exit criteria:
 - Intentionally wiring-only callbacks: `handleSelectActivity`, `handleStartDrill`, `handleProgressChange`, and direct settings toggles that only dispatch UI state/storage writes without branching domain rules.
 
 ## Phase 4: Scaling + Quality Gates
-- [ ] Evaluate moving large payload storage from `localStorage` to IndexedDB/SQLite.
+- [x] Decide storage strategy for this PR scope: keep `localStorage` and document explicit re-evaluation triggers.
 - [x] Add coverage thresholds for `components` and critical state modules.
 - [x] Standardize CI checks to include web + Electron type checks.
 - [x] Add a single local gate command (`npm run verify`) to run lint + tests + build consistently.
 - [x] Add CI gate command (`npm run verify:ci`) to enforce coverage thresholds before build.
 
 Exit criteria:
-- Storage strategy documented and implemented for large-content paths.
+- Storage strategy is explicitly documented and deferred/implemented intentionally.
 - CI fails on regressions in type checks and agreed coverage gates.

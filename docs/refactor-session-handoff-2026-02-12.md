@@ -2,38 +2,55 @@
 
 ## Branch + Anchor
 - Branch: `refactor`
-- Current HEAD: `2d3164d` (`Add refactor session handoff report`)
-- Working tree: additional uncommitted refactor changes are present.
+- Current HEAD: `bff88b4` (`Add phase 4 coverage thresholds and CI verify gate`)
+- Relative to `origin/refactor`: ahead by 2 commits.
+- Working tree: docs updates in progress for PR-readiness planning.
 
 ## Completed This Session
-- `App` feed transition logic extracted to `src/lib/appFeedTransitions.ts` with tests.
-- `TrainingReader` finish-recall planning extracted to `src/lib/trainingFeedback.ts` with tests.
-- `TrainingReader` scaffold recall submission/miss-continue/input parsing extracted to `src/lib/trainingRecall.ts` with tests.
-- `App` passage capture sentence/paragraph/last-lines selection extracted to `src/lib/passageCapture.ts` with tests.
-- Featured daily/random fetch result and error-message planning expanded in `src/lib/featuredArticleLaunch.ts` with tests.
-- Integration smoke tests added:
-  - `src/components/App.integration.test.tsx`
-  - `src/components/TrainingReader.integration.test.tsx`
-- `docs/refactor-phased-plan.md` updated with explicit Phase 3 closure checklist.
+- Added PR decision framework: `docs/refactor-pr-readiness-plan.md`.
+- Updated `docs/refactor-phased-plan.md` to:
+  - point to PR go/no-go criteria in the new readiness plan,
+  - record the explicit storage decision for this PR scope (`localStorage` for now, with re-evaluation triggers).
+- Refreshed this handoff to current branch/validation status.
 
 ## Validation Status At Stop
-- `npm run verify` passes on current working tree.
+- `npm run verify` passes.
+- `npm run verify:ci` passes.
+- `npm run electron:build` currently fails locally in this environment (`npm@11.7.0`) with:
+  - `electron-builder` npm dependency-tree collection error (`No JSON content found in output`).
+  - related probe failure observed: `npm prefix -w` returns `ENOWORKSPACES` under npm 11.
 - Current automated totals:
   - Test files: 31
-  - Tests: 231
-- No lint warnings/errors currently.
+  - Tests: 237
+- Coverage totals (`verify:ci`):
+  - Statements: 62.41%
+  - Branches: 54.21%
+  - Functions: 60.95%
+  - Lines: 64.11%
+- Lint/type/build gates are green on this branch.
 
-## Remaining Work (Next Session)
-Primary open items from `docs/refactor-phased-plan.md`:
-- Refresh this handoff document once commits for current uncommitted work are split/landed.
-- Phase 4 items remain open (coverage thresholds, CI gate standardization, storage strategy evaluation).
+## Workstream Status (PR Readiness)
+From `docs/refactor-pr-readiness-plan.md`:
+- Workstream A (Documentation Alignment): in progress, mostly complete.
+  - Completed: phased plan + PR-readiness plan sync.
+  - Remaining: keep docs synchronized as additional workstreams land.
+- Workstream B (Behavior Parity Matrix): complete for current scope.
+  - Completed: scenario matrix plus targeted App/Training integration coverage additions.
+  - Residual accepted risk: paragraph/last-lines capture UI and drill preview-forfeit path remain primarily planner-covered.
+- Workstream C (Orchestrator Hardening): complete for current scoped target.
+  - Completed: consolidated duplicated daily/random featured launch branching into shared flow in `App.tsx`.
+- Workstream D (CI/Gate Hardening): complete for current scope.
+  - Completed: CI Electron-change detection expanded to include shared contract/type/config surfaces.
+- Workstream E (Storage Strategy Decision): complete for this PR scope (`localStorage` decision documented).
+- Workstream F (PR Packaging And Evidence): in progress.
+  - Completed: initial PR narrative draft in `docs/refactor-pr-draft.md`.
 
 ## Suggested Next Session Sequence
-1. Split current working tree into focused commits by extraction domain.
-2. Re-run `npm run verify`.
-3. Update this handoff with new HEAD and exact verification totals.
-4. Start Phase 4 quality-gate tasks.
+1. Finalize Workstream F: trim/adjust `docs/refactor-pr-draft.md` into final PR description.
+2. Capture explicit residual risk acceptance from Workstream B directly in PR notes.
+3. Re-run `npm run verify` and `npm run verify:ci` immediately before opening PR.
+4. Update this handoff and the PR-readiness checklist with final go/no-go status.
 
 ## Notes
-- Keep commits focused by extraction domain (`app-feed-transitions`, `training-recall-planners`, `integration-smoke-tests`, `docs`).
-- Preserve behavior parity; maintain planner/helper tests plus component smoke tests as guardrails.
+- Keep commits focused by workstream (docs, tests, CI, targeted orchestrator hardening).
+- Preserve behavior parity: planner/helper unit tests plus integration smoke tests are the primary guardrail strategy.
