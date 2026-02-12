@@ -48,7 +48,7 @@ WIKI_API = "https://en.wikipedia.org/w/api.php"
 SIMPLE_WIKI_API = "https://simple.wikipedia.org/w/api.php"
 USER_AGENT = (
     "ReaderCorpusBuilder/1.0 "
-    "(speed reading training app; https://github.com/cmf/reader)"
+    "(speed reading training app; https://github.com/cmfunderburk/Reader)"
 )
 BATCH_SIZE = 20          # max titles per MediaWiki query request
 REQUEST_DELAY = 0.25     # seconds between API requests
