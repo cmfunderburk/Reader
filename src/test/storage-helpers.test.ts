@@ -11,6 +11,8 @@ import {
   clearSessionSnapshot,
   loadSettings,
   saveSettings,
+  loadDrillState,
+  saveDrillState,
 } from '../lib/storage';
 import type { Passage } from '../types';
 import {
@@ -174,5 +176,41 @@ describe('storage-helpers with real storage functions', () => {
     expect(loaded.wpmByActivity['paced-reading']).toBe(360);
     expect(loaded.wpmByActivity['active-recall']).toBe(360);
     expect(loaded.wpmByActivity.training).toBe(360);
+  });
+
+  it('drill state persists auto-adjust toggle', () => {
+    saveDrillState({
+      wpm: 300,
+      charLimit: 120,
+      rollingScores: [0.9, 0.95],
+      tier: 'medium',
+      autoAdjustDifficulty: true,
+    });
+
+    const loaded = loadDrillState();
+    expect(loaded).toEqual({
+      wpm: 300,
+      charLimit: 120,
+      rollingScores: [0.9, 0.95],
+      tier: 'medium',
+      autoAdjustDifficulty: true,
+    });
+  });
+
+  it('legacy drill state without auto-adjust toggle remains readable', () => {
+    localStorage.setItem('speedread_drill_state', JSON.stringify({
+      wpm: 280,
+      charLimit: 80,
+      rollingScores: [0.8],
+      tier: 'hard',
+    }));
+
+    const loaded = loadDrillState();
+    expect(loaded).toEqual({
+      wpm: 280,
+      charLimit: 80,
+      rollingScores: [0.8],
+      tier: 'hard',
+    });
   });
 });

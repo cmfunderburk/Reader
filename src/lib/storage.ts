@@ -365,6 +365,7 @@ export interface DrillState {
   charLimit: number;
   rollingScores: number[];
   tier?: 'easy' | 'medium' | 'hard';
+  autoAdjustDifficulty?: boolean;
 }
 
 const DRILL_STATE_KEY = 'speedread_drill_state';
