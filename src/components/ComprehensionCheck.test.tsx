@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { ComprehensionCheck } from './ComprehensionCheck';
 import type { ComprehensionAdapter } from '../lib/comprehensionAdapter';
 import type { Article, GeneratedComprehensionCheck } from '../types';
+import type { ActiveComprehensionContext } from '../lib/appViewState';
 
 function makeArticle(): Article {
   return {
@@ -13,6 +14,26 @@ function makeArticle(): Article {
     addedAt: 1,
     readPosition: 0,
     isRead: false,
+  };
+}
+
+function makeArticleWithContent(id: string, title: string, content: string): Article {
+  return {
+    id,
+    title,
+    content,
+    source: 'test',
+    addedAt: 1,
+    readPosition: 0,
+    isRead: false,
+  };
+}
+
+function makeComprehensionContext(overrides: Partial<ActiveComprehensionContext> = {}): ActiveComprehensionContext {
+  return {
+    runMode: 'quick-check',
+    sourceArticleIds: ['a1'],
+    ...overrides,
   };
 }
 
@@ -56,6 +77,7 @@ describe('ComprehensionCheck', () => {
 
     const adapter: ComprehensionAdapter = {
       generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
       scoreAnswer: vi.fn(async () => ({
         score: 2,
         feedback: 'Reasonable answer with one omission.',
@@ -68,6 +90,8 @@ describe('ComprehensionCheck', () => {
         entryPoint="launcher"
         adapter={adapter}
         onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
       />
     );
 
@@ -117,6 +141,7 @@ describe('ComprehensionCheck', () => {
       generateCheck: vi.fn(async () => {
         throw new Error('Comprehension check requires an API key');
       }),
+      generateExam: vi.fn(),
       scoreAnswer: vi.fn(async () => ({ score: 0, feedback: '' })),
     };
 
@@ -127,6 +152,8 @@ describe('ComprehensionCheck', () => {
         adapter={adapter}
         onClose={() => {}}
         onOpenSettings={onOpenSettings}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
       />
     );
 
@@ -153,6 +180,7 @@ describe('ComprehensionCheck', () => {
 
     const adapter: ComprehensionAdapter = {
       generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
       scoreAnswer: vi.fn(async () => {
         activeRequests += 1;
         maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
@@ -171,6 +199,8 @@ describe('ComprehensionCheck', () => {
         entryPoint="launcher"
         adapter={adapter}
         onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
       />
     );
 
@@ -201,6 +231,7 @@ describe('ComprehensionCheck', () => {
       generateCheck: vi.fn(async () => {
         throw new Error('Gemini request failed (400): API key not valid. Please pass a valid API key.');
       }),
+      generateExam: vi.fn(),
       scoreAnswer: vi.fn(async () => ({ score: 0, feedback: '' })),
     };
 
@@ -211,6 +242,8 @@ describe('ComprehensionCheck', () => {
         adapter={adapter}
         onClose={() => {}}
         onOpenSettings={onOpenSettings}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
       />
     );
 
@@ -237,6 +270,7 @@ describe('ComprehensionCheck', () => {
     };
     const adapter: ComprehensionAdapter = {
       generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
       scoreAnswer: vi.fn(async () => ({ score: 0, feedback: '' })),
     };
 
@@ -246,6 +280,8 @@ describe('ComprehensionCheck', () => {
         entryPoint="launcher"
         adapter={adapter}
         onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
       />
     );
 
@@ -270,5 +306,57 @@ describe('ComprehensionCheck', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Deep' }));
     expect(screen.getByText(/Feedback \/ model answer:/i)).toBeTruthy();
+  });
+
+  it('renders exam question passages from the selected source article', async () => {
+    const sourceA = makeArticleWithContent('a1', 'Source A', 'Passage A for exam context.');
+    const sourceB = makeArticleWithContent('a2', 'Source B', 'Passage B for interpretation section.');
+
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'q1',
+          dimension: 'factual',
+          format: 'short-answer',
+          section: 'interpretation',
+          sourceArticleId: 'a2',
+          prompt: 'Which source covers interpretation?',
+          modelAnswer: 'Source B should be used.',
+        },
+      ],
+    };
+
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(),
+      generateExam: vi.fn(async () => generated),
+      scoreAnswer: vi.fn(async () => ({ score: 2, feedback: 'Reasonable' })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={sourceA}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[sourceA, sourceB]}
+        comprehension={makeComprehensionContext({
+          runMode: 'exam',
+          sourceArticleIds: ['a1', 'a2'],
+          examPreset: 'quiz',
+          difficultyTarget: 'standard',
+          openBookSynthesis: true,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/Open-book phase/i)).toBeTruthy();
+    expect(screen.getByText('Show passage')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Show passage'));
+    expect(screen.getByText('Passage B for interpretation section.')).toBeTruthy();
+    expect(screen.queryByText('Passage A for exam context.')).toBeNull();
   });
 });

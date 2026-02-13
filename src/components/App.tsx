@@ -14,6 +14,7 @@ import { RecallReader } from './RecallReader';
 import { TrainingReader } from './TrainingReader';
 import { ComprehensionCheck } from './ComprehensionCheck';
 import { ComprehensionCheckBoundary } from './ComprehensionCheckBoundary';
+import { ComprehensionExamBuilder } from './ComprehensionExamBuilder';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
@@ -66,7 +67,12 @@ import type {
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
 import { formatBookName } from '../lib/libraryFormatting';
-import { appViewStateReducer, getInitialViewState, viewStateToAction } from '../lib/appViewState';
+import {
+  appViewStateReducer,
+  getInitialViewState,
+  viewStateToAction,
+  type ComprehensionBuilderState,
+} from '../lib/appViewState';
 import {
   planCloseActiveExercise,
   planContinueSession,
@@ -788,8 +794,40 @@ export function App() {
       screen: 'active-comprehension',
       article: rsvp.article,
       entryPoint: 'post-reading',
+      comprehension: {
+        runMode: 'quick-check',
+        sourceArticleIds: [rsvp.article.id],
+      },
     });
   }, [rsvp, setViewState]);
+
+  const handleStartComprehensionBuilder = useCallback(() => {
+    setViewState({ screen: 'comprehension-builder' });
+  }, [setViewState]);
+
+  const handleLaunchComprehensionBuilder = useCallback((builderState: ComprehensionBuilderState) => {
+    const selectedArticleIds = new Set(builderState.sourceArticleIds);
+    const selectedArticles = articles.filter((article) => selectedArticleIds.has(article.id));
+    if (selectedArticles.length === 0) {
+      setViewState({ screen: 'home' });
+      return;
+    }
+
+    const resolvedArticleIds = builderState.sourceArticleIds.filter((articleId) => selectedArticleIds.has(articleId));
+
+    setViewState({
+      screen: 'active-comprehension',
+      article: selectedArticles[0],
+      entryPoint: 'launcher',
+      comprehension: {
+        runMode: 'exam',
+        sourceArticleIds: resolvedArticleIds,
+        examPreset: builderState.preset,
+        difficultyTarget: builderState.difficultyTarget,
+        openBookSynthesis: builderState.openBookSynthesis,
+      },
+    });
+  }, [articles, setViewState]);
 
   const handleComprehensionAttemptSaved = useCallback((attempt: ComprehensionAttempt) => {
     setComprehensionAttempts((existing) => [attempt, ...existing].slice(0, 200));
@@ -1171,6 +1209,7 @@ export function App() {
             onSelectActivity={handleSelectActivity}
             onContinue={handleContinue}
             onStartDrill={handleStartDrill}
+            onStartComprehensionBuilder={handleStartComprehensionBuilder}
             onStartDaily={handleStartDaily}
             dailyStatus={dailyStatus}
             dailyError={dailyError}
@@ -1180,6 +1219,14 @@ export function App() {
             continueInfo={continueInfo}
             comprehensionSummary={comprehensionSummary}
             comprehensionAttempts={comprehensionAttempts}
+          />
+        )}
+
+        {viewState.screen === 'comprehension-builder' && (
+          <ComprehensionExamBuilder
+            articles={articles}
+            onClose={goHome}
+            onLaunch={handleLaunchComprehensionBuilder}
           />
         )}
 
@@ -1316,6 +1363,14 @@ export function App() {
             <ComprehensionCheck
               article={viewState.article}
               entryPoint={viewState.entryPoint}
+              sourceArticles={
+                viewState.comprehension.runMode === 'exam'
+                  ? viewState.comprehension.sourceArticleIds
+                    .map((articleId) => articles.find((article) => article.id === articleId))
+                    .filter((article): article is Article => article !== undefined)
+                  : [viewState.article]
+              }
+              comprehension={viewState.comprehension}
               adapter={comprehensionAdapter}
               onClose={closeActiveComprehension}
               onOpenSettings={() => navigate({ screen: 'settings' })}

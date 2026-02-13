@@ -3,6 +3,8 @@ import type {
   ComprehensionGeminiModel,
   GeneratedComprehensionCheck,
   GeneratedComprehensionQuestion,
+  ComprehensionExamPreset,
+  Article,
 } from '../types';
 import {
   buildGenerateCheckPrompt,
@@ -10,9 +12,26 @@ import {
   parseGeneratedCheckResponse,
   parseQuestionScoreResponse,
 } from './comprehensionPrompts';
+import {
+  buildGenerateExamPrompt,
+  parseGeneratedExamResponse,
+} from './comprehensionExamPrompts';
+import {
+  buildComprehensionExamContext,
+  getComprehensionExamSourceIds,
+} from './comprehensionExamContext';
+import type { GenerateExamPromptArgs, ParseGeneratedExamArgs } from './comprehensionExamPrompts';
+
+export interface ComprehensionExamRequest {
+  selectedArticles: Article[];
+  preset: ComprehensionExamPreset;
+  difficultyTarget: 'standard' | 'challenging';
+  openBookSynthesis: boolean;
+}
 
 export interface ComprehensionAdapter {
   generateCheck(passage: string, questionCount: number): Promise<GeneratedComprehensionCheck>;
+  generateExam(request: ComprehensionExamRequest): Promise<GeneratedComprehensionCheck>;
   scoreAnswer(
     passage: string,
     question: GeneratedComprehensionQuestion,
@@ -103,6 +122,41 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
     return parseGeneratedCheckResponse(rawText);
   }
 
+  async generateExam(request: ComprehensionExamRequest): Promise<GeneratedComprehensionCheck> {
+    const context = buildComprehensionExamContext(request.selectedArticles, request.preset);
+    const sourceArticleIds = getComprehensionExamSourceIds(context);
+    const generatorInput: GenerateExamPromptArgs = {
+      sourceContext: renderSourceContext(context),
+      preset: request.preset,
+      difficultyTarget: request.difficultyTarget,
+      openBookSynthesis: request.openBookSynthesis,
+    };
+
+    let lastError: unknown = null;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const prompt = buildGenerateExamPrompt(generatorInput);
+        const rawText = await this.generateContent(prompt);
+        const parseArgs: ParseGeneratedExamArgs = {
+          raw: rawText,
+          preset: request.preset,
+          difficultyTarget: request.difficultyTarget,
+          selectedSourceArticleIds: sourceArticleIds,
+        };
+        return parseGeneratedExamResponse(parseArgs);
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) {
+          continue;
+        }
+        throw lastError;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Failed to generate a valid exam');
+  }
+
   async scoreAnswer(
     passage: string,
     question: GeneratedComprehensionQuestion,
@@ -149,6 +203,7 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
 
     return extractGeminiText(payload);
   }
+
 }
 
 interface CreateComprehensionAdapterOptions extends GeminiAdapterOptions {
@@ -159,4 +214,14 @@ export function createComprehensionAdapter(
   options: CreateComprehensionAdapterOptions
 ): ComprehensionAdapter {
   return new GeminiComprehensionAdapter(options);
+}
+
+function renderSourceContext(context: ReturnType<typeof buildComprehensionExamContext>): string {
+  return context.packets
+    .map((packet, index) => {
+      const header = `${index + 1}. ${packet.title}`;
+      const sourceMeta = packet.group ? ` (${packet.group})` : '';
+      return `${header}${sourceMeta}\n[sourceId=${packet.articleId}]\n${packet.excerpt}`;
+    })
+    .join('\n\n');
 }

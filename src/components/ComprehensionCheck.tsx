@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { appendComprehensionAttempt, generateId } from '../lib/storage';
+import { type ActiveComprehensionContext } from '../lib/appViewState';
 import type { ComprehensionAdapter } from '../lib/comprehensionAdapter';
 import type {
   Article,
   ComprehensionAttempt,
   ComprehensionQuestionResult,
+  ComprehensionSourceRef,
   GeneratedComprehensionQuestion,
 } from '../types';
 
@@ -16,6 +18,8 @@ interface ComprehensionCheckProps {
   onOpenSettings?: () => void;
   onAttemptSaved?: (attempt: ComprehensionAttempt) => void;
   questionCount?: number;
+  sourceArticles: Article[];
+  comprehension: ActiveComprehensionContext;
 }
 
 interface CheckResults {
@@ -25,7 +29,9 @@ interface CheckResults {
 
 type ReviewDepth = 'quick' | 'standard' | 'deep';
 type ResultFilter = 'all' | 'needs-review';
+type ExamSectionStats = { total: number; scoreTotal: number };
 const FREE_RESPONSE_SCORE_CONCURRENCY = 2;
+const EXAM_SECTION_ORDER = ['recall', 'interpretation', 'synthesis'] as const;
 
 const MISSING_API_KEY_ERROR = 'Comprehension check requires an API key';
 const MISSING_API_KEY_HELP_TEXT = 'Comprehension Check requires an API key. Add your key in Settings and retry.';
@@ -92,6 +98,26 @@ function scoreAutoQuestion(
   return null;
 }
 
+function isValidSection(value: string | undefined): value is 'recall' | 'interpretation' | 'synthesis' {
+  return value === 'recall' || value === 'interpretation' || value === 'synthesis';
+}
+
+function buildAttemptSourceRefs(articles: Article[]): ComprehensionSourceRef[] {
+  return articles.map((article) => ({
+    articleId: article.id,
+    title: article.title,
+    ...(article.group ? { group: article.group } : {}),
+  }));
+}
+
+function buildAttemptTitle(articles: Article[]): string {
+  const first = articles[0];
+  if (!first) return '';
+  if (articles.length === 1) return first.title;
+  const extras = articles.length - 1;
+  return `${first.title}, +${extras} more`;
+}
+
 export function ComprehensionCheck({
   article,
   entryPoint,
@@ -100,6 +126,8 @@ export function ComprehensionCheck({
   onOpenSettings,
   onAttemptSaved,
   questionCount = 8,
+  sourceArticles,
+  comprehension,
 }: ComprehensionCheckProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'submitting' | 'complete'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -112,17 +140,62 @@ export function ComprehensionCheck({
   const [results, setResults] = useState<CheckResults | null>(null);
   const startTimeRef = useRef(Date.now());
 
-  const orderedQuestions = useMemo(() => {
-    const factual = questions.filter((question) => question.dimension === 'factual');
-    const nonFactual = questions.filter((question) => question.dimension !== 'factual');
-    return [...factual, ...nonFactual];
-  }, [questions]);
-
-  const closedBookCount = useMemo(
-    () => orderedQuestions.filter((question) => question.dimension === 'factual').length,
-    [orderedQuestions]
+  const sourceArticleRefs = useMemo(
+    () => buildAttemptSourceRefs(sourceArticles),
+    [sourceArticles]
   );
-  const isOpenBookPhase = closedBookCount === 0 || currentIndex >= closedBookCount;
+
+  const sourceArticleMap = useMemo(() => {
+    const map = new Map(sourceArticles.map((article) => [article.id, article]));
+    return map;
+  }, [sourceArticles]);
+
+  const questionSourceRefs = useMemo(() => {
+    const map = new Map(sourceArticleRefs.map((articleRef) => [articleRef.articleId, articleRef]));
+    return map;
+  }, [sourceArticleRefs]);
+
+  const isExamMode = comprehension.runMode === 'exam';
+  const orderedQuestions = useMemo(() => {
+    const hasSectionInfo = questions.every((question) => isValidSection(question.section));
+    if (!isExamMode || !hasSectionInfo) {
+      const factual = questions.filter((question) => question.dimension === 'factual');
+      const nonFactual = questions.filter((question) => question.dimension !== 'factual');
+      return [...factual, ...nonFactual];
+    }
+
+    const sectionRank = new Map(EXAM_SECTION_ORDER.map((section, index) => [section, index]));
+    return [...questions]
+      .map((question, index) => ({ question, index }))
+      .sort((first, second) => {
+        const firstSection = first.question.section ?? 'recall';
+        const secondSection = second.question.section ?? 'recall';
+        const sectionDiff = (sectionRank.get(firstSection) ?? 0) - (sectionRank.get(secondSection) ?? 0);
+        if (sectionDiff !== 0) return sectionDiff;
+        if (first.question.section !== second.question.section) return 0;
+
+        const sourceFirst = first.question.sourceArticleId ?? '';
+        const sourceSecond = second.question.sourceArticleId ?? '';
+        if (sourceFirst !== sourceSecond) return sourceFirst.localeCompare(sourceSecond);
+        return first.index - second.index;
+      })
+      .map((item) => item.question);
+  }, [isExamMode, questions]);
+
+  const closedBookCount = useMemo(() => (
+    isExamMode
+      ? orderedQuestions.filter((question) => question.section === 'recall').length
+      : orderedQuestions.filter((question) => question.dimension === 'factual').length
+  ), [isExamMode, orderedQuestions]);
+
+  const isOpenBookPhase = useMemo(() => {
+    const currentQuestion = orderedQuestions[currentIndex];
+    if (!currentQuestion) return false;
+    if (isExamMode) {
+      return currentQuestion.section !== 'recall';
+    }
+    return currentQuestion.dimension !== 'factual' || closedBookCount === 0 || currentIndex >= closedBookCount;
+  }, [closedBookCount, currentIndex, isExamMode, orderedQuestions]);
 
   const currentQuestion = orderedQuestions[currentIndex] ?? null;
 
@@ -138,8 +211,18 @@ export function ComprehensionCheck({
     startTimeRef.current = Date.now();
 
     try {
-      const generated = await adapter.generateCheck(article.content, questionCount);
-      setQuestions(generated.questions);
+      if (isExamMode) {
+        const generated = await adapter.generateExam({
+          selectedArticles: sourceArticles,
+          preset: comprehension.examPreset ?? 'quiz',
+          difficultyTarget: comprehension.difficultyTarget ?? 'standard',
+          openBookSynthesis: comprehension.openBookSynthesis ?? true,
+        });
+        setQuestions(generated.questions);
+      } else {
+        const generated = await adapter.generateCheck(article.content, questionCount);
+        setQuestions(generated.questions);
+      }
       setStatus('ready');
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Failed to generate comprehension check';
@@ -151,7 +234,7 @@ export function ComprehensionCheck({
       setIsMissingApiKeyError(missingApiKey);
       setStatus('error');
     }
-  }, [adapter, article.content, questionCount]);
+  }, [adapter, comprehension.difficultyTarget, comprehension.examPreset, comprehension.openBookSynthesis, isExamMode, questionCount, sourceArticles, article.content]);
 
   useEffect(() => {
     void loadQuestions();
@@ -175,6 +258,8 @@ export function ComprehensionCheck({
           id: question.id,
           dimension: question.dimension,
           format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
           prompt: question.prompt,
           userAnswer,
           modelAnswer: question.modelAnswer,
@@ -189,6 +274,8 @@ export function ComprehensionCheck({
           id: question.id,
           dimension: question.dimension,
           format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
           prompt: question.prompt,
           userAnswer: '',
           modelAnswer: question.modelAnswer,
@@ -198,11 +285,17 @@ export function ComprehensionCheck({
       }
 
       try {
-        const scored = await adapter.scoreAnswer(article.content, question, userAnswer);
+        const scoringArticle = question.sourceArticleId
+          ? sourceArticleMap.get(question.sourceArticleId)
+          : null;
+        const passageForScoring = scoringArticle?.content ?? article.content;
+        const scored = await adapter.scoreAnswer(passageForScoring, question, userAnswer);
         return {
           id: question.id,
           dimension: question.dimension,
           format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
           prompt: question.prompt,
           userAnswer,
           modelAnswer: question.modelAnswer,
@@ -214,6 +307,8 @@ export function ComprehensionCheck({
           id: question.id,
           dimension: question.dimension,
           format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
           prompt: question.prompt,
           userAnswer,
           modelAnswer: question.modelAnswer,
@@ -241,8 +336,13 @@ export function ComprehensionCheck({
     const attempt: ComprehensionAttempt = {
       id: generateId(),
       articleId: article.id,
-      articleTitle: article.title,
+      articleTitle: isExamMode ? buildAttemptTitle(sourceArticles) : article.title,
       entryPoint,
+      runMode: comprehension.runMode,
+      examPreset: comprehension.examPreset,
+      sourceArticles: isExamMode ? sourceArticleRefs : undefined,
+      difficultyTarget: comprehension.difficultyTarget,
+      openBookSynthesis: comprehension.openBookSynthesis,
       questions: scoredQuestions,
       overallScore,
       createdAt: Date.now(),
@@ -253,7 +353,21 @@ export function ComprehensionCheck({
 
     setResults({ questions: scoredQuestions, overallScore });
     setStatus('complete');
-  }, [adapter, article.content, article.id, article.title, entryPoint, onAttemptSaved, orderedQuestions, responses]);
+  }, [
+    article.id,
+    article.title,
+    article.content,
+    adapter,
+    isExamMode,
+    sourceArticles,
+    entryPoint,
+    onAttemptSaved,
+    orderedQuestions,
+    responses,
+    sourceArticleMap,
+    sourceArticleRefs,
+    comprehension,
+  ]);
 
   if (status === 'loading') {
     return (
@@ -281,16 +395,35 @@ export function ComprehensionCheck({
   }
 
   if (status === 'complete' && results) {
+    const sectionStats = results.questions.reduce<Record<string, ExamSectionStats>>((acc, question) => {
+      const sectionKey = question.section ?? 'recall';
+      const existing = acc[sectionKey] ?? { total: 0, scoreTotal: 0 };
+      acc[sectionKey] = {
+        total: existing.total + 1,
+        scoreTotal: existing.scoreTotal + Math.max(0, Math.min(3, question.score)),
+      };
+      return acc;
+    }, {});
+
+    const sourceCoverage = results.questions.reduce<Map<string, number>>((acc, question) => {
+      const key = question.sourceArticleId ?? article.id;
+      acc.set(key, (acc.get(key) ?? 0) + 1);
+      return acc;
+    }, new Map<string, number>());
+    const sourceCoverageNames = Array.from(sourceCoverage.keys()).map((sourceId) => questionSourceRefs.get(sourceId)?.title ?? sourceId);
     const questionEntries = results.questions.map((question, index) => {
       const statusInfo = getQuestionStatus(question);
+      const sourceLabel = question.sourceArticleId ? questionSourceRefs.get(question.sourceArticleId)?.title : undefined;
       return {
         question,
         index,
         statusInfo,
+        sourceLabel,
         needsReview: isQuestionNeedsReview(question),
         feedbackDuplicate: feedbackMatchesModelAnswer(question),
       };
     });
+
     const visibleEntries = questionEntries.filter((entry) => {
       if (resultFilter === 'all') return true;
       return entry.needsReview;
@@ -318,6 +451,28 @@ export function ComprehensionCheck({
         <p className="comprehension-summary">
           Overall score: <strong>{results.overallScore}%</strong>
         </p>
+
+        {isExamMode && sourceCoverageNames.length > 0 && (
+          <p className="comprehension-summary">
+            Source coverage: {sourceCoverageNames.length}/{comprehension.sourceArticleIds.length} selected
+          </p>
+        )}
+
+        {isExamMode && EXAM_SECTION_ORDER.some((section) => sectionStats[section] !== undefined) && (
+          <div className="comprehension-results-chips">
+            {EXAM_SECTION_ORDER.map((section) => {
+              const stat = sectionStats[section];
+              if (!stat) return null;
+              const avg = stat.scoreTotal / stat.total;
+              const percent = Math.round((avg / 3) * 100);
+              return (
+                <span key={section} className="comprehension-chip">
+                  {section}: {percent}%
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         <div className="comprehension-results-toolbar">
           <div className="comprehension-results-chips">
@@ -376,14 +531,24 @@ export function ComprehensionCheck({
         )}
 
         <div className="comprehension-results">
-          {visibleEntries.map(({ question, index, statusInfo, needsReview, feedbackDuplicate }) => (
+          {visibleEntries.map(({ question, index, sourceLabel, statusInfo, needsReview, feedbackDuplicate }) => (
             <article key={question.id} className="comprehension-result-card">
               <div className="comprehension-result-header">
-                <h3>Q{index + 1} · {question.dimension} · {question.format}</h3>
+                <h3>
+                  Q{index + 1}
+                  {question.section ? ` · ${question.section}` : ''}
+                  {' · '}
+                  {question.format}
+                </h3>
                 <span className={`comprehension-result-status ${statusInfo.tone}`}>
                   {statusInfo.label}
                 </span>
               </div>
+              {sourceLabel && (
+                <p className="comprehension-result-meta">
+                  Source: {sourceLabel}
+                </p>
+              )}
               <p className="comprehension-result-prompt">{question.prompt}</p>
               <p><strong>Your answer:</strong> {question.userAnswer || '(no answer)'}</p>
               {question.correct !== undefined && (
@@ -443,12 +608,18 @@ export function ComprehensionCheck({
   const responseValue = responses[currentQuestion.id] ?? '';
   const canGoBack = currentIndex > 0;
   const canGoNext = currentIndex < orderedQuestions.length - 1;
+  const progressLabel = isExamMode
+    ? `${currentQuestion.section ?? 'recall'} section`
+    : `${currentQuestion.dimension} question`;
+  const sourcePassage = currentQuestion.sourceArticleId
+    ? sourceArticleMap.get(currentQuestion.sourceArticleId)?.content ?? article.content
+    : article.content;
 
   return (
     <div className="comprehension-check">
       <h2>Comprehension Check</h2>
       <p className="comprehension-meta">
-        {article.title} · Question {currentIndex + 1} of {orderedQuestions.length}
+        {article.title} · Question {currentIndex + 1} of {orderedQuestions.length} · {progressLabel}
       </p>
       <p className={`comprehension-phase ${isOpenBookPhase ? 'open' : 'closed'}`}>
         {isOpenBookPhase ? 'Open-book phase' : 'Closed-book phase'}
@@ -457,12 +628,15 @@ export function ComprehensionCheck({
       {isOpenBookPhase && (
         <details className="comprehension-passage">
           <summary>Show passage</summary>
-          <div>{article.content}</div>
+          <div>{sourcePassage}</div>
         </details>
       )}
 
       <article className="comprehension-question-card">
-        <h3>{currentQuestion.dimension} · {currentQuestion.format}</h3>
+        <h3>
+          {currentQuestion.section && `${currentQuestion.section} · `}
+          {currentQuestion.format}
+        </h3>
         <p>{currentQuestion.prompt}</p>
 
         {currentQuestion.format === 'multiple-choice' && currentQuestion.options && (
