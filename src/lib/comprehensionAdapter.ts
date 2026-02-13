@@ -27,6 +27,7 @@ export interface ComprehensionExamRequest {
   preset: ComprehensionExamPreset;
   difficultyTarget: 'standard' | 'challenging';
   openBookSynthesis: boolean;
+  onProgress?: (message: string) => void;
 }
 
 export interface ComprehensionAdapter {
@@ -65,6 +66,7 @@ interface GeminiAdapterOptions {
 
 const DEFAULT_GEMINI_MODEL: ComprehensionGeminiModel = 'gemini-3-flash-preview';
 const DEFAULT_GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const MAX_EXAM_GENERATION_ATTEMPTS = 3;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -123,6 +125,7 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
   }
 
   async generateExam(request: ComprehensionExamRequest): Promise<GeneratedComprehensionCheck> {
+    request.onProgress?.('Preparing exam context...');
     const context = buildComprehensionExamContext(request.selectedArticles, request.preset);
     const sourceArticleIds = getComprehensionExamSourceIds(context);
     const generatorInput: GenerateExamPromptArgs = {
@@ -131,13 +134,19 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
       difficultyTarget: request.difficultyTarget,
       openBookSynthesis: request.openBookSynthesis,
     };
+    const basePrompt = buildGenerateExamPrompt(generatorInput);
 
     let lastError: unknown = null;
 
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    for (let attempt = 0; attempt < MAX_EXAM_GENERATION_ATTEMPTS; attempt += 1) {
+      const attemptNumber = attempt + 1;
       try {
-        const prompt = buildGenerateExamPrompt(generatorInput);
+        request.onProgress?.(`Generating exam draft (${attemptNumber}/${MAX_EXAM_GENERATION_ATTEMPTS})...`);
+        const prompt = attempt === 0
+          ? basePrompt
+          : buildExamRetryPrompt(basePrompt, lastError);
         const rawText = await this.generateContent(prompt);
+        request.onProgress?.(`Validating exam draft (${attemptNumber}/${MAX_EXAM_GENERATION_ATTEMPTS})...`);
         const parseArgs: ParseGeneratedExamArgs = {
           raw: rawText,
           preset: request.preset,
@@ -147,7 +156,8 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
         return parseGeneratedExamResponse(parseArgs);
       } catch (error) {
         lastError = error;
-        if (attempt === 0) {
+        if (shouldRetryExamGenerationError(error) && attempt < MAX_EXAM_GENERATION_ATTEMPTS - 1) {
+          request.onProgress?.(`Exam format validation failed, retrying (${attemptNumber + 1}/${MAX_EXAM_GENERATION_ATTEMPTS})...`);
           continue;
         }
         throw lastError;
@@ -224,4 +234,26 @@ function renderSourceContext(context: ReturnType<typeof buildComprehensionExamCo
       return `${header}${sourceMeta}\n[sourceId=${packet.articleId}]\n${packet.excerpt}`;
     })
     .join('\n\n');
+}
+
+function shouldRetryExamGenerationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  if (!message) return true;
+  if (message.includes('requires an API key')) return false;
+  if (message.includes('Gemini blocked the request')) return false;
+  if (message.includes('Gemini request failed (401)')) return false;
+  if (message.includes('Gemini request failed (403)')) return false;
+  return true;
+}
+
+function buildExamRetryPrompt(basePrompt: string, lastError: unknown): string {
+  const rawMessage = lastError instanceof Error ? lastError.message : String(lastError ?? '');
+  const compactMessage = rawMessage.replace(/\s+/g, ' ').trim().slice(0, 220);
+  return [
+    basePrompt,
+    '',
+    'IMPORTANT: The previous output failed validation.',
+    compactMessage ? `Validation error: ${compactMessage}` : 'Validation error: unknown',
+    'Return JSON only. Do not include markdown fences or explanatory text.',
+  ].join('\n');
 }

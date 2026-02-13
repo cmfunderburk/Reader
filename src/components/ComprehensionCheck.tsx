@@ -35,6 +35,7 @@ const EXAM_SECTION_ORDER = ['recall', 'interpretation', 'synthesis'] as const;
 
 const MISSING_API_KEY_ERROR = 'Comprehension check requires an API key';
 const MISSING_API_KEY_HELP_TEXT = 'Comprehension Check requires an API key. Add your key in Settings and retry.';
+const EXAM_GENERATION_ERROR_HELP_TEXT = 'Could not generate a valid exam this time. The model output did not match the expected exam format. Please retry.';
 
 function normalizeComparisonText(text: string): string {
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -118,6 +119,16 @@ function buildAttemptTitle(articles: Article[]): string {
   return `${first.title}, +${extras} more`;
 }
 
+function isLikelyExamFormatError(message: string): boolean {
+  return (
+    message.includes('Exam item') ||
+    message.includes('Exam section') ||
+    message.includes('Generated exam JSON') ||
+    message.includes('LLM response') ||
+    message.includes('Failed to generate a valid exam')
+  );
+}
+
 export function ComprehensionCheck({
   article,
   entryPoint,
@@ -130,7 +141,10 @@ export function ComprehensionCheck({
   comprehension,
 }: ComprehensionCheckProps) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'submitting' | 'complete'>('loading');
+  const [loadingMessage, setLoadingMessage] = useState('Generating questions...');
+  const [loadingElapsedSeconds, setLoadingElapsedSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | null>(null);
   const [isMissingApiKeyError, setIsMissingApiKeyError] = useState(false);
   const [reviewDepth, setReviewDepth] = useState<ReviewDepth>('quick');
   const [resultFilter, setResultFilter] = useState<ResultFilter>('all');
@@ -201,7 +215,10 @@ export function ComprehensionCheck({
 
   const loadQuestions = useCallback(async () => {
     setStatus('loading');
+    setLoadingMessage(isExamMode ? 'Preparing exam context...' : 'Generating questions...');
+    setLoadingElapsedSeconds(0);
     setErrorMessage(null);
+    setErrorDetails(null);
     setIsMissingApiKeyError(false);
     setReviewDepth('quick');
     setResultFilter('all');
@@ -217,6 +234,9 @@ export function ComprehensionCheck({
           preset: comprehension.examPreset ?? 'quiz',
           difficultyTarget: comprehension.difficultyTarget ?? 'standard',
           openBookSynthesis: comprehension.openBookSynthesis ?? true,
+          onProgress: (message) => {
+            setLoadingMessage(message);
+          },
         });
         setQuestions(generated.questions);
       } else {
@@ -227,10 +247,14 @@ export function ComprehensionCheck({
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : 'Failed to generate comprehension check';
       const missingApiKey = rawMessage.trim() === MISSING_API_KEY_ERROR;
+      const friendlyExamError = isExamMode && isLikelyExamFormatError(rawMessage);
       const message = missingApiKey
         ? MISSING_API_KEY_HELP_TEXT
-        : rawMessage;
+        : friendlyExamError
+          ? EXAM_GENERATION_ERROR_HELP_TEXT
+          : rawMessage;
       setErrorMessage(message);
+      setErrorDetails(friendlyExamError ? rawMessage : null);
       setIsMissingApiKeyError(missingApiKey);
       setStatus('error');
     }
@@ -239,6 +263,17 @@ export function ComprehensionCheck({
   useEffect(() => {
     void loadQuestions();
   }, [loadQuestions]);
+
+  useEffect(() => {
+    if (status !== 'loading') {
+      setLoadingElapsedSeconds(0);
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      setLoadingElapsedSeconds((seconds) => seconds + 1);
+    }, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [status]);
 
   const handleResponseChange = useCallback((questionId: string, value: string) => {
     setResponses((prev) => ({ ...prev, [questionId]: value }));
@@ -373,7 +408,12 @@ export function ComprehensionCheck({
     return (
       <div className="comprehension-check">
         <h2>Comprehension Check</h2>
-        <p>Generating questions...</p>
+        <p>{loadingMessage}</p>
+        <p className="comprehension-meta">
+          {loadingElapsedSeconds < 8
+            ? 'This may take up to 30 seconds.'
+            : `Still working... ${loadingElapsedSeconds}s elapsed.`}
+        </p>
       </div>
     );
   }
@@ -383,6 +423,12 @@ export function ComprehensionCheck({
       <div className="comprehension-check">
         <h2>Comprehension Check</h2>
         <p>{errorMessage ?? 'Unable to generate comprehension check.'}</p>
+        {errorDetails && (
+          <details>
+            <summary>Technical details</summary>
+            <pre>{errorDetails}</pre>
+          </details>
+        )}
         <div className="comprehension-actions">
           {isMissingApiKeyError && onOpenSettings && (
             <button className="control-btn" onClick={onOpenSettings}>Open Settings</button>

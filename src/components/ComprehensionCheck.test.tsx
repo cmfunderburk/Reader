@@ -254,6 +254,41 @@ describe('ComprehensionCheck', () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(0);
   });
 
+  it('shows a friendly error when exam generation returns malformed structure', async () => {
+    const sourceA = makeArticleWithContent('a1', 'Source A', 'Passage A');
+    const sourceB = makeArticleWithContent('a2', 'Source B', 'Passage B');
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(),
+      generateExam: vi.fn(async () => {
+        throw new Error('Exam item 0 is missing required fields');
+      }),
+      scoreAnswer: vi.fn(async () => ({ score: 0, feedback: '' })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={sourceA}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[sourceA, sourceB]}
+        comprehension={makeComprehensionContext({
+          runMode: 'exam',
+          sourceArticleIds: ['a1', 'a2'],
+          examPreset: 'quiz',
+          difficultyTarget: 'standard',
+          openBookSynthesis: true,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Could not generate a valid exam this time/i)).toBeTruthy();
+    });
+    expect(screen.getByText('Technical details')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+  });
+
   it('supports review depth controls and deduplicates repeated explanation text', async () => {
     const generated: GeneratedComprehensionCheck = {
       questions: [
