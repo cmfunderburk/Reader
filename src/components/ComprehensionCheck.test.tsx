@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { ComprehensionCheck } from './ComprehensionCheck';
 import type { ComprehensionAdapter } from '../lib/comprehensionAdapter';
 import type { Article, GeneratedComprehensionCheck } from '../types';
@@ -393,5 +394,74 @@ describe('ComprehensionCheck', () => {
     fireEvent.click(screen.getByText('Show passage'));
     expect(screen.getByText('Passage B for interpretation section.')).toBeTruthy();
     expect(screen.queryByText('Passage A for exam context.')).toBeNull();
+  });
+
+  it('does not regenerate exam after submit when parent rerenders with equivalent sources', async () => {
+    const sourceA = makeArticleWithContent('a1', 'Source A', 'Passage A');
+    const sourceB = makeArticleWithContent('a2', 'Source B', 'Passage B');
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'q1',
+          dimension: 'factual',
+          format: 'multiple-choice',
+          section: 'recall',
+          sourceArticleId: 'a1',
+          prompt: 'Recall question?',
+          options: ['A', 'B', 'C', 'D'],
+          correctOptionIndex: 0,
+          modelAnswer: 'A',
+        },
+      ],
+    };
+
+    const generateExam = vi.fn(async () => generated);
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(),
+      generateExam,
+      scoreAnswer: vi.fn(async () => ({ score: 3, feedback: 'Correct' })),
+    };
+
+    function Harness() {
+      const [, setTick] = useState(0);
+      const rebuiltSources = [
+        { ...sourceA },
+        { ...sourceB },
+      ];
+      return (
+        <ComprehensionCheck
+          article={rebuiltSources[0]}
+          entryPoint="launcher"
+          adapter={adapter}
+          onClose={() => {}}
+          onAttemptSaved={() => setTick((tick) => tick + 1)}
+          sourceArticles={rebuiltSources}
+          comprehension={makeComprehensionContext({
+            runMode: 'exam',
+            sourceArticleIds: ['a1', 'a2'],
+            examPreset: 'quiz',
+            difficultyTarget: 'standard',
+            openBookSynthesis: true,
+          })}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText('A'));
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Comprehension Check Results/i)).toBeTruthy();
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(generateExam).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Generating/i)).toBeNull();
   });
 });

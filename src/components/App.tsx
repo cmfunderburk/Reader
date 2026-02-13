@@ -939,6 +939,16 @@ export function App() {
     };
   }, [comprehensionAttempts]);
 
+  const activeComprehensionSourceArticles = useMemo(() => {
+    if (viewState.screen !== 'active-comprehension') return [];
+    if (viewState.comprehension.runMode !== 'exam') {
+      return [viewState.article];
+    }
+    return viewState.comprehension.sourceArticleIds
+      .map((articleId) => articles.find((article) => article.id === articleId))
+      .filter((article): article is Article => article !== undefined);
+  }, [articles, viewState]);
+
   const handleContinue = useCallback((info: { article: Article; activity: Activity; displayMode: DisplayMode }) => {
     applySessionLaunchPlan(planContinueSession(info));
   }, [applySessionLaunchPlan]);
@@ -1363,13 +1373,7 @@ export function App() {
             <ComprehensionCheck
               article={viewState.article}
               entryPoint={viewState.entryPoint}
-              sourceArticles={
-                viewState.comprehension.runMode === 'exam'
-                  ? viewState.comprehension.sourceArticleIds
-                    .map((articleId) => articles.find((article) => article.id === articleId))
-                    .filter((article): article is Article => article !== undefined)
-                  : [viewState.article]
-              }
+              sourceArticles={activeComprehensionSourceArticles}
               comprehension={viewState.comprehension}
               adapter={comprehensionAdapter}
               onClose={closeActiveComprehension}

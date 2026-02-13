@@ -153,6 +153,11 @@ export function ComprehensionCheck({
   const [responses, setResponses] = useState<Record<string, string>>({});
   const [results, setResults] = useState<CheckResults | null>(null);
   const startTimeRef = useRef(Date.now());
+  const sourceArticlesRef = useRef(sourceArticles);
+
+  useEffect(() => {
+    sourceArticlesRef.current = sourceArticles;
+  }, [sourceArticles]);
 
   const sourceArticleRefs = useMemo(
     () => buildAttemptSourceRefs(sourceArticles),
@@ -168,6 +173,11 @@ export function ComprehensionCheck({
     const map = new Map(sourceArticleRefs.map((articleRef) => [articleRef.articleId, articleRef]));
     return map;
   }, [sourceArticleRefs]);
+
+  const sourceArticleIdsKey = useMemo(
+    () => sourceArticles.map((sourceArticle) => sourceArticle.id).join('|'),
+    [sourceArticles]
+  );
 
   const isExamMode = comprehension.runMode === 'exam';
   const orderedQuestions = useMemo(() => {
@@ -228,9 +238,12 @@ export function ComprehensionCheck({
     startTimeRef.current = Date.now();
 
     try {
+      if (isExamMode && sourceArticleIdsKey.length === 0) {
+        throw new Error('No exam sources were selected.');
+      }
       if (isExamMode) {
         const generated = await adapter.generateExam({
-          selectedArticles: sourceArticles,
+          selectedArticles: sourceArticlesRef.current,
           preset: comprehension.examPreset ?? 'quiz',
           difficultyTarget: comprehension.difficultyTarget ?? 'standard',
           openBookSynthesis: comprehension.openBookSynthesis ?? true,
@@ -258,7 +271,7 @@ export function ComprehensionCheck({
       setIsMissingApiKeyError(missingApiKey);
       setStatus('error');
     }
-  }, [adapter, comprehension.difficultyTarget, comprehension.examPreset, comprehension.openBookSynthesis, isExamMode, questionCount, sourceArticles, article.content]);
+  }, [adapter, comprehension.difficultyTarget, comprehension.examPreset, comprehension.openBookSynthesis, isExamMode, questionCount, sourceArticleIdsKey, article.content]);
 
   useEffect(() => {
     void loadQuestions();
