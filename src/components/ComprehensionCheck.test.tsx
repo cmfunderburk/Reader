@@ -570,6 +570,54 @@ describe('ComprehensionCheck', () => {
     expect(screen.queryByText('Passage A for exam context.')).toBeNull();
   });
 
+  it('keeps synthesis questions closed-book when open-book synthesis is disabled', async () => {
+    const sourceA = makeArticleWithContent('a1', 'Source A', 'Passage A for exam context.');
+    const sourceB = makeArticleWithContent('a2', 'Source B', 'Passage B for synthesis section.');
+
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'q-syn',
+          dimension: 'evaluative',
+          format: 'short-answer',
+          section: 'synthesis',
+          sourceArticleId: 'a2',
+          prompt: 'Synthesize the argument across chapters.',
+          modelAnswer: 'Synthesis answer.',
+        },
+      ],
+    };
+
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(),
+      generateExam: vi.fn(async () => generated),
+      scoreAnswer: vi.fn(async () => ({ score: 2, feedback: 'Reasonable' })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={sourceA}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[sourceA, sourceB]}
+        comprehension={makeComprehensionContext({
+          runMode: 'exam',
+          sourceArticleIds: ['a1', 'a2'],
+          examPreset: 'quiz',
+          difficultyTarget: 'standard',
+          openBookSynthesis: false,
+        })}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+    expect(screen.getByText(/Closed-book phase/i)).toBeTruthy();
+    expect(screen.queryByText('Show passage')).toBeNull();
+  });
+
   it('does not regenerate exam after submit when parent rerenders with equivalent sources', async () => {
     const sourceA = makeArticleWithContent('a1', 'Source A', 'Passage A');
     const sourceB = makeArticleWithContent('a2', 'Source B', 'Passage B');

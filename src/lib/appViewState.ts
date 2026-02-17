@@ -47,8 +47,8 @@ export type ViewAction =
   | { type: 'open-add' };
 
 export function getInitialViewState(search: string): ViewState {
-  const params = new URLSearchParams(search);
-  return params.get('import') === '1' ? { screen: 'add' } : { screen: 'home' };
+  void search;
+  return { screen: 'home' };
 }
 
 export function appViewStateReducer(_state: ViewState, action: ViewAction): ViewState {

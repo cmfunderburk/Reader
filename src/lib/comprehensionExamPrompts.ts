@@ -20,7 +20,6 @@ export interface GenerateExamPromptArgs {
   sourceContext: string;
   preset: ComprehensionExamPreset;
   difficultyTarget: ExamDifficulty;
-  openBookSynthesis: boolean;
 }
 
 export interface ParseGeneratedExamArgs {
@@ -505,7 +504,6 @@ export function buildGenerateExamPrompt(args: GenerateExamPromptArgs): string {
     `Preset: ${args.preset}`,
     `Total questions: ${blueprint.questionCount}`,
     `Difficulty target: ${args.difficultyTarget}`,
-    `Open-book for interpretation and synthesis: yes` + (args.openBookSynthesis ? '' : ' (enforced as closed for all sections)') ,
     `Section mix (exact):`,
     sectionMix,
     '',
@@ -518,7 +516,7 @@ export function buildGenerateExamPrompt(args: GenerateExamPromptArgs): string {
     '- True-false must include valid correctAnswer boolean.',
     '- True-false prompts must ask for True/False plus a brief explanation in <= 2 sentences.',
     '- Short-answer and essay must include modelAnswer.',
-    '- Include both closed-book and open-book sections in order: recall, interpretation, synthesis.',
+    '- Include sections in order: recall, interpretation, synthesis.',
     '',
     `Return JSON only with this exact shape:`,
     '{',

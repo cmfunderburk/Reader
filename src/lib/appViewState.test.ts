@@ -16,11 +16,8 @@ function makeArticle(id: string): Article {
 }
 
 describe('appViewState', () => {
-  it('initializes add screen for bookmarklet import query', () => {
-    expect(getInitialViewState('?import=1')).toEqual({ screen: 'add' });
-  });
-
   it('initializes home screen without import query', () => {
+    expect(getInitialViewState('?import=1')).toEqual({ screen: 'home' });
     expect(getInitialViewState('?foo=bar')).toEqual({ screen: 'home' });
     expect(getInitialViewState('')).toEqual({ screen: 'home' });
   });

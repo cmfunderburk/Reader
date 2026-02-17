@@ -447,7 +447,7 @@ export function App() {
     const updated = [...articles, newArticle];
     setArticles(updated);
     saveArticles(updated);
-    // If in content-browser stay there; if bookmarklet import go home
+    // If in content-browser stay there; if launched from add screen go home
     if (viewState.screen === 'add') {
       setViewState({ screen: 'home' });
     }
@@ -1403,7 +1403,7 @@ export function App() {
           </ComprehensionCheckBoundary>
         )}
 
-        {/* Bookmarklet import */}
+        {/* Add Article */}
         {viewState.screen === 'add' && (
           <AddContent
             onAdd={handleAddArticle}

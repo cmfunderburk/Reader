@@ -132,7 +132,6 @@ export class GeminiComprehensionAdapter implements ComprehensionAdapter {
       sourceContext: renderSourceContext(context),
       preset: request.preset,
       difficultyTarget: request.difficultyTarget,
-      openBookSynthesis: request.openBookSynthesis,
     };
     const basePrompt = buildGenerateExamPrompt(generatorInput);
 

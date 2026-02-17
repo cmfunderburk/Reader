@@ -209,6 +209,7 @@ export function ComprehensionCheck({
   );
 
   const isExamMode = comprehension.runMode === 'exam';
+  const synthesisOpenBookEnabled = comprehension.openBookSynthesis ?? true;
   const orderedQuestions = useMemo(() => {
     const hasSectionInfo = questions.every((question) => isValidSection(question.section));
     if (!isExamMode || !hasSectionInfo) {
@@ -245,10 +246,12 @@ export function ComprehensionCheck({
     const currentQuestion = orderedQuestions[currentIndex];
     if (!currentQuestion) return false;
     if (isExamMode) {
-      return currentQuestion.section !== 'recall';
+      if (currentQuestion.section === 'recall') return false;
+      if (currentQuestion.section === 'synthesis') return synthesisOpenBookEnabled;
+      return true;
     }
     return currentQuestion.dimension !== 'factual' || closedBookCount === 0 || currentIndex >= closedBookCount;
-  }, [closedBookCount, currentIndex, isExamMode, orderedQuestions]);
+  }, [closedBookCount, currentIndex, isExamMode, orderedQuestions, synthesisOpenBookEnabled]);
 
   const currentQuestion = orderedQuestions[currentIndex] ?? null;
 
@@ -282,6 +285,7 @@ export function ComprehensionCheck({
           difficultyTarget: comprehension.difficultyTarget ?? 'standard',
           openBookSynthesis: comprehension.openBookSynthesis ?? true,
           onProgress: (message) => {
+            if (isStaleRequest()) return;
             setLoadingMessage(message);
           },
         });
