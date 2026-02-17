@@ -37,6 +37,34 @@ const MISSING_API_KEY_ERROR = 'Comprehension check requires an API key';
 const MISSING_API_KEY_HELP_TEXT = 'Comprehension Check requires an API key. Add your key in Settings and retry.';
 const EXAM_GENERATION_ERROR_HELP_TEXT = 'Could not generate a valid exam this time. The model output did not match the expected exam format. Please retry.';
 
+function parseTrueFalseSelection(response: string): boolean | null {
+  if (response === 'true') return true;
+  if (response === 'false') return false;
+  return null;
+}
+
+function countSentences(text: string): number {
+  const normalized = text.trim();
+  if (!normalized) return 0;
+  const matches = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g);
+  if (!matches) return 0;
+  return matches
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length > 0)
+    .length;
+}
+
+function formatTrueFalseUserAnswer(response: string, explanation: string): string {
+  const selection = parseTrueFalseSelection(response);
+  const trimmedExplanation = explanation.trim();
+  const answerText = selection === null ? '' : selection ? 'True' : 'False';
+
+  if (!answerText && !trimmedExplanation) return '';
+  if (!answerText) return trimmedExplanation;
+  if (!trimmedExplanation) return answerText;
+  return `${answerText}. ${trimmedExplanation}`;
+}
+
 function normalizeComparisonText(text: string): string {
   return text.replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -74,11 +102,6 @@ function formatUserAnswer(question: GeneratedComprehensionQuestion, response: st
     }
     return question.options[selectedIndex];
   }
-  if (question.format === 'true-false') {
-    if (response === 'true') return 'True';
-    if (response === 'false') return 'False';
-    return '';
-  }
   return response.trim();
 }
 
@@ -89,11 +112,6 @@ function scoreAutoQuestion(
   if (question.format === 'multiple-choice') {
     const selectedIndex = Number(response);
     const correct = Number.isInteger(selectedIndex) && selectedIndex === question.correctOptionIndex;
-    return { score: correct ? 3 : 0, correct };
-  }
-  if (question.format === 'true-false') {
-    const selected = response === 'true' ? true : response === 'false' ? false : null;
-    const correct = selected !== null && selected === question.correctAnswer;
     return { score: correct ? 3 : 0, correct };
   }
   return null;
@@ -151,6 +169,7 @@ export function ComprehensionCheck({
   const [questions, setQuestions] = useState<GeneratedComprehensionQuestion[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, string>>({});
+  const [trueFalseExplanations, setTrueFalseExplanations] = useState<Record<string, string>>({});
   const [results, setResults] = useState<CheckResults | null>(null);
   const startTimeRef = useRef(Date.now());
   const sourceArticlesRef = useRef(sourceArticles);
@@ -248,6 +267,7 @@ export function ComprehensionCheck({
     setResultFilter('all');
     setResults(null);
     setResponses({});
+    setTrueFalseExplanations({});
     setCurrentIndex(0);
     startTimeRef.current = Date.now();
 
@@ -310,6 +330,10 @@ export function ComprehensionCheck({
     setResponses((prev) => ({ ...prev, [questionId]: value }));
   }, []);
 
+  const handleTrueFalseExplanationChange = useCallback((questionId: string, value: string) => {
+    setTrueFalseExplanations((prev) => ({ ...prev, [questionId]: value }));
+  }, []);
+
   const submit = useCallback(async () => {
     if (orderedQuestions.length === 0) return;
 
@@ -319,7 +343,129 @@ export function ComprehensionCheck({
 
     setStatus('submitting');
 
+    const scoreTrueFalseQuestion = async (question: GeneratedComprehensionQuestion): Promise<ComprehensionQuestionResult> => {
+      const response = responses[question.id] ?? '';
+      const explanation = (trueFalseExplanations[question.id] ?? '').trim();
+      const selected = parseTrueFalseSelection(response);
+      const choiceLabel = selected === null ? '' : selected ? 'True' : 'False';
+      const userAnswer = formatTrueFalseUserAnswer(response, explanation);
+
+      if (selected === null && explanation.length === 0) {
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer: '',
+          modelAnswer: question.modelAnswer,
+          score: 0,
+          feedback: 'No answer submitted. Select True or False and add a brief explanation.',
+        };
+      }
+
+      if (selected === null) {
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer,
+          modelAnswer: question.modelAnswer,
+          score: 0,
+          feedback: 'Select True or False, then explain your reasoning in no more than 2 sentences.',
+        };
+      }
+
+      if (selected !== question.correctAnswer) {
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer,
+          modelAnswer: question.modelAnswer,
+          score: 0,
+          feedback: `Incorrect true/false choice (${choiceLabel}). ${question.modelAnswer}`,
+        };
+      }
+
+      if (!explanation) {
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer,
+          modelAnswer: question.modelAnswer,
+          score: 1,
+          feedback: 'True/False choice is correct, but add a brief explanation (<= 2 sentences) to earn full credit.',
+        };
+      }
+
+      const sentenceCount = countSentences(explanation);
+      const exceedsSentenceLimit = sentenceCount > 2;
+      const scorePromptAnswer = [
+        `True/False selection: ${choiceLabel}`,
+        `Explanation (<= 2 sentences): ${explanation}`,
+      ].join('\n');
+
+      try {
+        const scoringArticle = question.sourceArticleId
+          ? sourceArticleMap.get(question.sourceArticleId)
+          : null;
+        const passageForScoring = scoringArticle?.content ?? article.content;
+        const scored = await adapter.scoreAnswer(passageForScoring, question, scorePromptAnswer);
+        const score = exceedsSentenceLimit
+          ? Math.min(Math.max(0, Math.min(3, scored.score)), 2)
+          : Math.max(0, Math.min(3, scored.score));
+        const sentenceLimitFeedback = exceedsSentenceLimit
+          ? ` Keep explanations to 2 sentences or fewer (received ${sentenceCount}).`
+          : '';
+
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer,
+          modelAnswer: question.modelAnswer,
+          score,
+          feedback: `${scored.feedback}${sentenceLimitFeedback}`,
+        };
+      } catch {
+        const sentenceLimitFeedback = exceedsSentenceLimit
+          ? ` Explanation exceeded 2 sentences (${sentenceCount}).`
+          : '';
+        return {
+          id: question.id,
+          dimension: question.dimension,
+          format: question.format,
+          section: question.section,
+          sourceArticleId: question.sourceArticleId,
+          prompt: question.prompt,
+          userAnswer,
+          modelAnswer: question.modelAnswer,
+          score: 1,
+          feedback: `True/False choice is correct, but explanation could not be fully scored automatically.${sentenceLimitFeedback} Review the model answer below.`,
+        };
+      }
+    };
+
     const scoreQuestion = async (question: GeneratedComprehensionQuestion): Promise<ComprehensionQuestionResult> => {
+      if (question.format === 'true-false') {
+        return scoreTrueFalseQuestion(question);
+      }
+
       const response = responses[question.id] ?? '';
       const userAnswer = formatUserAnswer(question, response);
       const autoScore = scoreAutoQuestion(question, response);
@@ -441,6 +587,7 @@ export function ComprehensionCheck({
     responses,
     sourceArticleMap,
     sourceArticleRefs,
+    trueFalseExplanations,
     comprehension,
   ]);
 
@@ -692,6 +839,13 @@ export function ComprehensionCheck({
   }
 
   const responseValue = responses[currentQuestion.id] ?? '';
+  const trueFalseExplanationValue = currentQuestion.format === 'true-false'
+    ? (trueFalseExplanations[currentQuestion.id] ?? '')
+    : '';
+  const trueFalseSentenceCount = currentQuestion.format === 'true-false'
+    ? countSentences(trueFalseExplanationValue)
+    : 0;
+  const trueFalseExceedsSentenceLimit = trueFalseSentenceCount > 2;
   const canGoBack = currentIndex > 0;
   const canGoNext = currentIndex < orderedQuestions.length - 1;
   const progressLabel = isExamMode
@@ -743,28 +897,42 @@ export function ComprehensionCheck({
         )}
 
         {currentQuestion.format === 'true-false' && (
-          <fieldset className="comprehension-options">
-            <label>
-              <input
-                type="radio"
-                name={`question-${currentQuestion.id}`}
-                value="true"
-                checked={responseValue === 'true'}
-                onChange={(event) => handleResponseChange(currentQuestion.id, event.target.value)}
-              />
-              True
-            </label>
-            <label>
-              <input
-                type="radio"
-                name={`question-${currentQuestion.id}`}
-                value="false"
-                checked={responseValue === 'false'}
-                onChange={(event) => handleResponseChange(currentQuestion.id, event.target.value)}
-              />
-              False
-            </label>
-          </fieldset>
+          <>
+            <fieldset className="comprehension-options">
+              <label>
+                <input
+                  type="radio"
+                  name={`question-${currentQuestion.id}`}
+                  value="true"
+                  checked={responseValue === 'true'}
+                  onChange={(event) => handleResponseChange(currentQuestion.id, event.target.value)}
+                />
+                True
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name={`question-${currentQuestion.id}`}
+                  value="false"
+                  checked={responseValue === 'false'}
+                  onChange={(event) => handleResponseChange(currentQuestion.id, event.target.value)}
+                />
+                False
+              </label>
+            </fieldset>
+            <textarea
+              className="comprehension-textarea"
+              value={trueFalseExplanationValue}
+              onChange={(event) => handleTrueFalseExplanationChange(currentQuestion.id, event.target.value)}
+              placeholder="Explain your answer in no more than 2 sentences."
+              rows={3}
+            />
+            <p className="comprehension-meta">
+              Explain in {'<='} 2 sentences.
+              {trueFalseSentenceCount > 0 ? ` (${trueFalseSentenceCount}/2)` : ''}
+              {trueFalseExceedsSentenceLimit ? ' Extra sentences reduce your score.' : ''}
+            </p>
+          </>
         )}
 
         {currentQuestion.format === 'short-answer' && (

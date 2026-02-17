@@ -516,6 +516,7 @@ export function buildGenerateExamPrompt(args: GenerateExamPromptArgs): string {
     '- Recall questions must be objective format only: multiple-choice or true-false.',
     '- Multiple-choice must include exactly 4 unique options and a valid correctOptionIndex.',
     '- True-false must include valid correctAnswer boolean.',
+    '- True-false prompts must ask for True/False plus a brief explanation in <= 2 sentences.',
     '- Short-answer and essay must include modelAnswer.',
     '- Include both closed-book and open-book sections in order: recall, interpretation, synthesis.',
     '',

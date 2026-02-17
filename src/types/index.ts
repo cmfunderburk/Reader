@@ -163,7 +163,7 @@ export interface ComprehensionQuestionResult {
   modelAnswer: string;
   score: number;          // 0-3
   feedback: string;
-  correct?: boolean;      // for auto-scored MC/TF
+  correct?: boolean;      // for auto-scored multiple-choice
 }
 
 export interface ComprehensionAttempt {

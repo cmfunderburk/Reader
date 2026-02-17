@@ -166,6 +166,180 @@ describe('ComprehensionCheck', () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('requires true-false explanation and scores both choice and explanation', async () => {
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'tf-1',
+          dimension: 'factual',
+          format: 'true-false',
+          prompt: 'True or False: the passage is used for comprehension testing. Explain in <= 2 sentences.',
+          correctAnswer: true,
+          modelAnswer: 'True. The passage explicitly states it is used for comprehension testing.',
+        },
+      ],
+    };
+
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
+      scoreAnswer: vi.fn(async () => ({
+        score: 3,
+        feedback: 'Accurate choice and concise, coherent explanation.',
+      })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={makeArticle()}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText('True'));
+    fireEvent.change(screen.getByPlaceholderText('Explain your answer in no more than 2 sentences.'), {
+      target: { value: 'The passage states this directly.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Comprehension Check Results/i)).toBeTruthy();
+    });
+
+    expect(adapter.scoreAnswer).toHaveBeenCalledTimes(1);
+    expect(adapter.scoreAnswer).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ id: 'tf-1' }),
+      expect.stringContaining('True/False selection: True')
+    );
+
+    const stored = JSON.parse(localStorage.getItem('speedread_comprehension_attempts') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].questions[0]).toMatchObject({
+      id: 'tf-1',
+      score: 3,
+      userAnswer: 'True. The passage states this directly.',
+    });
+  });
+
+  it('caps true-false explanation score when explanation exceeds 2 sentences', async () => {
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'tf-cap',
+          dimension: 'factual',
+          format: 'true-false',
+          prompt: 'True or False: the passage is sample content. Explain in <= 2 sentences.',
+          correctAnswer: true,
+          modelAnswer: 'True. It says it is a sample passage.',
+        },
+      ],
+    };
+
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
+      scoreAnswer: vi.fn(async () => ({
+        score: 3,
+        feedback: 'Strong explanation.',
+      })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={makeArticle()}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText('True'));
+    fireEvent.change(screen.getByPlaceholderText('Explain your answer in no more than 2 sentences.'), {
+      target: { value: 'Sentence one. Sentence two. Sentence three.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Comprehension Check Results/i)).toBeTruthy();
+    });
+
+    const stored = JSON.parse(localStorage.getItem('speedread_comprehension_attempts') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].questions[0].score).toBe(2);
+  });
+
+  it('assigns zero for wrong true-false choice without calling explanation scoring', async () => {
+    const generated: GeneratedComprehensionCheck = {
+      questions: [
+        {
+          id: 'tf-wrong',
+          dimension: 'factual',
+          format: 'true-false',
+          prompt: 'True or False: the passage is unrelated to testing. Explain in <= 2 sentences.',
+          correctAnswer: false,
+          modelAnswer: 'False. It is explicitly about comprehension testing.',
+        },
+      ],
+    };
+
+    const adapter: ComprehensionAdapter = {
+      generateCheck: vi.fn(async () => generated),
+      generateExam: vi.fn(),
+      scoreAnswer: vi.fn(async () => ({
+        score: 3,
+        feedback: 'Should not be used.',
+      })),
+    };
+
+    render(
+      <ComprehensionCheck
+        article={makeArticle()}
+        entryPoint="launcher"
+        adapter={adapter}
+        onClose={() => {}}
+        sourceArticles={[makeArticle()]}
+        comprehension={makeComprehensionContext()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Question 1 of 1/i)).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText('True'));
+    fireEvent.change(screen.getByPlaceholderText('Explain your answer in no more than 2 sentences.'), {
+      target: { value: 'It seems unrelated.' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Comprehension Check Results/i)).toBeTruthy();
+    });
+
+    expect(adapter.scoreAnswer).toHaveBeenCalledTimes(0);
+    const stored = JSON.parse(localStorage.getItem('speedread_comprehension_attempts') || '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].questions[0]).toMatchObject({
+      id: 'tf-wrong',
+      score: 0,
+    });
+  });
+
   it('limits concurrent free-response scoring requests', async () => {
     const generated: GeneratedComprehensionCheck = {
       questions: [
