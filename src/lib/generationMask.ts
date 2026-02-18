@@ -18,6 +18,12 @@ interface CoreParts {
   trailing: string;
 }
 
+interface MaskContext {
+  tokenIndex: number;
+  partsByTokenIndex: Map<number, CoreParts>;
+  titleCaseLine: boolean;
+}
+
 const DIFFICULTY_PROFILES: Record<GenerationDifficulty, MaskProfile> = {
   normal: { maxMaskRatio: 0.25 },
   hard: { maxMaskRatio: 0.4 },
@@ -72,19 +78,73 @@ function isAcronym(core: string): boolean {
   return /^[A-Z]{2,}$/.test(normalized);
 }
 
-function isProperNoun(core: string, sentenceInitial: boolean): boolean {
-  if (sentenceInitial) return false;
-  if (/^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/.test(core)) return true;
-  if (/^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(core)) return true;
+function normalizeAlpha(core: string): string {
+  return core.toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function isSimpleTitleCase(core: string): boolean {
+  return /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/.test(core);
+}
+
+function isInternalCapWord(core: string): boolean {
+  return /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(core);
+}
+
+function isNameLikeTitleWord(core: string): boolean {
+  if (!isSimpleTitleCase(core)) return false;
+  const alphaOnly = normalizeAlpha(core);
+  if (alphaOnly.length < 3) return false;
+  if (FUNCTION_WORDS.has(alphaOnly)) return false;
+  return true;
+}
+
+function hasAdjacentNameLikeTitleWord(tokenIndex: number, partsByTokenIndex: Map<number, CoreParts>): boolean {
+  const prev = partsByTokenIndex.get(tokenIndex - 1);
+  if (prev && isNameLikeTitleWord(prev.core)) return true;
+  const next = partsByTokenIndex.get(tokenIndex + 1);
+  if (next && isNameLikeTitleWord(next.core)) return true;
   return false;
 }
 
-function isMaskEligible(core: string, sentenceInitial: boolean): boolean {
+function isLikelyTitleCaseLine(tokens: TokenInfo[], partsByTokenIndex: Map<number, CoreParts>): boolean {
+  let alphaTokenCount = 0;
+  let titleCaseCount = 0;
+
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+    const parts = partsByTokenIndex.get(tokenIndex);
+    if (!parts) continue;
+    const alphaOnly = normalizeAlpha(parts.core);
+    if (alphaOnly.length === 0) continue;
+
+    alphaTokenCount += 1;
+    if (isSimpleTitleCase(parts.core) || isInternalCapWord(parts.core) || isAcronym(parts.core)) {
+      titleCaseCount += 1;
+    }
+  }
+
+  if (alphaTokenCount < 3) return false;
+  return (titleCaseCount / alphaTokenCount) >= 0.65;
+}
+
+function isProperNoun(core: string, sentenceInitial: boolean, context: MaskContext): boolean {
+  if (isInternalCapWord(core)) return true;
+  if (sentenceInitial) return false;
+  if (!isSimpleTitleCase(core)) return false;
+
+  if (!context.titleCaseLine) {
+    return true;
+  }
+
+  // In heading/title-case lines, only preserve likely multi-word names.
+  return hasAdjacentNameLikeTitleWord(context.tokenIndex, context.partsByTokenIndex);
+}
+
+function isMaskEligible(core: string, sentenceInitial: boolean, context: MaskContext): boolean {
   if (/\d/.test(core)) return false;
   if (isAcronym(core)) return false;
-  if (isProperNoun(core, sentenceInitial)) return false;
+  if (isProperNoun(core, sentenceInitial, context)) return false;
 
-  const alphaOnly = core.toLowerCase().replace(/[^a-z]/g, '');
+  const alphaOnly = normalizeAlpha(core);
   if (alphaOnly.length === 0) return false;
   if (FUNCTION_WORDS.has(alphaOnly)) return false;
 
@@ -205,6 +265,7 @@ export function maskGenerationLine(
     if (!parts) continue;
     partsByTokenIndex.set(tokenIndex, parts);
   }
+  const titleCaseLine = isLikelyTitleCaseLine(tokens, partsByTokenIndex);
 
   let cursor = 0;
   let result = '';
@@ -214,7 +275,7 @@ export function maskGenerationLine(
     result += lineText.slice(cursor, token.start);
 
     const parts = partsByTokenIndex.get(tokenIndex);
-    if (!parts || !isMaskEligible(parts.core, token.sentenceInitial)) {
+    if (!parts || !isMaskEligible(parts.core, token.sentenceInitial, { tokenIndex, partsByTokenIndex, titleCaseLine })) {
       result += token.raw;
       cursor = token.end;
       continue;

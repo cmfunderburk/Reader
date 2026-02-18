@@ -52,6 +52,12 @@ describe('generationMask', () => {
     expect(masked).not.toBe(line);
   });
 
+  it('masks standalone title-cased words in heading-like lines', () => {
+    const headingLine = 'Learning Is Misunderstood';
+    const masked = maskGenerationLine(headingLine, 'normal', 9, 0);
+    expect(masked).not.toContain('Misunderstood');
+  });
+
   it('applies per-word mask caps (<=25% normal, <=40% hard)', () => {
     const line = 'retrieval practice improves durable memory formation substantially';
     const originalTokens = getWordTokens(line);
