@@ -28,6 +28,7 @@ import type {
   ComprehensionKeyPointResult,
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
+import { MAX_WPM, MIN_WPM } from './wpm';
 
 const STORAGE_KEYS = {
   schemaVersion: 'speedread_schema_version',
@@ -47,12 +48,12 @@ const STORAGE_KEYS = {
 } as const;
 
 const CURRENT_STORAGE_SCHEMA_VERSION = 3;
+let lastKnownStorageSchemaVersion: number | null = null;
 
 export interface Settings {
   defaultWpm: number;
   wpmByActivity: Record<Activity, number>;
   defaultMode: TokenMode;
-  customCharWidth: number;
   rsvpFontSize: number;
   saccadeFontSize: number;
   predictionFontSize: number;
@@ -88,7 +89,6 @@ const DEFAULT_SETTINGS: Settings = {
     'comprehension-check': 300,
   },
   defaultMode: 'word',
-  customCharWidth: 8,
   rsvpFontSize: 2.5,
   saccadeFontSize: 1.0,
   predictionFontSize: 1.25,
@@ -113,9 +113,6 @@ const DEFAULT_SETTINGS: Settings = {
   generationDifficulty: 'normal',
   generationSweepReveal: true,
 };
-
-const MIN_WPM = 100;
-const MAX_WPM = 800;
 
 function clampWpm(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -251,7 +248,16 @@ function migrateComprehensionAttemptsToV3(): void {
 
 function runStorageMigrations(): void {
   const currentVersion = loadStorageSchemaVersion();
-  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) return;
+  if (
+    currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION
+    && lastKnownStorageSchemaVersion === currentVersion
+  ) {
+    return;
+  }
+  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) {
+    lastKnownStorageSchemaVersion = currentVersion;
+    return;
+  }
 
   if (currentVersion < 1) {
     migrateSettingsToV1();
@@ -268,6 +274,7 @@ function runStorageMigrations(): void {
   }
 
   saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);
+  lastKnownStorageSchemaVersion = CURRENT_STORAGE_SCHEMA_VERSION;
 }
 
 /**
@@ -410,7 +417,6 @@ export function loadSettings(): Settings {
       settings.saccadePacerStyle = settings.saccadeShowSweep === false ? 'focus' : 'sweep';
     }
     // Clamp values that may have been saved under old wider ranges
-    settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
     settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
     settings.predictionPreviewMode = settings.predictionPreviewMode === 'unlimited' ? 'unlimited' : 'sentences';
     settings.predictionPreviewSentenceCount = Math.max(
@@ -492,36 +498,46 @@ export function clearSessionSnapshot(): void {
  * Update reading position for an article.
  */
 export function updateArticlePosition(articleId: string, position: number): void {
-  const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].readPosition = position;
-    saveArticles(articles);
-  }
+  updateArticleInStorage(articleId, (article) => (
+    article.readPosition === position
+      ? article
+      : { ...article, readPosition: position }
+  ));
 }
 
 /**
  * Update prediction position for an article (separate from RSVP/saccade position).
  */
 export function updateArticlePredictionPosition(articleId: string, position: number): void {
-  const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].predictionPosition = position;
-    saveArticles(articles);
-  }
+  updateArticleInStorage(articleId, (article) => (
+    article.predictionPosition === position
+      ? article
+      : { ...article, predictionPosition: position }
+  ));
 }
 
 /**
  * Mark an article as read.
  */
 export function markArticleAsRead(articleId: string): void {
+  updateArticleInStorage(articleId, (article) => (
+    article.isRead
+      ? article
+      : { ...article, isRead: true }
+  ));
+}
+
+function updateArticleInStorage(articleId: string, updater: (article: Article) => Article): void {
   const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].isRead = true;
-    saveArticles(articles);
-  }
+  const index = articles.findIndex((article) => article.id === articleId);
+  if (index === -1) return;
+
+  const current = articles[index];
+  const updated = updater(current);
+  if (updated === current) return;
+
+  articles[index] = updated;
+  saveArticles(articles);
 }
 
 /**

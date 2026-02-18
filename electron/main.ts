@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, protocol, net, safeStorage } from 
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath, pathToFileURL } from 'url'
-import type { ApiKeyId } from '../shared/electron-contract'
+import type { ApiKeyId, CorpusArticle, CorpusFamily, CorpusTier } from '../shared/electron-contract'
 import {
   getConfiguredSources,
   scanDirectory,
@@ -37,17 +37,6 @@ protocol.registerSchemesAsPrivileged([
 // ---------------------------------------------------------------------------
 // Corpus cache — loaded lazily per tier, held in memory for sampling
 // ---------------------------------------------------------------------------
-interface CorpusArticle {
-  title: string
-  text: string
-  domain: string
-  fk_grade: number
-  words: number
-  sentences: number
-}
-
-type CorpusFamily = 'wiki' | 'prose'
-type CorpusTier = 'easy' | 'medium' | 'hard'
 const CORPUS_FAMILIES: CorpusFamily[] = ['wiki', 'prose']
 const CORPUS_TIERS: CorpusTier[] = ['easy', 'medium', 'hard']
 

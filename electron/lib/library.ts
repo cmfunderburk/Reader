@@ -2,21 +2,8 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { app } from 'electron'
 import { isFrontmatterFilename } from './cleanup'
-
-export interface LibrarySource {
-  name: string
-  path: string
-}
-
-export interface LibraryItem {
-  name: string
-  path: string
-  type: 'pdf' | 'epub' | 'txt'
-  size: number
-  modifiedAt: number
-  parentDir?: string       // Immediate parent directory name (for grouping)
-  isFrontmatter?: boolean  // Detected as frontmatter file
-}
+import type { LibraryItem, LibrarySource } from '../../shared/electron-contract'
+export type { LibraryItem, LibrarySource } from '../../shared/electron-contract'
 
 const SOURCES_FILE = 'library-sources.json'
 const LIBRARY_MANIFEST_SCHEMA = 'reader-library-manifest'
