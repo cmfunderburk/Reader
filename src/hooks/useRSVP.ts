@@ -130,6 +130,14 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
 
   // Prediction mode position tracking (word index, separate from RSVP/saccade)
   const predictionWordIndexRef = useRef<number>(0);
+  const lastPersistedReadingRef = useRef<{ articleId: string | null; index: number | null }>({
+    articleId: null,
+    index: null,
+  });
+  const lastPersistedPredictionRef = useRef<{ articleId: string | null; index: number | null }>({
+    articleId: null,
+    index: null,
+  });
   const advanceToNextRef = useRef<() => void>(() => {});
 
   const getElapsedPlayTimeMs = useCallback((): number => {
@@ -183,22 +191,6 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     wpmRef,
   ]);
 
-  // Retokenize when saccadeLength changes in custom RSVP mode
-  useEffect(() => {
-    if (article && mode === 'custom' && displayMode === 'rsvp') {
-      const { chunks: newChunks, pages } = retokenize(
-        article.content, displayMode, mode, saccadeLength, linesPerPageRef.current, article.assetBaseUrl, article.sourcePath
-      );
-      setSaccadePages(pages);
-      setChunks(newChunks);
-      setCurrentChunkIndex(
-        mapChunkIndexByProgress(currentChunkIndex, chunks.length, newChunks.length)
-      );
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to saccadeLength changes
-  }, [saccadeLength]);
-
-
   // Helper to tokenize based on current display mode and chunk mode
   const retokenize = useCallback((
     content: string,
@@ -227,6 +219,55 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     }
   }, []);
 
+  const retokenizeArticle = useCallback((
+    activeArticle: Article,
+    dm: DisplayMode,
+    tm: TokenMode,
+    pageLines: number = linesPerPageRef.current,
+  ): Chunk[] => {
+    const { chunks: newChunks, pages } = retokenize(
+      activeArticle.content,
+      dm,
+      tm,
+      saccadeLengthRef.current,
+      pageLines,
+      activeArticle.assetBaseUrl,
+      activeArticle.sourcePath
+    );
+    setSaccadePages(pages);
+    setChunks(newChunks);
+    return newChunks;
+  }, [linesPerPageRef, retokenize, saccadeLengthRef]);
+
+  const persistReadingPosition = useCallback((articleId: string, index: number, totalChunks: number): void => {
+    const nextIndex = clampChunkIndex(index, totalChunks);
+    const last = lastPersistedReadingRef.current;
+    if (last.articleId === articleId && last.index === nextIndex) return;
+    updateArticlePosition(articleId, nextIndex);
+    lastPersistedReadingRef.current = { articleId, index: nextIndex };
+  }, []);
+
+  const persistPredictionPosition = useCallback((articleId: string, index: number, totalChunks: number): void => {
+    const nextIndex = clampProgressIndex(index, totalChunks);
+    const last = lastPersistedPredictionRef.current;
+    if (last.articleId === articleId && last.index === nextIndex) return;
+    updateArticlePredictionPosition(articleId, nextIndex);
+    lastPersistedPredictionRef.current = { articleId, index: nextIndex };
+  }, []);
+
+  // Retokenize when saccadeLength changes in custom RSVP mode
+  useEffect(() => {
+    const activeArticle = articleRef.current;
+    if (!activeArticle || modeRef.current !== 'custom' || displayModeRef.current !== 'rsvp') return;
+
+    const previousChunkCount = chunksRef.current.length;
+    const previousIndex = indexRef.current;
+    const newChunks = retokenizeArticle(activeArticle, displayModeRef.current, modeRef.current);
+    setCurrentChunkIndex(
+      mapChunkIndexByProgress(previousIndex, previousChunkCount, newChunks.length)
+    );
+  }, [articleRef, chunksRef, displayModeRef, indexRef, modeRef, retokenizeArticle, saccadeLength]);
+
   // Advance to next chunk
   const { isPlaying, play: startTimer, pause: stopTimer } = usePlaybackTimer({
     enabled: shouldAutoPlay && chunks.length > 0,
@@ -242,7 +283,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     if (currentIndex >= chunks.length - 1) {
       stopTimer();
       if (articleRef.current) {
-        updateArticlePosition(articleRef.current.id, clampChunkIndex(currentIndex, chunks.length));
+        persistReadingPosition(articleRef.current.id, currentIndex, chunks.length);
       }
       onComplete?.();
       return;
@@ -254,9 +295,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
 
     // Persist position periodically
     if (articleRef.current && (nextIndex % 10 === 0 || nextIndex === chunks.length - 1)) {
-      updateArticlePosition(articleRef.current.id, nextIndex);
+      persistReadingPosition(articleRef.current.id, nextIndex, chunks.length);
     }
-  }, [articleRef, chunksRef, indexRef, onComplete, stopTimer]);
+  }, [articleRef, chunksRef, indexRef, onComplete, persistReadingPosition, stopTimer]);
 
   useEffect(() => {
     advanceToNextRef.current = advanceToNext;
@@ -281,18 +322,21 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     if (articleRef.current) {
       const total = chunksRef.current.length;
       if (displayModeRef.current === 'prediction') {
-        updateArticlePredictionPosition(
-          articleRef.current.id,
-          clampProgressIndex(indexRef.current, total)
-        );
+        persistPredictionPosition(articleRef.current.id, indexRef.current, total);
       } else {
-        updateArticlePosition(
-          articleRef.current.id,
-          clampChunkIndex(indexRef.current, total)
-        );
+        persistReadingPosition(articleRef.current.id, indexRef.current, total);
       }
     }
-  }, [articleRef, chunksRef, displayModeRef, indexRef, isPlaying, stopTimer]);
+  }, [
+    articleRef,
+    chunksRef,
+    displayModeRef,
+    indexRef,
+    isPlaying,
+    persistPredictionPosition,
+    persistReadingPosition,
+    stopTimer,
+  ]);
 
   const toggle = useCallback(() => {
     if (isPlaying) {
@@ -348,24 +392,14 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setMode(newMode);
     const activeArticle = articleRef.current;
     if (activeArticle) {
-      const { chunks: newChunks, pages } = retokenize(
-        activeArticle.content,
-        displayModeRef.current,
-        newMode,
-        saccadeLengthRef.current,
-        linesPerPageRef.current,
-        activeArticle.assetBaseUrl,
-        activeArticle.sourcePath
-      );
-      setSaccadePages(pages);
+      const newChunks = retokenizeArticle(activeArticle, displayModeRef.current, newMode);
 
       // Try to preserve approximate position
-      setChunks(newChunks);
       setCurrentChunkIndex(
         mapChunkIndexByProgress(currentChunkIndex, chunks.length, newChunks.length)
       );
     }
-  }, [articleRef, chunks.length, currentChunkIndex, displayModeRef, linesPerPageRef, modeRef, retokenize, saccadeLengthRef]);
+  }, [articleRef, chunks.length, currentChunkIndex, displayModeRef, modeRef, retokenizeArticle]);
 
   const handleSetDisplayMode = useCallback((newDisplayMode: DisplayMode) => {
     if (newDisplayMode === 'prediction' || newDisplayMode === 'recall' || newDisplayMode === 'training') {
@@ -380,25 +414,13 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       // Save prediction position when leaving prediction mode
       if (prevDisplayMode === 'prediction') {
         predictionWordIndexRef.current = indexRef.current;
-        updateArticlePredictionPosition(
-          activeArticle.id,
-          clampProgressIndex(indexRef.current, chunksRef.current.length)
-        );
+        persistPredictionPosition(activeArticle.id, indexRef.current, chunksRef.current.length);
       }
 
       // Prediction mode forces word tokenization
       const effectiveMode = newDisplayMode === 'prediction' ? 'word' : modeRef.current;
 
-      const { chunks: newChunks, pages } = retokenize(
-        activeArticle.content,
-        newDisplayMode,
-        effectiveMode,
-        saccadeLengthRef.current,
-        linesPerPageRef.current,
-        activeArticle.assetBaseUrl,
-        activeArticle.sourcePath
-      );
-      setSaccadePages(pages);
+      const newChunks = retokenizeArticle(activeArticle, newDisplayMode, effectiveMode);
 
       if (newDisplayMode === 'training') {
         // Training manages its own state; just set empty chunks
@@ -428,8 +450,6 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
           mapChunkIndexByProgress(currentChunkIndex, chunks.length, newChunks.length)
         );
       }
-
-      setChunks(newChunks);
     }
   }, [
     articleRef,
@@ -438,11 +458,10 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     currentChunkIndex,
     displayModeRef,
     indexRef,
-    linesPerPageRef,
     modeRef,
     pause,
-    retokenize,
-    saccadeLengthRef,
+    persistPredictionPosition,
+    retokenizeArticle,
   ]);
 
   const setLinesPerPage = useCallback((lines: number) => {
@@ -452,23 +471,12 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       activeArticle
       && (displayModeRef.current === 'saccade' || displayModeRef.current === 'generation' || displayModeRef.current === 'recall')
     ) {
-      const { chunks: newChunks, pages } = retokenize(
-        activeArticle.content,
-        displayModeRef.current,
-        modeRef.current,
-        saccadeLengthRef.current,
-        lines,
-        activeArticle.assetBaseUrl,
-        activeArticle.sourcePath
-      );
-      setSaccadePages(pages);
-
-      setChunks(newChunks);
+      const newChunks = retokenizeArticle(activeArticle, displayModeRef.current, modeRef.current, lines);
       setCurrentChunkIndex(
         mapChunkIndexByProgress(currentChunkIndex, chunks.length, newChunks.length)
       );
     }
-  }, [articleRef, chunks.length, currentChunkIndex, displayModeRef, modeRef, retokenize, saccadeLengthRef]);
+  }, [articleRef, chunks.length, currentChunkIndex, displayModeRef, modeRef, retokenizeArticle]);
 
   const loadArticle = useCallback((newArticle: Article, options?: LoadArticleOptions) => {
     pause();
@@ -485,19 +493,11 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
 
     setArticle(newArticle);
     predictionWordIndexRef.current = newArticle.predictionPosition || 0;
+    lastPersistedReadingRef.current = { articleId: newArticle.id, index: null };
+    lastPersistedPredictionRef.current = { articleId: newArticle.id, index: null };
 
     const effectiveMode = requestedDisplayMode === 'prediction' ? 'word' : requestedMode;
-    const { chunks: newChunks, pages } = retokenize(
-      newArticle.content,
-      requestedDisplayMode,
-      effectiveMode,
-      saccadeLengthRef.current,
-      linesPerPageRef.current,
-      newArticle.assetBaseUrl,
-      newArticle.sourcePath
-    );
-    setSaccadePages(pages);
-    setChunks(newChunks);
+    const newChunks = retokenizeArticle(newArticle, requestedDisplayMode, effectiveMode);
 
     if (requestedDisplayMode === 'prediction') {
       const startIndex = predictionWordIndexRef.current || newArticle.predictionPosition || 0;
@@ -508,7 +508,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       const startIndex = newArticle.readPosition || 0;
       setCurrentChunkIndex(clampChunkIndex(startIndex, newChunks.length));
     }
-  }, [displayModeRef, linesPerPageRef, modeRef, pause, retokenize, saccadeLengthRef]);
+  }, [displayModeRef, modeRef, pause, retokenizeArticle]);
 
   const resetRampTime = useCallback(() => {
     accumulatedPlayTimeRef.current = 0;
@@ -554,11 +554,11 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       const total = chunksRef.current.length;
       const nextIndex = Math.min(prevIndex + 1, total);
       if (articleRef.current && displayModeRef.current === 'prediction') {
-        updateArticlePredictionPosition(articleRef.current.id, nextIndex);
+        persistPredictionPosition(articleRef.current.id, nextIndex, total);
       }
       return nextIndex;
     });
-  }, [articleRef, chunksRef, displayModeRef]);
+  }, [articleRef, chunksRef, displayModeRef, persistPredictionPosition]);
 
   // Recompute every render so ramp display stays in sync with chunk advances.
   const effectiveWpm = !rampEnabled

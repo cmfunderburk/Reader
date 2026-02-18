@@ -48,6 +48,7 @@ const STORAGE_KEYS = {
 } as const;
 
 const CURRENT_STORAGE_SCHEMA_VERSION = 3;
+let lastKnownStorageSchemaVersion: number | null = null;
 
 export interface Settings {
   defaultWpm: number;
@@ -247,7 +248,16 @@ function migrateComprehensionAttemptsToV3(): void {
 
 function runStorageMigrations(): void {
   const currentVersion = loadStorageSchemaVersion();
-  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) return;
+  if (
+    currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION
+    && lastKnownStorageSchemaVersion === currentVersion
+  ) {
+    return;
+  }
+  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) {
+    lastKnownStorageSchemaVersion = currentVersion;
+    return;
+  }
 
   if (currentVersion < 1) {
     migrateSettingsToV1();
@@ -264,6 +274,7 @@ function runStorageMigrations(): void {
   }
 
   saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);
+  lastKnownStorageSchemaVersion = CURRENT_STORAGE_SCHEMA_VERSION;
 }
 
 /**
@@ -487,36 +498,46 @@ export function clearSessionSnapshot(): void {
  * Update reading position for an article.
  */
 export function updateArticlePosition(articleId: string, position: number): void {
-  const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].readPosition = position;
-    saveArticles(articles);
-  }
+  updateArticleInStorage(articleId, (article) => (
+    article.readPosition === position
+      ? article
+      : { ...article, readPosition: position }
+  ));
 }
 
 /**
  * Update prediction position for an article (separate from RSVP/saccade position).
  */
 export function updateArticlePredictionPosition(articleId: string, position: number): void {
-  const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].predictionPosition = position;
-    saveArticles(articles);
-  }
+  updateArticleInStorage(articleId, (article) => (
+    article.predictionPosition === position
+      ? article
+      : { ...article, predictionPosition: position }
+  ));
 }
 
 /**
  * Mark an article as read.
  */
 export function markArticleAsRead(articleId: string): void {
+  updateArticleInStorage(articleId, (article) => (
+    article.isRead
+      ? article
+      : { ...article, isRead: true }
+  ));
+}
+
+function updateArticleInStorage(articleId: string, updater: (article: Article) => Article): void {
   const articles = loadArticles();
-  const index = articles.findIndex(a => a.id === articleId);
-  if (index !== -1) {
-    articles[index].isRead = true;
-    saveArticles(articles);
-  }
+  const index = articles.findIndex((article) => article.id === articleId);
+  if (index === -1) return;
+
+  const current = articles[index];
+  const updated = updater(current);
+  if (updated === current) return;
+
+  articles[index] = updated;
+  saveArticles(articles);
 }
 
 /**
