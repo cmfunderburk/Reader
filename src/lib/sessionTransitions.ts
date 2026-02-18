@@ -4,7 +4,7 @@ import type { ViewState } from './appViewState';
 
 interface ResumeReadingPlan {
   article: Article;
-  displayMode: 'saccade' | 'rsvp';
+  displayMode: 'saccade' | 'generation' | 'rsvp';
   chunkIndex: number;
   snapshot: SessionSnapshot;
 }
@@ -30,13 +30,15 @@ export interface SessionLaunchPlan {
   autoPlay: boolean;
 }
 
-function normalizeReadingDisplayMode(displayMode: DisplayMode): 'saccade' | 'rsvp' {
-  return displayMode === 'saccade' || displayMode === 'rsvp' ? displayMode : 'saccade';
+function normalizeReadingDisplayMode(displayMode: DisplayMode): 'saccade' | 'generation' | 'rsvp' {
+  return displayMode === 'saccade' || displayMode === 'generation' || displayMode === 'rsvp'
+    ? displayMode
+    : 'saccade';
 }
 
 function createPacedReadingLaunchPlan(
   article: Article,
-  displayMode: 'saccade' | 'rsvp',
+  displayMode: 'saccade' | 'generation' | 'rsvp',
   mode?: TokenMode
 ): SessionLaunchPlan {
   return {

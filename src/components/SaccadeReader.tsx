@@ -1,7 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { Chunk, SaccadePage, SaccadeLine, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type {
+  Chunk,
+  GenerationDifficulty,
+  SaccadePage,
+  SaccadeLine,
+  SaccadePacerStyle,
+  SaccadeFocusTarget,
+} from '../types';
 import { computeLineFixations, calculateSaccadeLineDuration, computeFocusTargets, computeFocusTargetTimings, computeWordFocusTargetsAndFixations } from '../lib/saccade';
+import { maskGenerationLine } from '../lib/generationMask';
 
 interface SaccadeReaderProps {
   page: SaccadePage | null;
@@ -15,6 +23,10 @@ interface SaccadeReaderProps {
   saccadeFocusTarget?: SaccadeFocusTarget;
   saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
+  generationMode?: boolean;
+  generationDifficulty?: GenerationDifficulty;
+  generationMaskSeed?: number;
+  generationReveal?: boolean;
 }
 
 const EMPTY_WORD_FOCUS_DATA = {
@@ -22,7 +34,23 @@ const EMPTY_WORD_FOCUS_DATA = {
   fixations: [] as number[],
 };
 
-export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength }: SaccadeReaderProps) {
+export function SaccadeReader({
+  page,
+  chunk,
+  isPlaying,
+  showPacer,
+  wpm,
+  saccadeShowOVP,
+  saccadeShowSweep,
+  saccadePacerStyle,
+  saccadeFocusTarget,
+  saccadeMergeShortFunctionWords,
+  saccadeLength,
+  generationMode = false,
+  generationDifficulty = 'normal',
+  generationMaskSeed = 0,
+  generationReveal = false,
+}: SaccadeReaderProps) {
   const readerRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [figureMaxHeightPx, setFigureMaxHeightPx] = useState<number | null>(null);
@@ -154,6 +182,12 @@ export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeS
             key={lineIndex}
             line={line}
             lineIndex={lineIndex}
+            displayText={
+              generationMode && !generationReveal && line.type !== 'figure' && line.type !== 'blank'
+                ? maskGenerationLine(line.text, generationDifficulty, generationMaskSeed, lineIndex)
+                : line.text
+            }
+            renderGenerationMaskSlots={generationMode && !generationReveal}
             isActiveLine={lineIndex === currentLineIndex}
             isPlaying={isPlaying}
             isFutureLine={showPacer && lineIndex > currentLineIndex}
@@ -198,6 +232,8 @@ export function SaccadeReader({ page, chunk, isPlaying, showPacer, wpm, saccadeS
 export interface SaccadeLineProps {
   line: SaccadeLine;
   lineIndex: number;
+  displayText?: string;
+  renderGenerationMaskSlots?: boolean;
   isActiveLine: boolean;
   isPlaying: boolean;
   isFutureLine: boolean;
@@ -212,11 +248,29 @@ export interface SaccadeLineProps {
   onOpenFigure?: (figure: { src: string; alt: string; caption?: string }) => void;
 }
 
-export const SaccadeLineComponent = memo(function SaccadeLineComponent({ line, lineIndex, isActiveLine, isPlaying, isFutureLine, showPacer, wpm, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength, onOpenFigure }: SaccadeLineProps) {
+export const SaccadeLineComponent = memo(function SaccadeLineComponent({
+  line,
+  lineIndex,
+  displayText,
+  renderGenerationMaskSlots = false,
+  isActiveLine,
+  isPlaying,
+  isFutureLine,
+  showPacer,
+  wpm,
+  saccadeShowOVP,
+  saccadeShowSweep,
+  saccadePacerStyle,
+  saccadeFocusTarget,
+  saccadeMergeShortFunctionWords,
+  saccadeLength,
+  onOpenFigure,
+}: SaccadeLineProps) {
   const isBlank = line.type === 'blank';
   const isFigure = line.type === 'figure';
   const isHeading = line.type === 'heading';
-  const textLength = line.text.length;
+  const lineText = displayText ?? line.text;
+  const textLength = lineText.length;
 
   // Character-based line duration: 5 chars = 1 word at configured WPM
   const lineDuration = useMemo(
@@ -228,16 +282,16 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({ line, l
   const useWordFocus = pacerStyle === 'focus' && focusTarget === 'word';
 
   const fixationBasedFixations = useMemo(
-    () => (((!isBlank && !isFigure) && saccadeLength && line.text)
-      ? computeLineFixations(line.text, saccadeLength)
+    () => (((!isBlank && !isFigure) && saccadeLength && lineText)
+      ? computeLineFixations(lineText, saccadeLength)
       : []),
-    [isBlank, isFigure, line.text, saccadeLength]
+    [isBlank, isFigure, lineText, saccadeLength]
   );
   const wordFocusData = useMemo(
     () => (useWordFocus && !isBlank && !isFigure
-      ? computeWordFocusTargetsAndFixations(line.text, saccadeMergeShortFunctionWords ?? false)
+      ? computeWordFocusTargetsAndFixations(lineText, saccadeMergeShortFunctionWords ?? false)
       : EMPTY_WORD_FOCUS_DATA),
-    [isBlank, isFigure, line.text, saccadeMergeShortFunctionWords, useWordFocus]
+    [isBlank, isFigure, lineText, saccadeMergeShortFunctionWords, useWordFocus]
   );
   const fixations = useWordFocus
     ? wordFocusData.fixations
@@ -247,25 +301,25 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({ line, l
     if (isBlank || isFigure) return [];
     if (pacerStyle !== 'focus') return [];
     if (useWordFocus) return wordFocusData.targets;
-    return computeFocusTargets(line.text, fixations);
-  }, [fixations, isBlank, isFigure, line.text, pacerStyle, useWordFocus, wordFocusData.targets]);
+    return computeFocusTargets(lineText, fixations);
+  }, [fixations, isBlank, isFigure, lineText, pacerStyle, useWordFocus, wordFocusData.targets]);
   const useSweepBar = !isBlank && !isFigure && showPacer && pacerStyle === 'sweep' && isActiveLine && lineDuration > 0;
   const useFocusTargets = !isBlank && !isFigure && showPacer && pacerStyle === 'focus' && isActiveLine && lineDuration > 0 && focusTargets.length > 0;
   const focusTimingTargets = useMemo(() => (
     useFocusTargets && focusTarget !== 'word'
-      ? computeFixationTimingTargets(line.text, focusTargets)
+      ? computeFixationTimingTargets(lineText, focusTargets)
       : focusTargets
-  ), [focusTarget, focusTargets, line.text, useFocusTargets]);
+  ), [focusTarget, focusTargets, lineText, useFocusTargets]);
   const focusTimings = useMemo(() => (
     useFocusTargets
-      ? computeFocusTargetTimings(line.text, focusTimingTargets, focusTarget === 'word' ? 'word' : 'char')
+      ? computeFocusTargetTimings(lineText, focusTimingTargets, focusTarget === 'word' ? 'word' : 'char')
       : []
-  ), [focusTarget, focusTimingTargets, line.text, useFocusTargets]);
+  ), [focusTarget, focusTimingTargets, lineText, useFocusTargets]);
   const focusSegments = useMemo(() => (
     useFocusTargets
-      ? computeFocusRenderSegments(line.text, focusTargets, focusTimings)
+      ? computeFocusRenderSegments(lineText, focusTargets, focusTimings)
       : []
-  ), [focusTargets, focusTimings, line.text, useFocusTargets]);
+  ), [focusTargets, focusTimings, lineText, useFocusTargets]);
 
   // Sweep-synced ORP decoloring: ORPs start amber, turn plain as sweep passes
   const sweepDecolors = useSweepBar && saccadeShowOVP && fixations.length > 0;
@@ -390,8 +444,8 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({ line, l
         />
       )}
       {focusConfig
-        ? renderLineTextWithFocus(line.text, isHeading, showStaticOVP || focusDecolors, fixations, focusConfig, decolorConfig)
-        : renderLineText(line.text, isHeading, showStaticOVP || sweepDecolors, fixations, decolorConfig)}
+        ? renderLineTextWithFocus(lineText, isHeading, showStaticOVP || focusDecolors, fixations, focusConfig, decolorConfig, renderGenerationMaskSlots)
+        : renderLineText(lineText, isHeading, showStaticOVP || sweepDecolors, fixations, decolorConfig, renderGenerationMaskSlots)}
     </div>
   );
 });
@@ -550,11 +604,12 @@ function renderLineTextWithFocus(
     focusSegments: FocusRenderSegment[];
   },
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
+  renderGenerationMaskSlots = false,
 ): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
 
   if (!text || focusConfig.focusSegments.length === 0) {
-    return renderLineText(text, isHeading, showOVP, fixations, decolorConfig);
+    return renderLineText(text, isHeading, showOVP, fixations, decolorConfig, renderGenerationMaskSlots);
   }
 
   const segments: JSX.Element[] = [];
@@ -573,7 +628,8 @@ function renderLineTextWithFocus(
           showOVP,
           fixations,
           `pre-${i}`,
-          decolorConfig
+          decolorConfig,
+          renderGenerationMaskSlots
         )
       );
     }
@@ -585,7 +641,8 @@ function renderLineTextWithFocus(
         showOVP,
         fixations,
         `focus-${i}`,
-        decolorConfig
+        decolorConfig,
+        renderGenerationMaskSlots
       );
       segments.push(
         <span
@@ -612,7 +669,8 @@ function renderLineTextWithFocus(
         showOVP,
         fixations,
         'tail',
-        decolorConfig
+        decolorConfig,
+        renderGenerationMaskSlots
       )
     );
   }
@@ -626,16 +684,17 @@ function renderLineText(
   showOVP?: boolean,
   fixations?: number[],
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
+  renderGenerationMaskSlots = false,
 ): JSX.Element {
   const className = isHeading ? 'saccade-heading' : 'saccade-body';
 
   if (!showOVP || !fixations || fixations.length === 0 || !text) {
-    return <span className={className}>{text || '\u00A0'}</span>;
+    return <span className={className}>{renderMaskedSlotsText(text || '\u00A0', renderGenerationMaskSlots)}</span>;
   }
 
   return (
     <span className={className}>
-      {renderTextSliceWithFixations(text, 0, showOVP, fixations, 'line', decolorConfig)}
+      {renderTextSliceWithFixations(text, 0, showOVP, fixations, 'line', decolorConfig, renderGenerationMaskSlots)}
     </span>
   );
 }
@@ -647,10 +706,11 @@ function renderTextSliceWithFixations(
   fixations: number[] | undefined,
   keyPrefix: string,
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
+  renderGenerationMaskSlots = false,
 ): JSX.Element[] {
   if (!textSlice) return [];
   if (!showOVP || !fixations || fixations.length === 0) {
-    return [<span key={`${keyPrefix}-text`}>{textSlice}</span>];
+    return [<span key={`${keyPrefix}-text`}>{renderMaskedSlotsText(textSlice, renderGenerationMaskSlots)}</span>];
   }
 
   const segments: JSX.Element[] = [];
@@ -664,7 +724,9 @@ function renderTextSliceWithFixations(
     const localIdx = globalIdx - offset;
     if (localIdx > cursor) {
       segments.push(
-        <span key={`${keyPrefix}-t-${i}`}>{textSlice.slice(cursor, localIdx)}</span>
+        <span key={`${keyPrefix}-t-${i}`}>
+          {renderMaskedSlotsText(textSlice.slice(cursor, localIdx), renderGenerationMaskSlots)}
+        </span>
       );
     }
 
@@ -687,8 +749,27 @@ function renderTextSliceWithFixations(
   }
 
   if (cursor < textSlice.length) {
-    segments.push(<span key={`${keyPrefix}-tail`}>{textSlice.slice(cursor)}</span>);
+    segments.push(
+      <span key={`${keyPrefix}-tail`}>
+        {renderMaskedSlotsText(textSlice.slice(cursor), renderGenerationMaskSlots)}
+      </span>
+    );
   }
 
   return segments;
+}
+
+function renderMaskedSlotsText(text: string, enabled: boolean): JSX.Element[] | string {
+  if (!enabled || !text.includes('_')) return text;
+
+  const nodes: JSX.Element[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '_') {
+      nodes.push(<span key={`mask-${i}`} className="generation-mask-slot" aria-hidden="true" />);
+      continue;
+    }
+    nodes.push(<span key={`char-${i}`}>{char}</span>);
+  }
+  return nodes;
 }

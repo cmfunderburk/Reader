@@ -364,6 +364,25 @@ describe('useRSVP — saccade paging', () => {
       );
     }
   });
+
+  it('generation mode uses line pages and page navigation like saccade', () => {
+    const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
+    const article = makeArticle({ content: longContent });
+    const { result } = renderHook(() =>
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'generation' })
+    );
+
+    act(() => result.current.loadArticle(article, { displayMode: 'generation' }));
+    act(() => result.current.setLinesPerPage(6));
+
+    expect(result.current.displayMode).toBe('generation');
+    expect(result.current.saccadePages.length).toBeGreaterThan(1);
+    expect(result.current.currentSaccadePage).not.toBeNull();
+
+    const firstPage = result.current.currentSaccadePageIndex;
+    act(() => result.current.nextPage());
+    expect(result.current.currentSaccadePageIndex).toBe(Math.min(firstPage + 1, result.current.saccadePages.length - 1));
+  });
 });
 
 describe('useRSVP — advanceSelfPaced', () => {

@@ -157,6 +157,7 @@ describe('storage-helpers with real storage functions', () => {
     expect(defaults.predictionPreviewMode).toBe('sentences');
     expect(defaults.predictionPreviewSentenceCount).toBe(2);
     expect(defaults.comprehensionGeminiModel).toBe('gemini-3-flash-preview');
+    expect(defaults.generationDifficulty).toBe('normal');
     expect(defaults.themePreference).toBe('dark');
     expect(defaults.wpmByActivity['paced-reading']).toBe(defaults.defaultWpm);
     expect(defaults.wpmByActivity['active-recall']).toBe(defaults.defaultWpm);
@@ -168,6 +169,7 @@ describe('storage-helpers with real storage functions', () => {
       predictionPreviewMode: 'unlimited',
       predictionPreviewSentenceCount: 5,
       comprehensionGeminiModel: 'gemini-3-pro-preview',
+      generationDifficulty: 'hard',
       themePreference: 'system',
       wpmByActivity: {
         ...defaults.wpmByActivity,
@@ -179,6 +181,7 @@ describe('storage-helpers with real storage functions', () => {
     expect(loaded.predictionPreviewMode).toBe('unlimited');
     expect(loaded.predictionPreviewSentenceCount).toBe(5);
     expect(loaded.comprehensionGeminiModel).toBe('gemini-3-pro-preview');
+    expect(loaded.generationDifficulty).toBe('hard');
     expect(loaded.themePreference).toBe('system');
     expect(loaded.wpmByActivity.training).toBe(460);
   });
@@ -196,6 +199,7 @@ describe('storage-helpers with real storage functions', () => {
     expect(loaded.wpmByActivity.training).toBe(360);
     expect(loaded.wpmByActivity['comprehension-check']).toBe(360);
     expect(loaded.comprehensionGeminiModel).toBe('gemini-3-flash-preview');
+    expect(loaded.generationDifficulty).toBe('normal');
   });
 
   it('normalizes unknown comprehension model to default', () => {
@@ -209,6 +213,19 @@ describe('storage-helpers with real storage functions', () => {
     saveSettings(loaded);
     const persisted = JSON.parse(localStorage.getItem('speedread_settings') || '{}');
     expect(persisted.comprehensionGeminiModel).toBe('gemini-3-flash-preview');
+  });
+
+  it('normalizes unknown generation difficulty to normal', () => {
+    localStorage.setItem('speedread_settings', JSON.stringify({
+      generationDifficulty: 'expert',
+    }));
+
+    const loaded = loadSettings();
+    expect(loaded.generationDifficulty).toBe('normal');
+
+    saveSettings(loaded);
+    const persisted = JSON.parse(localStorage.getItem('speedread_settings') || '{}');
+    expect(persisted.generationDifficulty).toBe('normal');
   });
 
   it('runs schema migration and persists normalized legacy settings/drill state', () => {
