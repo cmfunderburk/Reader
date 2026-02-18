@@ -28,6 +28,7 @@ import type {
   ComprehensionKeyPointResult,
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
+import { MAX_WPM, MIN_WPM } from './wpm';
 
 const STORAGE_KEYS = {
   schemaVersion: 'speedread_schema_version',
@@ -52,7 +53,6 @@ export interface Settings {
   defaultWpm: number;
   wpmByActivity: Record<Activity, number>;
   defaultMode: TokenMode;
-  customCharWidth: number;
   rsvpFontSize: number;
   saccadeFontSize: number;
   predictionFontSize: number;
@@ -88,7 +88,6 @@ const DEFAULT_SETTINGS: Settings = {
     'comprehension-check': 300,
   },
   defaultMode: 'word',
-  customCharWidth: 8,
   rsvpFontSize: 2.5,
   saccadeFontSize: 1.0,
   predictionFontSize: 1.25,
@@ -113,9 +112,6 @@ const DEFAULT_SETTINGS: Settings = {
   generationDifficulty: 'normal',
   generationSweepReveal: true,
 };
-
-const MIN_WPM = 100;
-const MAX_WPM = 800;
 
 function clampWpm(value: unknown, fallback: number): number {
   const n = typeof value === 'number' ? value : Number(value);
@@ -410,7 +406,6 @@ export function loadSettings(): Settings {
       settings.saccadePacerStyle = settings.saccadeShowSweep === false ? 'focus' : 'sweep';
     }
     // Clamp values that may have been saved under old wider ranges
-    settings.customCharWidth = Math.max(5, Math.min(20, settings.customCharWidth));
     settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
     settings.predictionPreviewMode = settings.predictionPreviewMode === 'unlimited' ? 'unlimited' : 'sentences';
     settings.predictionPreviewSentenceCount = Math.max(

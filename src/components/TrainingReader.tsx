@@ -32,6 +32,7 @@ import type { TrainingFinalWord } from '../lib/trainingScoring';
 import { planFinishRecallPhase } from '../lib/trainingFeedback';
 import type { TrainingHistory, DrillState } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
+import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 
 type TrainingPhase = 'setup' | 'reading' | 'recall' | 'feedback' | 'complete';
 type DrillMode = 'article' | 'random';
@@ -47,8 +48,6 @@ const DRILL_FAMILIES: Array<{ id: CorpusFamily; label: string }> = [
   { id: 'wiki', label: 'Wikipedia' },
   { id: 'prose', label: 'Prose' },
 ];
-const MIN_WPM = 100;
-const MAX_WPM = 800;
 
 interface TrainingReaderProps {
   article?: Article;

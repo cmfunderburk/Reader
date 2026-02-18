@@ -1,5 +1,6 @@
 import type { Article } from '../types';
 import type { ComprehensionExamPreset } from '../types';
+import { normalizeText } from './tokenizer';
 
 const PRESET_CONTEXT_BUDGET_BY_PRESET: Record<ComprehensionExamPreset, number> = {
   quiz: 5200,
@@ -21,10 +22,6 @@ export interface ComprehensionExamContext {
   preset: ComprehensionExamPreset;
   totalBudget: number;
   packets: SourcePacket[];
-}
-
-function normalizeText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
 }
 
 function trimToBudget(text: string, budget: number): string {

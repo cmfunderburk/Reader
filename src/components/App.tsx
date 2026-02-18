@@ -110,10 +110,9 @@ import {
   updateFeedLastFetched,
 } from '../lib/appFeedTransitions';
 import { createComprehensionAdapter } from '../lib/comprehensionAdapter';
+import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
-const MIN_WPM = 100;
-const MAX_WPM = 800;
 
 function clipPassagePreview(text: string, maxChars: number = 180): string {
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -319,7 +318,6 @@ export function App() {
   const rsvp = useRSVP({
     initialWpm: settings.wpmByActivity['paced-reading'],
     initialMode: settings.defaultMode,
-    initialCustomCharWidth: settings.customCharWidth,
     initialRampEnabled: settings.rampEnabled,
     rampCurve: settings.rampCurve,
     rampStartPercent: settings.rampStartPercent,
