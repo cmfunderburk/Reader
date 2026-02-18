@@ -10,6 +10,7 @@ import type {
   DisplayMode,
   SaccadePacerStyle,
   SaccadeFocusTarget,
+  GenerationDifficulty,
   Passage,
   PassageReviewMode,
   PassageReviewState,
@@ -73,6 +74,7 @@ export interface Settings {
   saccadeFocusTarget: SaccadeFocusTarget;
   saccadeMergeShortFunctionWords: boolean;
   saccadeLength: number;
+  generationDifficulty: GenerationDifficulty;
   lastSession?: { articleId: string; activity: Activity; displayMode: DisplayMode };
 }
 
@@ -107,6 +109,7 @@ const DEFAULT_SETTINGS: Settings = {
   saccadeFocusTarget: 'fixation',
   saccadeMergeShortFunctionWords: false,
   saccadeLength: 10,
+  generationDifficulty: 'normal',
 };
 
 const MIN_WPM = 100;
@@ -126,6 +129,10 @@ function parseComprehensionGeminiModel(value: unknown): ComprehensionGeminiModel
     return value as ComprehensionGeminiModel;
   }
   return DEFAULT_SETTINGS.comprehensionGeminiModel;
+}
+
+function parseGenerationDifficulty(value: unknown): GenerationDifficulty {
+  return value === 'hard' ? 'hard' : 'normal';
 }
 
 function loadStorageSchemaVersion(): number {
@@ -405,6 +412,7 @@ export function loadSettings(): Settings {
       Math.min(10, Math.round(settings.predictionPreviewSentenceCount || 2))
     );
     settings.comprehensionGeminiModel = parseComprehensionGeminiModel(settings.comprehensionGeminiModel);
+    settings.generationDifficulty = parseGenerationDifficulty(settings.generationDifficulty);
     settings.themePreference = settings.themePreference === 'light' || settings.themePreference === 'system'
       ? settings.themePreference
       : 'dark';
@@ -438,6 +446,7 @@ export function saveSettings(settings: Settings): void {
       clampWpm(settings.defaultWpm, DEFAULT_SETTINGS.defaultWpm)
     ),
     comprehensionGeminiModel: parseComprehensionGeminiModel(settings.comprehensionGeminiModel),
+    generationDifficulty: parseGenerationDifficulty(settings.generationDifficulty),
   };
   localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(normalized));
 }

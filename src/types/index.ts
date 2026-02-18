@@ -2,7 +2,7 @@
 export type Activity = 'paced-reading' | 'active-recall' | 'training' | 'comprehension-check';
 
 // Display mode: how text is presented
-export type DisplayMode = 'rsvp' | 'saccade' | 'prediction' | 'recall' | 'training';
+export type DisplayMode = 'rsvp' | 'saccade' | 'generation' | 'prediction' | 'recall' | 'training';
 
 // Token/chunk mode: how text is chunked
 export type TokenMode = 'word' | 'custom';
@@ -14,6 +14,7 @@ export type PredictionPreviewMode = 'sentences' | 'unlimited';
 export type ThemePreference = 'dark' | 'light' | 'system';
 export type SaccadePacerStyle = 'sweep' | 'focus';
 export type SaccadeFocusTarget = 'fixation' | 'word';
+export type GenerationDifficulty = 'normal' | 'hard';
 
 export const PREDICTION_LINE_WIDTHS: Record<PredictionLineWidth, number> = {
   narrow: 50,

@@ -390,6 +390,22 @@ button {
   font-weight: 600;
 }
 
+.generation-mask-slot {
+  display: inline-block;
+  width: 1ch;
+  height: 1em;
+  position: relative;
+}
+
+.generation-mask-slot::after {
+  content: '';
+  position: absolute;
+  left: 0.14ch;
+  right: 0.14ch;
+  bottom: -0.06em;
+  border-bottom: 1px solid currentColor;
+}
+
 /* Inline fixation-point highlights */
 .saccade-fixation {
   color: var(--saccade-ovp-color);

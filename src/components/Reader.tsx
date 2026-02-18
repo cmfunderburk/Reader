@@ -1,4 +1,11 @@
-import type { Chunk, DisplayMode, SaccadePage, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type {
+  Chunk,
+  DisplayMode,
+  GenerationDifficulty,
+  SaccadePage,
+  SaccadePacerStyle,
+  SaccadeFocusTarget,
+} from '../types';
 import { isBreakChunk } from '../lib/rsvp';
 import { calculateORP, FUNCTION_WORDS } from '../lib/tokenizer';
 import { SaccadeReader } from './SaccadeReader';
@@ -18,12 +25,53 @@ interface ReaderProps {
   saccadeFocusTarget?: SaccadeFocusTarget;
   saccadeMergeShortFunctionWords?: boolean;
   saccadeLength?: number;
+  generationDifficulty?: GenerationDifficulty;
+  generationMaskSeed?: number;
+  generationReveal?: boolean;
 }
 
-export function Reader({ chunk, isPlaying, displayMode, saccadePage, showPacer = true, wpm, colorPhase, showORP = true, saccadeShowOVP, saccadeShowSweep, saccadePacerStyle, saccadeFocusTarget, saccadeMergeShortFunctionWords, saccadeLength }: ReaderProps) {
+export function Reader({
+  chunk,
+  isPlaying,
+  displayMode,
+  saccadePage,
+  showPacer = true,
+  wpm,
+  colorPhase,
+  showORP = true,
+  saccadeShowOVP,
+  saccadeShowSweep,
+  saccadePacerStyle,
+  saccadeFocusTarget,
+  saccadeMergeShortFunctionWords,
+  saccadeLength,
+  generationDifficulty = 'normal',
+  generationMaskSeed = 0,
+  generationReveal = false,
+}: ReaderProps) {
   // Saccade mode uses its own reader component
   if (displayMode === 'saccade') {
     return <SaccadeReader page={saccadePage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadePacerStyle={saccadePacerStyle} saccadeFocusTarget={saccadeFocusTarget} saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords} saccadeLength={saccadeLength} />;
+  }
+  if (displayMode === 'generation') {
+    return (
+      <SaccadeReader
+        page={saccadePage ?? null}
+        chunk={chunk}
+        isPlaying={isPlaying}
+        showPacer={showPacer}
+        wpm={wpm}
+        generationMode
+        generationDifficulty={generationDifficulty}
+        generationMaskSeed={generationMaskSeed}
+        generationReveal={generationReveal}
+        saccadeShowOVP={false}
+        saccadePacerStyle="sweep"
+        saccadeFocusTarget="fixation"
+        saccadeMergeShortFunctionWords={false}
+        saccadeLength={saccadeLength}
+      />
+    );
   }
   // No article loaded
   if (!chunk) {

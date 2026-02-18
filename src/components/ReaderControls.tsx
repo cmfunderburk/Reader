@@ -1,4 +1,4 @@
-import type { TokenMode, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type { TokenMode, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget, GenerationDifficulty } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
@@ -40,6 +40,8 @@ interface ReaderControlsProps {
   onSaccadeMergeShortFunctionWordsChange: (enabled: boolean) => void;
   saccadeLength: number;
   onSaccadeLengthChange: (length: number) => void;
+  generationDifficulty: GenerationDifficulty;
+  onGenerationDifficultyChange: (difficulty: GenerationDifficulty) => void;
 }
 
 export function ReaderControls({
@@ -82,10 +84,12 @@ export function ReaderControls({
   onSaccadeMergeShortFunctionWordsChange,
   saccadeLength,
   onSaccadeLengthChange,
+  generationDifficulty,
+  onGenerationDifficultyChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall' || displayMode === 'training';
-  const showChunks = !isSelfPaced && displayMode !== 'saccade';
-  const showSaccadePageTransport = !isSelfPaced && displayMode === 'saccade';
+  const showChunks = !isSelfPaced && displayMode !== 'saccade' && displayMode !== 'generation';
+  const showSaccadePageTransport = !isSelfPaced && (displayMode === 'saccade' || displayMode === 'generation');
   const hasSaccadePages = totalPages > 0;
   const safePageNumber = hasSaccadePages ? currentPageIndex + 1 : 0;
 
@@ -196,6 +200,7 @@ export function ReaderControls({
           const ALL_MODES: { value: DisplayMode; label: string }[] = [
             { value: 'rsvp', label: 'RSVP' },
             { value: 'saccade', label: 'Saccade' },
+            { value: 'generation', label: 'Generation' },
             { value: 'prediction', label: 'Prediction' },
             { value: 'recall', label: 'Recall' },
             { value: 'training', label: 'Training' },
@@ -324,7 +329,32 @@ export function ReaderControls({
           </>
         )}
 
-        {(displayMode === 'saccade' || displayMode === 'recall') && (
+        {displayMode === 'generation' && (
+          <>
+            <label className="control-group control-checkbox">
+              <input
+                type="checkbox"
+                checked={showPacer}
+                onChange={e => onShowPacerChange(e.target.checked)}
+              />
+              <span className="control-label">Pacer</span>
+            </label>
+            <label className="control-group">
+              <span className="control-label">Difficulty:</span>
+              <select
+                value={generationDifficulty}
+                onChange={e => onGenerationDifficultyChange(e.target.value as GenerationDifficulty)}
+                className="control-select"
+              >
+                <option value="normal">Normal</option>
+                <option value="hard">Hard</option>
+              </select>
+            </label>
+            <span className="control-label">Hold R to reveal</span>
+          </>
+        )}
+
+        {(displayMode === 'saccade' || displayMode === 'generation' || displayMode === 'recall') && (
           <label className="control-group">
             <span className="control-label">Lines:</span>
             <input

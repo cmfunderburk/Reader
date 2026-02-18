@@ -6,7 +6,7 @@ Last updated: February 2026.
 
 ## Product Scope
 Reader currently supports four connected workflows:
-1. **Paced Reading** (`Saccade` and `RSVP`) for throughput and focus.
+1. **Paced Reading** (`Saccade`, `RSVP`, and `Generation`) for throughput and focus.
 2. **Active Exercise** (`Prediction` and `Recall`) on saved passages.
 3. **Training** (`Article` and `Random Drill`) for repeated read-recall-feedback practice.
 4. **Comprehension Check** (LLM-generated question sets) for passage-grounded understanding feedback.
@@ -25,6 +25,13 @@ The design goal is to reduce friction between reading and retention practice by 
 - Word/custom chunk presentation with ORP highlighting.
 - Optional WPM ramp and alternate color phase.
 - Shared pacing controls with other modes.
+
+### Generation
+- Line-paced reading with selective letter masking cues inspired by generation-effect tasks.
+- Masking excludes function words, proper nouns, acronyms, and numbers.
+- Difficulty presets (`Normal`, `Hard`) adjust per-word mask limits (`<=25%` / `<=40%`).
+- Hold `R` to temporarily reveal full text; pacing pauses while held.
+- Uses the same page navigation and passage-capture workflow as saccade mode.
 
 ### Prediction
 - Next-word prediction with typo-tolerant scoring.
@@ -84,6 +91,7 @@ The design goal is to reduce friction between reading and retention practice by 
 - `Space`: play/pause in playback modes.
 - `[` / `]`: adjust WPM for current activity.
 - `Esc`: back/exit/skip depending on surface.
+- Generation mode: hold `R` to reveal current page text (pacing pauses while held).
 - Prediction: `Tab` preview toggle.
 - Recall/training recall: `Enter`/`Space` submit or continue depending on state.
 - Training Random Drill (no scaffold): `Tab` timed preview of remaining words (previewed words are unscored).

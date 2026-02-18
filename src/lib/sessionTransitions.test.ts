@@ -95,6 +95,29 @@ describe('sessionTransitions', () => {
     });
   });
 
+  it('preserves generation display mode when resuming paced reading', () => {
+    const article = makeArticle('a3');
+    const snapshot: SessionSnapshot = {
+      reading: { articleId: 'a3', chunkIndex: 4, displayMode: 'generation' },
+      updatedAt: 1,
+    };
+    const plan = planCloseActiveExercise(snapshot, [article], 77);
+    expect(plan).toEqual({
+      type: 'resume-reading',
+      plan: {
+        article,
+        displayMode: 'generation',
+        chunkIndex: 4,
+        snapshot: {
+          reading: { articleId: 'a3', chunkIndex: 4, displayMode: 'generation' },
+          training: undefined,
+          lastTransition: 'return-to-reading',
+          updatedAt: 77,
+        },
+      },
+    });
+  });
+
   it('plans featured article launch into paced reading session', () => {
     const article = makeArticle('f1');
     expect(planFeaturedArticleLaunch(article)).toEqual({

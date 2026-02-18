@@ -55,6 +55,7 @@ import type {
   TokenMode,
   Activity,
   DisplayMode,
+  GenerationDifficulty,
   SaccadePacerStyle,
   SaccadeFocusTarget,
   Passage,
@@ -253,6 +254,8 @@ export function App() {
   const [captureNotice, setCaptureNotice] = useState<string | null>(null);
   const [activePassageId, setActivePassageId] = useState<string | null>(null);
   const [isPassageWorkspaceOpen, setIsPassageWorkspaceOpen] = useState(false);
+  const [generationMaskSeed, setGenerationMaskSeed] = useState<number>(() => Date.now());
+  const [generationRevealHeld, setGenerationRevealHeld] = useState(false);
   const [comprehensionApiKey, setComprehensionApiKey] = useState<string>('');
   const [comprehensionApiKeyStorageMode, setComprehensionApiKeyStorageMode] = useState<ComprehensionApiKeyStorageMode>('local');
   const [comprehensionAttempts, setComprehensionAttempts] = useState<ComprehensionAttempt[]>(() => loadComprehensionAttempts());
@@ -325,6 +328,11 @@ export function App() {
     saccadeLength: settings.saccadeLength,
     onComplete: () => {},
   });
+  const previousReadingModeRef = useRef<DisplayMode>(rsvp.displayMode);
+  const previousReadingArticleIdRef = useRef<string | null>(rsvp.article?.id ?? null);
+  const generationRevealHeldRef = useRef(false);
+  const generationResumeOnReleaseRef = useRef(false);
+  const isRsvpPlayingRef = useRef(rsvp.isPlaying);
 
   const getActivityWpm = useCallback((activity: Activity): number => {
     return settings.wpmByActivity[activity] ?? settings.defaultWpm;
@@ -425,6 +433,87 @@ export function App() {
       }
     },
   });
+
+  useEffect(() => {
+    isRsvpPlayingRef.current = rsvp.isPlaying;
+  }, [rsvp.isPlaying]);
+
+  useEffect(() => {
+    const previousMode = previousReadingModeRef.current;
+    const previousArticleId = previousReadingArticleIdRef.current;
+    const currentArticleId = rsvp.article?.id ?? null;
+    const enteringGeneration = rsvp.displayMode === 'generation'
+      && (previousMode !== 'generation' || previousArticleId !== currentArticleId);
+
+    if (enteringGeneration) {
+      setGenerationMaskSeed(Date.now());
+    }
+
+    if (rsvp.displayMode !== 'generation') {
+      generationRevealHeldRef.current = false;
+      generationResumeOnReleaseRef.current = false;
+      setGenerationRevealHeld(false);
+    }
+
+    previousReadingModeRef.current = rsvp.displayMode;
+    previousReadingArticleIdRef.current = currentArticleId;
+  }, [rsvp.article?.id, rsvp.displayMode]);
+
+  const currentDisplayMode = rsvp.displayMode;
+  const pausePlayback = rsvp.pause;
+  const playPlayback = rsvp.play;
+
+  useEffect(() => {
+    if (viewState.screen !== 'active-reader' || currentDisplayMode !== 'generation') {
+      return;
+    }
+
+    const isEditableTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false;
+      return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+    };
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyR' || event.repeat || isEditableTarget(event.target)) return;
+      event.preventDefault();
+      if (generationRevealHeldRef.current) return;
+
+      generationRevealHeldRef.current = true;
+      generationResumeOnReleaseRef.current = isRsvpPlayingRef.current;
+      setGenerationRevealHeld(true);
+      if (isRsvpPlayingRef.current) {
+        pausePlayback();
+      }
+    };
+
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'KeyR') return;
+      if (!generationRevealHeldRef.current) return;
+
+      generationRevealHeldRef.current = false;
+      setGenerationRevealHeld(false);
+      if (generationResumeOnReleaseRef.current) {
+        generationResumeOnReleaseRef.current = false;
+        playPlayback();
+      }
+    };
+
+    const onBlur = () => {
+      if (!generationRevealHeldRef.current) return;
+      generationRevealHeldRef.current = false;
+      generationResumeOnReleaseRef.current = false;
+      setGenerationRevealHeld(false);
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [currentDisplayMode, pausePlayback, playPlayback, viewState.screen]);
 
   useEffect(() => {
     if (!captureNotice) return;
@@ -585,6 +674,14 @@ export function App() {
     });
   }, []);
 
+  const handleGenerationDifficultyChange = useCallback((difficulty: GenerationDifficulty) => {
+    setDisplaySettings(prev => {
+      const next = { ...prev, generationDifficulty: difficulty };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
+
   const handleProgressChange = useCallback((progress: number) => {
     const newIndex = Math.floor((progress / 100) * rsvp.chunks.length);
     rsvp.goToIndex(newIndex);
@@ -618,7 +715,7 @@ export function App() {
   }, [rsvp.chunks, rsvp.saccadePages]);
 
   const currentSaccadeCaptureContext = useMemo(() => {
-    if (rsvp.displayMode !== 'saccade') return null;
+    if (rsvp.displayMode !== 'saccade' && rsvp.displayMode !== 'generation') return null;
     if (!rsvp.article || !rsvp.currentChunk?.saccade) return null;
 
     const currentSac = rsvp.currentChunk.saccade;
@@ -632,6 +729,7 @@ export function App() {
 
     return {
       article: rsvp.article,
+      displayMode: rsvp.displayMode,
       pageIndex: currentSac.pageIndex,
       lineIndex: currentSac.lineIndex,
       globalLineIndex,
@@ -674,7 +772,7 @@ export function App() {
       id: generateId(),
       articleId: ctx.article.id,
       articleTitle: ctx.article.title,
-      sourceMode: 'saccade',
+      sourceMode: ctx.displayMode,
       captureKind,
       text,
       createdAt: now,
@@ -1041,6 +1139,8 @@ export function App() {
       onSaccadeMergeShortFunctionWordsChange={handleSaccadeMergeShortFunctionWordsChange}
       saccadeLength={displaySettings.saccadeLength}
       onSaccadeLengthChange={handleSaccadeLengthChange}
+      generationDifficulty={displaySettings.generationDifficulty}
+      onGenerationDifficultyChange={handleGenerationDifficultyChange}
     />
   );
 
@@ -1065,7 +1165,7 @@ export function App() {
 
   const renderPassageWorkspace = () => {
     const canCapture = viewState.screen === 'active-reader'
-      && rsvp.displayMode === 'saccade'
+      && (rsvp.displayMode === 'saccade' || rsvp.displayMode === 'generation')
       && !rsvp.isPlaying
       && !!currentSaccadeCaptureContext;
     const queueItems = reviewQueue;
@@ -1308,10 +1408,13 @@ export function App() {
               saccadeFocusTarget={displaySettings.saccadeFocusTarget}
               saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
               saccadeLength={displaySettings.saccadeLength}
+              generationDifficulty={displaySettings.generationDifficulty}
+              generationMaskSeed={generationMaskSeed}
+              generationReveal={generationRevealHeld}
             />
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
-            {renderReaderControls(['rsvp', 'saccade'], 'paced-reading')}
+            {renderReaderControls(['rsvp', 'saccade', 'generation'], 'paced-reading')}
             {isAtEndOfText && (
               <div className="reader-finish-actions">
                 <button className="control-btn" onClick={handleStartComprehensionFromReading}>
