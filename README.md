@@ -130,7 +130,7 @@ bun run tauri:build
 
 Bridge status in this branch:
 - Tauri command parity is implemented for current `window.library`, `window.corpus`, and `window.secureKeys` surfaces.
-- Library open behavior in Tauri currently supports TXT directly and PDF/EPUB via normalized `.txt` sidecar fallback.
+- Library open behavior in Tauri follows the current production workflow: normalized `.txt` inputs plus adjacent assets (figures/equations) where present.
 - Renderer calls still use `window.library`, `window.corpus`, `window.secureKeys` through a compatibility adapter.
 - Full native parity is tracked in `docs/migration/tauri-rust-migration-board.md`.
 

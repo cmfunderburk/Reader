@@ -49,7 +49,7 @@ Delivered:
 
 Open items for M1 completion:
 - Validate app launch and first-four command path end-to-end in a local Tauri session.
-- Native PDF/EPUB extraction parity in Rust (current bridge supports TXT and normalized `.txt` sidecar fallback for PDF/EPUB).
+- Capture demo checkpoint (`Tauri boots and reads from local library`) using the current normalized `.txt` + adjacent assets ingestion workflow.
 
 Validation blockers in current dev environment:
 - None for `bun run tauri:check` after installing `webkit2gtk-4.1` (includes `javascriptcoregtk-4.1` pkg-config target on Arch).
@@ -72,7 +72,7 @@ Validation blockers in current dev environment:
 | Metric | Target | Current | Notes |
 |---|---|---|---|
 | `% domain logic migrated to Rust` | >=60% by Week 8 | 0% | Core module migration starts in Phase 3 |
-| `# Electron API surfaces remaining` | 0 for bridge parity | 0 (command surface) | PDF/EPUB native extraction still pending in Rust |
+| `# Electron API surfaces remaining` | 0 for bridge parity | 0 (command surface) | Current production ingestion workflow (`.txt` + assets) is bridged |
 | `Tokenizer fixture parity pass rate` | >=99% deterministic | 100% (8/8) | Fixture harness + parity test active |
 | `Startup delta vs Electron baseline` | Neutral or better | Pending | Capture using runbook |
 | `Idle memory delta vs Electron baseline` | Neutral or better | Pending | Capture using runbook |

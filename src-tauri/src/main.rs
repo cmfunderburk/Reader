@@ -786,7 +786,7 @@ fn library_open_book(app: AppHandle, file_path: String) -> Result<ExtractedConte
     }
 
     Err(format!(
-    "Unsupported file type: .{extension}. PDF/EPUB extraction is not yet implemented in the Tauri bridge. Add a normalized .txt sidecar next to the source file."
+    "Unsupported file type: .{extension}. This bridge loads normalized .txt snapshots (plus adjacent assets such as figure/equation files). Add a normalized .txt file next to the source file."
   ))
 }
 
