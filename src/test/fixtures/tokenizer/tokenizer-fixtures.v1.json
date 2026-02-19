@@ -1,0 +1,328 @@
+{
+  "schema": "reader-tokenizer-fixtures",
+  "version": 1,
+  "generatedAt": "2026-02-19T18:16:29.846Z",
+  "generator": "scripts/generate-tokenizer-fixtures.ts",
+  "cases": [
+    {
+      "id": "word-basic",
+      "description": "Word mode emits one chunk per word.",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "mode": "word"
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "The",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "quick",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "brown",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "fox",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "jumps",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "over",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "the",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "lazy",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "dog.",
+            "wordCount": 1,
+            "orpIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-markdown-strip",
+      "description": "Markdown formatting is stripped before tokenization.",
+      "input": {
+        "text": "# Heading\n\nThis is **bold** and *italic* with a [link](https://example.com).",
+        "mode": "word"
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "Heading",
+            "wordCount": 1,
+            "orpIndex": 2
+          },
+          {
+            "text": "· · ·",
+            "wordCount": 0,
+            "orpIndex": 2
+          },
+          {
+            "text": "This",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "is",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "bold",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "and",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "italic",
+            "wordCount": 1,
+            "orpIndex": 2
+          },
+          {
+            "text": "with",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "a",
+            "wordCount": 1,
+            "orpIndex": 0
+          },
+          {
+            "text": "link.",
+            "wordCount": 1,
+            "orpIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-dash-split",
+      "description": "Em dash between words introduces a split point after the dash.",
+      "input": {
+        "text": "alpha—beta gamma",
+        "mode": "word"
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "alpha—",
+            "wordCount": 1,
+            "orpIndex": 2
+          },
+          {
+            "text": "beta",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "gamma",
+            "wordCount": 1,
+            "orpIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "word-abbreviation-spacing",
+      "description": "Uppercase abbreviations are preserved when normalizing punctuation spacing.",
+      "input": {
+        "text": "We met in the U.S.A.Today we left.",
+        "mode": "word"
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "We",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "met",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "in",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "the",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "U.S.A.Today",
+            "wordCount": 1,
+            "orpIndex": 3
+          },
+          {
+            "text": "we",
+            "wordCount": 1,
+            "orpIndex": 1
+          },
+          {
+            "text": "left.",
+            "wordCount": 1,
+            "orpIndex": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "custom-phrase-basic",
+      "description": "Custom mode builds phrase chunks around soft and hard limits.",
+      "input": {
+        "text": "The reader should group text into stable phrase chunks for RSVP pacing.",
+        "mode": "custom",
+        "saccadeLength": 10
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "The reader",
+            "wordCount": 2,
+            "orpIndex": 5
+          },
+          {
+            "text": "should group",
+            "wordCount": 2,
+            "orpIndex": 5
+          },
+          {
+            "text": "text into stable",
+            "wordCount": 3,
+            "orpIndex": 8
+          },
+          {
+            "text": "phrase chunks for",
+            "wordCount": 3,
+            "orpIndex": 8
+          },
+          {
+            "text": "RSVP pacing.",
+            "wordCount": 2,
+            "orpIndex": 6
+          }
+        ]
+      }
+    },
+    {
+      "id": "custom-punctuation-breaks",
+      "description": "Clause punctuation can trigger chunk finalization once threshold is met.",
+      "input": {
+        "text": "First clause, second clause, then final sentence.",
+        "mode": "custom",
+        "saccadeLength": 9
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "First clause,",
+            "wordCount": 2,
+            "orpIndex": 6
+          },
+          {
+            "text": "second clause,",
+            "wordCount": 2,
+            "orpIndex": 7
+          },
+          {
+            "text": "then final",
+            "wordCount": 2,
+            "orpIndex": 5
+          },
+          {
+            "text": "sentence.",
+            "wordCount": 1,
+            "orpIndex": 3
+          }
+        ]
+      }
+    },
+    {
+      "id": "custom-paragraph-break",
+      "description": "Paragraph boundaries insert break-marker chunks.",
+      "input": {
+        "text": "Paragraph one has text.\n\nParagraph two has more text.",
+        "mode": "custom",
+        "saccadeLength": 10
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "Paragraph one",
+            "wordCount": 2,
+            "orpIndex": 6
+          },
+          {
+            "text": "has text.",
+            "wordCount": 2,
+            "orpIndex": 4
+          },
+          {
+            "text": "· · ·",
+            "wordCount": 0,
+            "orpIndex": 2
+          },
+          {
+            "text": "Paragraph two",
+            "wordCount": 2,
+            "orpIndex": 6
+          },
+          {
+            "text": "has more text.",
+            "wordCount": 3,
+            "orpIndex": 7
+          }
+        ]
+      }
+    },
+    {
+      "id": "custom-short-lines",
+      "description": "Small inputs still produce at least one chunk.",
+      "input": {
+        "text": "Short text.",
+        "mode": "custom",
+        "saccadeLength": 12
+      },
+      "output": {
+        "chunks": [
+          {
+            "text": "Short text.",
+            "wordCount": 2,
+            "orpIndex": 4
+          }
+        ]
+      }
+    }
+  ]
+}

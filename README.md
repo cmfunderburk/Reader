@@ -84,7 +84,7 @@ The design goal is to reduce friction between reading and retention practice by 
 - URL import (Readability extraction).
 - Paste text.
 - RSS/Atom feeds.
-- Local library content in Electron (PDF/EPUB workflows).
+- Local library content in desktop builds (Electron now, Tauri bridge in progress).
 - Library sharing via `Export Manifest` / `Import Manifest`.
 - Wikipedia daily/random featured ingestion with reader-specific normalization.
 
@@ -103,12 +103,14 @@ The design goal is to reduce friction between reading and retention practice by 
 bun install
 bun run dev
 bun run electron:dev
+bun run tauri:dev
 bun run typecheck
 bun run lint
 bun run test:run
 bun run verify
 bun run verify:ci
 bun run build
+bun run tauri:check
 ```
 
 Dev server defaults to `http://127.0.0.1:5417` and uses strict port binding (it will fail fast if occupied, rather than shifting or taking over other ports). Override with `READER_DEV_PORT`, for example:
@@ -117,7 +119,22 @@ Dev server defaults to `http://127.0.0.1:5417` and uses strict port binding (it 
 READER_DEV_PORT=5517 bun run dev
 ```
 
-## Electron Build
+## Desktop Builds
+
+### Tauri Bridge (Current Migration Path)
+
+```bash
+bun run tauri:dev
+bun run tauri:build
+```
+
+Bridge status in this branch:
+- Tauri command parity is implemented for current `window.library`, `window.corpus`, and `window.secureKeys` surfaces.
+- Library open behavior in Tauri currently supports TXT directly and PDF/EPUB via normalized `.txt` sidecar fallback.
+- Renderer calls still use `window.library`, `window.corpus`, `window.secureKeys` through a compatibility adapter.
+- Full native parity is tracked in `docs/migration/tauri-rust-migration-board.md`.
+
+### Electron (Legacy Bridge)
 
 ```bash
 bun run electron:build
@@ -135,8 +152,12 @@ Run these before commit/PR:
 If `electron/**` or Electron-relevant shared/type/config surfaces changed, also run:
 - `bun run electron:build`
 
+If `src-tauri/**` or Tauri bridge contracts changed, also run:
+- `bun run tauri:check`
+
 ## Project Docs
 - Agent/repo workflow: `AGENTS.md`
 - AI implementation context: `CLAUDE.md`
 - Comprehension research synthesis: `docs/Comprehension-Check-Research.md`
 - Comprehension milestone board: `docs/Comprehension-Improvement-Milestone-Board.md`
+- Tauri bridge migration board: `docs/migration/tauri-rust-migration-board.md`

@@ -5,6 +5,8 @@ node_modules/
 dist/
 dist-electron/
 dist-electron-build/
+src-tauri/target/
+src-tauri/gen/
 coverage/
 
 # Electron builder output

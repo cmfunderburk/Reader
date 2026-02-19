@@ -5,7 +5,7 @@ Reading and training app with three top-level activities:
 - `active-recall` (prediction/recall on passages)
 - `training` (article paragraph loop + random drill)
 
-Stack: React 18 + TypeScript + Vite, with optional Electron for local PDF/EPUB support.
+Stack: React 18 + TypeScript + Vite, with desktop bridge support via Electron (legacy) and Tauri (current migration path).
 
 ## Architecture
 
@@ -14,15 +14,16 @@ src/
   components/     App shell + reading/exercise/training surfaces
   hooks/          useRSVP (core orchestrator), usePlaybackTimer, useKeyboard
   lib/            tokenizer, saccade, rsvp timing, levenshtein, feeds,
-                  wikipedia, storage, app/session transition planners
+                  wikipedia, storage, nativeBridge, app/session transition planners
   types/          shared app/electron types
 electron/         main.ts, preload.ts, lib/ (pdf, epub, library, cleanup)
-shared/           Electron IPC contract types shared by preload + renderer
+src-tauri/        Tauri Rust bridge shell + command handlers (phase migration)
+shared/           Desktop contract types shared by preload/adapter + renderer
 ```
 
 ## Main Data Flow
 
-1. Content enters via URL extraction, pasted text, RSS feeds, or Electron file loading.
+1. Content enters via URL extraction, pasted text, RSS feeds, or desktop bridge file loading.
 2. `useRSVP` tokenizes content into `Chunk[]` based on display mode and token mode.
 3. Playback modes (RSVP/saccade) advance via `usePlaybackTimer` and mode-specific timing.
 4. Prediction/Recall are self-paced and update scoring state per chunk.
@@ -44,7 +45,8 @@ shared/           Electron IPC contract types shared by preload + renderer
   - `trainingFeedback.ts`
   - `trainingScoring.ts`
 - `ContinueSessionInfo` is defined in `appViewSelectors.ts` and reused by `sessionTransitions.ts` to avoid type drift.
-- Electron preload/renderer API contracts are sourced from `shared/electron-contract.ts` (no duplicated local interface declarations).
+- Desktop preload/renderer API contracts are sourced from `shared/electron-contract.ts` (no duplicated local interface declarations).
+- Tauri bridge compatibility wiring lives in `src/lib/nativeBridge.ts` and must preserve existing `window.library`, `window.corpus`, `window.secureKeys` call signatures.
 
 ## Training/Drill Invariants
 
@@ -77,12 +79,14 @@ shared/           Electron IPC contract types shared by preload + renderer
 ```bash
 bun run dev
 bun run electron:dev
+bun run tauri:dev
 bun run lint
 bun run test:run
 bun run verify
 bun run verify:ci
 bun run build
 bun run electron:build  # when electron/** or Electron-relevant shared/type/config files change
+bun run tauri:check     # when src-tauri/** or Tauri bridge surfaces change
 ```
 
 ## Conventions

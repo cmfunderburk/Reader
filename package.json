@@ -24,7 +24,11 @@
     "verify:ci": "bun run lint && bun run test:coverage && bun run build",
     "electron:dev": "ELECTRON=true vite",
     "electron:build": "bun run typecheck:electron && ELECTRON=true vite build && electron-builder",
-    "electron:preview": "electron dist-electron/main.js"
+    "electron:preview": "electron dist-electron/main.js",
+    "tauri:dev": "cargo tauri dev --config src-tauri/tauri.conf.json",
+    "tauri:build": "cargo tauri build --config src-tauri/tauri.conf.json",
+    "tauri:check": "cargo check --manifest-path src-tauri/Cargo.toml",
+    "fixtures:tokenizer": "bun run scripts/generate-tokenizer-fixtures.ts"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

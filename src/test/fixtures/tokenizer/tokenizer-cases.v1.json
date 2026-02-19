@@ -1,0 +1,74 @@
+{
+  "schema": "reader-tokenizer-cases",
+  "version": 1,
+  "cases": [
+    {
+      "id": "word-basic",
+      "description": "Word mode emits one chunk per word.",
+      "input": {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "mode": "word"
+      }
+    },
+    {
+      "id": "word-markdown-strip",
+      "description": "Markdown formatting is stripped before tokenization.",
+      "input": {
+        "text": "# Heading\n\nThis is **bold** and *italic* with a [link](https://example.com).",
+        "mode": "word"
+      }
+    },
+    {
+      "id": "word-dash-split",
+      "description": "Em dash between words introduces a split point after the dash.",
+      "input": {
+        "text": "alpha—beta gamma",
+        "mode": "word"
+      }
+    },
+    {
+      "id": "word-abbreviation-spacing",
+      "description": "Uppercase abbreviations are preserved when normalizing punctuation spacing.",
+      "input": {
+        "text": "We met in the U.S.A.Today we left.",
+        "mode": "word"
+      }
+    },
+    {
+      "id": "custom-phrase-basic",
+      "description": "Custom mode builds phrase chunks around soft and hard limits.",
+      "input": {
+        "text": "The reader should group text into stable phrase chunks for RSVP pacing.",
+        "mode": "custom",
+        "saccadeLength": 10
+      }
+    },
+    {
+      "id": "custom-punctuation-breaks",
+      "description": "Clause punctuation can trigger chunk finalization once threshold is met.",
+      "input": {
+        "text": "First clause, second clause, then final sentence.",
+        "mode": "custom",
+        "saccadeLength": 9
+      }
+    },
+    {
+      "id": "custom-paragraph-break",
+      "description": "Paragraph boundaries insert break-marker chunks.",
+      "input": {
+        "text": "Paragraph one has text.\n\nParagraph two has more text.",
+        "mode": "custom",
+        "saccadeLength": 10
+      }
+    },
+    {
+      "id": "custom-short-lines",
+      "description": "Small inputs still produce at least one chunk.",
+      "input": {
+        "text": "Short text.",
+        "mode": "custom",
+        "saccadeLength": 12
+      }
+    }
+  ]
+}
