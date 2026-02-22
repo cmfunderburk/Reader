@@ -116,9 +116,13 @@ Serve the web build to a tablet or phone over [Tailscale](https://tailscale.com/
 
 ### Seeding library content
 
-The Electron app's local library files aren't available in the web build. To transfer articles to the mobile device's localStorage, use the seed page:
+The Electron app's local library files aren't available in the web build. To transfer articles to the mobile device's localStorage, generate a seed file and load it once:
 
-1. Add articles to `public/seed-articles.json` (array of `Article` objects).
+1. Generate `public/seed-articles.json` locally from your library files. This file is gitignored (library content may be copyrighted). A minimal example using the `Article` shape from `src/types/index.ts`:
+   ```json
+   [{"id":"1-abc","title":"Chapter 1","content":"...","source":"Library",
+     "addedAt":0,"readPosition":0,"isRead":false,"group":"My Book"}]
+   ```
 2. Rebuild (`bun run build`) so the file lands in `dist/`.
 3. On the mobile device, visit `https://<hostname>.<tailnet>.ts.net/seed.html` once.
 
