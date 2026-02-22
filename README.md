@@ -28,7 +28,7 @@ The design goal is to reduce friction between reading and retention practice by 
 
 ### Generation
 - Line-paced reading with selective letter masking cues inspired by generation-effect tasks.
-- Masking excludes function words, proper nouns, acronyms, and numbers in Normal/Hard; Recall masks every word down to first/last letters.
+- Masking excludes function words, proper nouns, acronyms, and numbers in Normal/Hard; for German lines, capitalization alone is not treated as a proper noun signal (to avoid exempting common nouns). Recall masks every word down to first/last letters.
 - Difficulty presets (`Normal`, `Hard`, `Recall`) adjust per-word masking (`<=25%`, `<=40%`, or first/last letters only).
 - Optional `Sweep reveal` progressively unmasks letters as the pacer passes.
 - Hold `R` to temporarily reveal full text; pacing pauses while held.
@@ -96,6 +96,33 @@ The design goal is to reduce friction between reading and retention practice by 
 - Prediction: `Tab` preview toggle.
 - Recall/training recall: `Enter`/`Space` submit or continue depending on state.
 - Training Random Drill (no scaffold): `Tab` timed preview of remaining words (previewed words are unscored).
+
+## Mobile Access via Tailscale
+
+Serve the web build to a tablet or phone over [Tailscale](https://tailscale.com/) without exposing anything to the public internet.
+
+1. Install Tailscale on both machines (e.g. Arch Linux host + iPad) and sign in with the same account.
+2. Build and serve:
+   ```bash
+   bun run build
+   npx serve dist --listen 3000
+   ```
+3. Expose the port over Tailscale:
+   ```bash
+   sudo tailscale serve 3000
+   ```
+   This prints a URL like `https://<hostname>.<tailnet>.ts.net/`.
+4. Open that URL on the mobile device.
+
+### Seeding library content
+
+The Electron app's local library files aren't available in the web build. To transfer articles to the mobile device's localStorage, use the seed page:
+
+1. Add articles to `public/seed-articles.json` (array of `Article` objects).
+2. Rebuild (`bun run build`) so the file lands in `dist/`.
+3. On the mobile device, visit `https://<hostname>.<tailnet>.ts.net/seed.html` once.
+
+The seed page merges articles into existing localStorage without duplicating by title+group, so it's safe to re-run.
 
 ## Development
 
