@@ -190,4 +190,3 @@ This order keeps the project "useful immediately" while steadily reducing fricti
 - **Granularity interaction**: when paragraph and sentence schedules disagree, which drives the day plan?
 - **Assistive credit assignment**: should assisted recalls (scaffold on, preview used) update stability at all, or only partially?
 - **Time budgeting**: do we optimize for a fixed daily time budget (most realistic) or for clearing all due items (often unrealistic)?
-
