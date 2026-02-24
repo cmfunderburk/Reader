@@ -14,7 +14,7 @@ const MS_PER_DAY = 86_400_000;
 
 function makeCard(overrides: Partial<SRSCard> = {}): SRSCard {
   return {
-    key: 'what is x?',
+    key: 'a1::what is x?',
     box: 1 as LeitnerBox,
     nextDueAt: 0,
     lastReviewedAt: 0,
@@ -75,7 +75,7 @@ afterEach(() => {
 describe('srsStore', () => {
   describe('loadSRSPool / saveSRSPool', () => {
     it('round-trips valid cards', () => {
-      const cards = [makeCard(), makeCard({ key: 'second', prompt: 'Second?' })];
+      const cards = [makeCard(), makeCard({ key: 'a1::second?', prompt: 'Second?' })];
       saveSRSPool(cards);
       const loaded = loadSRSPool();
       expect(loaded).toEqual(cards);
@@ -110,6 +110,14 @@ describe('srsStore', () => {
       localStorage.setItem('speedread_srs_pool', JSON.stringify([bad]));
       expect(loadSRSPool()).toEqual([]);
     });
+
+    it('normalizes legacy prompt-only keys to article+prompt keys', () => {
+      const legacy = { ...makeCard(), key: 'what is x?' };
+      localStorage.setItem('speedread_srs_pool', JSON.stringify([legacy]));
+      const loaded = loadSRSPool();
+      expect(loaded).toHaveLength(1);
+      expect(loaded[0].key).toBe('a1::what is x?');
+    });
   });
 
   describe('ingestComprehensionAttempt', () => {
@@ -131,7 +139,7 @@ describe('srsStore', () => {
       expect(q2Card.nextDueAt).toBe(now + LEITNER_INTERVALS[3] * MS_PER_DAY);
     });
 
-    it('deduplicates by normalized prompt key', () => {
+    it('deduplicates by normalized prompt key within an article', () => {
       const attempt = makeAttempt();
       const now = 2_000_000;
       const initial = ingestComprehensionAttempt([], attempt, now);
@@ -139,6 +147,48 @@ describe('srsStore', () => {
       // Re-ingest same attempt — should not add duplicates
       const result = ingestComprehensionAttempt(initial, attempt, now + 1000);
       expect(result).toHaveLength(2);
+    });
+
+    it('does not deduplicate same prompt across different articles', () => {
+      const now = 2_000_000;
+      const attemptOne = makeAttempt({
+        id: 'att-a',
+        articleId: 'a1',
+        questions: [
+          {
+            id: 'q1',
+            dimension: 'factual',
+            format: 'short-answer',
+            prompt: 'What is X?',
+            userAnswer: 'Y',
+            modelAnswer: 'X is Y.',
+            score: 2,
+            feedback: 'Partial.',
+          },
+        ],
+      });
+      const attemptTwo = makeAttempt({
+        id: 'att-b',
+        articleId: 'a2',
+        articleTitle: 'Second Article',
+        questions: [
+          {
+            id: 'q1',
+            dimension: 'factual',
+            format: 'short-answer',
+            prompt: 'What is X?',
+            userAnswer: 'Y',
+            modelAnswer: 'X is Y.',
+            score: 2,
+            feedback: 'Partial.',
+          },
+        ],
+      });
+
+      const first = ingestComprehensionAttempt([], attemptOne, now);
+      const result = ingestComprehensionAttempt(first, attemptTwo, now + 1000);
+      expect(result).toHaveLength(2);
+      expect(result.map((card) => card.key).sort()).toEqual(['a1::what is x?', 'a2::what is x?']);
     });
 
     it('updates metadata on existing cards without changing scheduling', () => {

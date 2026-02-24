@@ -65,6 +65,7 @@ import type {
   PassageReviewState,
   ThemePreference,
   ComprehensionAttempt,
+  SRSCard,
   SRSCardStatus,
 } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
@@ -270,6 +271,7 @@ export function App() {
   const [comprehensionApiKeyStorageMode, setComprehensionApiKeyStorageMode] = useState<ComprehensionApiKeyStorageMode>('local');
   const [comprehensionAttempts, setComprehensionAttempts] = useState<ComprehensionAttempt[]>(() => loadComprehensionAttempts());
   const [srsCards, setSrsCards] = useState(() => loadSRSPool());
+  const [srsSessionCardKeys, setSrsSessionCardKeys] = useState<string[]>([]);
   const comprehensionAdapter = useMemo(() => {
     return createComprehensionAdapter({
       apiKey: comprehensionApiKey || undefined,
@@ -954,8 +956,10 @@ export function App() {
   }, []);
 
   const handleStartSRSReview = useCallback(() => {
+    const dueCards = getDueCards(srsCards, Date.now());
+    setSrsSessionCardKeys(dueCards.map((card) => card.key));
     setViewState({ screen: 'active-srs-review' });
-  }, [setViewState]);
+  }, [setViewState, srsCards]);
 
   const handleSRSCardReviewed = useCallback((cardKey: string, selfGradeCorrect: boolean) => {
     setSrsCards((existing) => {
@@ -974,6 +978,7 @@ export function App() {
   }, []);
 
   const closeSRSReview = useCallback(() => {
+    setSrsSessionCardKeys([]);
     goHome();
   }, [goHome]);
 
@@ -1090,8 +1095,12 @@ export function App() {
 
   const srsDueCards = useMemo(() => {
     if (viewState.screen !== 'active-srs-review') return [];
-    return getDueCards(srsCards, Date.now());
-  }, [srsCards, viewState.screen]);
+    if (srsSessionCardKeys.length === 0) return [];
+    const cardsByKey = new Map(srsCards.map((card) => [card.key, card]));
+    return srsSessionCardKeys
+      .map((cardKey) => cardsByKey.get(cardKey))
+      .filter((card): card is SRSCard => card !== undefined);
+  }, [srsCards, srsSessionCardKeys, viewState.screen]);
 
   const activeComprehensionSourceArticles = useMemo(() => {
     if (viewState.screen !== 'active-comprehension') return [];

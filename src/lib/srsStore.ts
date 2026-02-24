@@ -20,6 +20,10 @@ const MAX_CARDS = 500;
 const VALID_STATUSES: SRSCardStatus[] = ['active', 'complete', 'deferred'];
 const VALID_BOXES: LeitnerBox[] = [1, 2, 3, 4, 5];
 
+function buildCardKey(articleId: string, prompt: string): string {
+  return `${articleId.trim()}::${normalizePromptKey(prompt)}`;
+}
+
 function isValidCard(card: unknown): card is SRSCard {
   if (typeof card !== 'object' || card === null) return false;
   const c = card as Record<string, unknown>;
@@ -48,7 +52,21 @@ export function loadSRSPool(): SRSCard[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isValidCard).slice(0, MAX_CARDS);
+    const filtered = parsed.filter(isValidCard).slice(0, MAX_CARDS);
+    const cardsByKey = new Map<string, SRSCard>();
+
+    for (const card of filtered) {
+      const normalizedCard = {
+        ...card,
+        key: buildCardKey(card.articleId, card.prompt),
+      };
+      const existing = cardsByKey.get(normalizedCard.key);
+      if (!existing || normalizedCard.lastReviewedAt >= existing.lastReviewedAt) {
+        cardsByKey.set(normalizedCard.key, normalizedCard);
+      }
+    }
+
+    return Array.from(cardsByKey.values()).slice(0, MAX_CARDS);
   } catch {
     return [];
   }
@@ -66,7 +84,7 @@ function buildCardFromQuestion(
   const needsReview = questionNeedsReview(question);
   const box = getInitialBox(needsReview);
   return {
-    key: normalizePromptKey(question.prompt),
+    key: buildCardKey(attempt.articleId, question.prompt),
     box,
     nextDueAt: computeNextDueAt(box, now),
     lastReviewedAt: now,
@@ -93,7 +111,7 @@ export function ingestComprehensionAttempt(
   const cardMap = new Map(existingCards.map((c) => [c.key, c]));
 
   for (const question of attempt.questions) {
-    const key = normalizePromptKey(question.prompt);
+    const key = buildCardKey(attempt.articleId, question.prompt);
     const existing = cardMap.get(key);
 
     if (existing) {

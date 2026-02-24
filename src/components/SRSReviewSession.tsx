@@ -32,12 +32,12 @@ export function SRSReviewSession({
 
   const handleSelfGrade = useCallback((correct: boolean) => {
     if (!card) return;
+    const shouldShowGraduation = correct && card.box >= 5;
     onCardReviewed(card.key, correct);
     if (correct) setCorrectCount((c) => c + 1);
     setReviewedCount((c) => c + 1);
 
-    // Check if graduation prompt needed (after advancing — box was just bumped)
-    if (correct && isGraduationEligible(card)) {
+    if (shouldShowGraduation && isGraduationEligible(card)) {
       setPhase('graduation');
       return;
     }

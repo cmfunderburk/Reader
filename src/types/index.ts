@@ -254,7 +254,7 @@ export type SRSCardStatus = 'active' | 'complete' | 'deferred';
 export type LeitnerBox = 1 | 2 | 3 | 4 | 5;
 
 export interface SRSCard {
-  key: string;              // normalized prompt text (dedup key)
+  key: string;              // `${articleId}::${normalizedPrompt}` (dedup key)
   box: LeitnerBox;
   nextDueAt: number;
   lastReviewedAt: number;
