@@ -31,6 +31,7 @@ export type ViewState =
   | { screen: 'settings' }
   | { screen: 'library-settings' }
   | { screen: 'comprehension-builder'; }
+  | { screen: 'active-srs-review' }
   | { screen: 'add' };
 
 export type ViewAction =
@@ -42,6 +43,7 @@ export type ViewAction =
   | { type: 'open-active-comprehension'; article: Article; entryPoint: 'post-reading' | 'launcher'; comprehension: ActiveComprehensionContext }
   | { type: 'open-active-training'; article?: Article }
   | { type: 'open-comprehension-builder' }
+  | { type: 'open-srs-review' }
   | { type: 'open-settings' }
   | { type: 'open-library-settings' }
   | { type: 'open-add' };
@@ -74,6 +76,8 @@ export function appViewStateReducer(_state: ViewState, action: ViewAction): View
       return { screen: 'active-training', ...(action.article ? { article: action.article } : {}) };
     case 'open-comprehension-builder':
       return { screen: 'comprehension-builder' };
+    case 'open-srs-review':
+      return { screen: 'active-srs-review' };
     case 'open-settings':
       return { screen: 'settings' };
     case 'open-library-settings':
@@ -108,6 +112,8 @@ export function viewStateToAction(state: ViewState): ViewAction {
       return { type: 'open-active-training', article: state.article };
     case 'comprehension-builder':
       return { type: 'open-comprehension-builder' };
+    case 'active-srs-review':
+      return { type: 'open-srs-review' };
     case 'settings':
       return { type: 'open-settings' };
     case 'library-settings':

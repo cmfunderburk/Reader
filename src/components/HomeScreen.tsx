@@ -21,6 +21,8 @@ interface HomeScreenProps {
   continueInfo: ContinueInfo | null;
   comprehensionSummary: { attemptCount: number; lastScore: number | null };
   comprehensionAttempts: ComprehensionAttempt[];
+  srsDueCount: number;
+  onStartSRSReview: () => void;
 }
 
 const MAX_HISTORY_ATTEMPTS = 30;
@@ -58,6 +60,8 @@ export function HomeScreen({
   continueInfo,
   comprehensionSummary,
   comprehensionAttempts,
+  srsDueCount,
+  onStartSRSReview,
 }: HomeScreenProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const attemptsToShow = comprehensionAttempts.slice(0, MAX_HISTORY_ATTEMPTS);
@@ -155,6 +159,13 @@ export function HomeScreen({
               onClick={onStartComprehensionBuilder}
             >
               Build Exam
+            </button>
+            <button
+              className="activity-card-action"
+              onClick={onStartSRSReview}
+              disabled={srsDueCount === 0}
+            >
+              Review ({srsDueCount} due)
             </button>
             <button
               className="activity-card-action"

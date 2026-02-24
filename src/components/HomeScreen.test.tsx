@@ -17,6 +17,8 @@ const baseProps = {
   continueInfo: null,
   comprehensionSummary: { attemptCount: 0, lastScore: null as number | null },
   comprehensionAttempts: [] as ComprehensionAttempt[],
+  srsDueCount: 0,
+  onStartSRSReview: vi.fn(),
 };
 
 function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {
@@ -75,6 +77,22 @@ describe('HomeScreen', () => {
     expect(screen.getByRole('heading', { name: 'Comprehension History' })).toBeTruthy();
     expect(screen.getByText('Mill on Reading')).toBeTruthy();
     expect(screen.getByText(/Score 96%/i)).toBeTruthy();
+  });
+
+  it('shows SRS review button disabled when no cards due', () => {
+    render(<HomeScreen {...baseProps} srsDueCount={0} />);
+    const reviewBtn = screen.getByRole('button', { name: 'Review (0 due)' });
+    expect(reviewBtn).toBeTruthy();
+    expect(reviewBtn.getAttribute('disabled')).not.toBeNull();
+  });
+
+  it('shows SRS review button enabled with due count', () => {
+    const onStart = vi.fn();
+    render(<HomeScreen {...baseProps} srsDueCount={5} onStartSRSReview={onStart} />);
+    const reviewBtn = screen.getByRole('button', { name: 'Review (5 due)' });
+    expect(reviewBtn.getAttribute('disabled')).toBeNull();
+    fireEvent.click(reviewBtn);
+    expect(onStart).toHaveBeenCalledOnce();
   });
 
   it('shows an empty state when no history exists', () => {

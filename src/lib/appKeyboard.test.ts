@@ -36,6 +36,10 @@ describe('appKeyboard', () => {
     })).toBe('close-active-comprehension');
   });
 
+  it('returns close-srs-review on active SRS review', () => {
+    expect(planEscapeAction({ screen: 'active-srs-review' })).toBe('close-srs-review');
+  });
+
   it('returns go-home for all other screens', () => {
     const article = makeArticle('a1');
     expect(planEscapeAction({ screen: 'content-browser', activity: 'training' })).toBe('go-home');

@@ -154,7 +154,7 @@ export type ComprehensionItemMode =
   | 'interleaved-drill';
 export type ComprehensionHint = string;
 export type ComprehensionConfidence = 1 | 2 | 3 | 4 | 5;
-export const COMPREHENSION_GEMINI_MODELS = ['gemini-3-pro-preview', 'gemini-3-flash-preview'] as const;
+export const COMPREHENSION_GEMINI_MODELS = ['gemini-3.1-pro-preview', 'gemini-3-flash-preview'] as const;
 export type ComprehensionGeminiModel = typeof COMPREHENSION_GEMINI_MODELS[number];
 
 export interface ComprehensionSourceRef {
@@ -247,4 +247,29 @@ export interface ComprehensionQuestionScore {
   score: number;          // 0-3
   feedback: string;
   keyPointResults?: ComprehensionKeyPointResult[];
+}
+
+// SRS (Spaced Repetition) types
+export type SRSCardStatus = 'active' | 'complete' | 'deferred';
+export type LeitnerBox = 1 | 2 | 3 | 4 | 5;
+
+export interface SRSCard {
+  key: string;              // normalized prompt text (dedup key)
+  box: LeitnerBox;
+  nextDueAt: number;
+  lastReviewedAt: number;
+  createdAt: number;
+  reviewCount: number;
+  lapseCount: number;
+  status: SRSCardStatus;
+  // Question snapshot
+  prompt: string;
+  modelAnswer: string;
+  format: ComprehensionFormat;
+  dimension: ComprehensionDimension;
+  section?: ComprehensionExamSection;
+  // Source metadata
+  articleId: string;
+  articleTitle: string;
+  sourceAttemptId: string;
 }

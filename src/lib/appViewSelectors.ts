@@ -35,6 +35,8 @@ export function getHeaderTitle(viewState: ViewState): string {
       return 'Comprehension Check';
     case 'comprehension-builder':
       return 'Build Exam';
+    case 'active-srs-review':
+      return 'Spaced Review';
     case 'content-browser':
       return ACTIVITY_LABELS[viewState.activity];
     case 'preview':
@@ -96,7 +98,7 @@ export function shouldShowBackButton(viewState: ViewState): boolean {
   return viewState.screen !== 'home';
 }
 
-export type HeaderBackAction = 'go-home' | 'close-active-exercise' | 'close-active-comprehension';
+export type HeaderBackAction = 'go-home' | 'close-active-exercise' | 'close-active-comprehension' | 'close-srs-review';
 
 export function getHeaderBackAction(viewState: ViewState): HeaderBackAction {
   if (viewState.screen === 'active-exercise') {
@@ -104,6 +106,9 @@ export function getHeaderBackAction(viewState: ViewState): HeaderBackAction {
   }
   if (viewState.screen === 'active-comprehension') {
     return 'close-active-comprehension';
+  }
+  if (viewState.screen === 'active-srs-review') {
+    return 'close-srs-review';
   }
   return 'go-home';
 }
