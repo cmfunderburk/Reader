@@ -15,6 +15,7 @@ import { TrainingReader } from './TrainingReader';
 import { ComprehensionCheck } from './ComprehensionCheck';
 import { ComprehensionCheckBoundary } from './ComprehensionCheckBoundary';
 import { ComprehensionExamBuilder } from './ComprehensionExamBuilder';
+import { SRSReviewSession } from './SRSReviewSession';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
@@ -64,6 +65,8 @@ import type {
   PassageReviewState,
   ThemePreference,
   ComprehensionAttempt,
+  SRSCard,
+  SRSCardStatus,
 } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
@@ -110,6 +113,17 @@ import {
   updateFeedLastFetched,
 } from '../lib/appFeedTransitions';
 import { createComprehensionAdapter } from '../lib/comprehensionAdapter';
+import { getDueCards } from '../lib/srsScheduling';
+import {
+  loadSRSPool,
+  saveSRSPool,
+  ingestComprehensionAttempt,
+  backfillFromAttempts,
+  updateCardAfterReview,
+  updateCardStatus,
+  hasInitializedSRSBackfill,
+  markSRSBackfillInitialized,
+} from '../lib/srsStore';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
@@ -258,6 +272,8 @@ export function App() {
   const [comprehensionApiKey, setComprehensionApiKey] = useState<string>('');
   const [comprehensionApiKeyStorageMode, setComprehensionApiKeyStorageMode] = useState<ComprehensionApiKeyStorageMode>('local');
   const [comprehensionAttempts, setComprehensionAttempts] = useState<ComprehensionAttempt[]>(() => loadComprehensionAttempts());
+  const [srsCards, setSrsCards] = useState(() => loadSRSPool());
+  const [srsSessionCards, setSrsSessionCards] = useState<SRSCard[]>([]);
   const comprehensionAdapter = useMemo(() => {
     return createComprehensionAdapter({
       apiKey: comprehensionApiKey || undefined,
@@ -314,6 +330,19 @@ export function App() {
       cancelled = true;
     };
   }, []);
+
+  // Auto-backfill SRS pool from existing comprehension attempts on first load
+  useEffect(() => {
+    if (!hasInitializedSRSBackfill()) {
+      if (srsCards.length === 0 && comprehensionAttempts.length > 0) {
+        const backfilled = backfillFromAttempts(comprehensionAttempts);
+        setSrsCards(backfilled);
+        saveSRSPool(backfilled);
+      }
+      markSRSBackfillInitialized();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — run once on mount
 
   const rsvp = useRSVP({
     initialWpm: settings.wpmByActivity['paced-reading'],
@@ -438,6 +467,8 @@ export function App() {
         closeActiveExercise();
       } else if (escapeAction === 'close-active-comprehension') {
         closeActiveComprehension();
+      } else if (escapeAction === 'close-srs-review') {
+        closeSRSReview();
       } else if (escapeAction === 'go-home') {
         goHome();
       }
@@ -922,7 +953,39 @@ export function App() {
 
   const handleComprehensionAttemptSaved = useCallback((attempt: ComprehensionAttempt) => {
     setComprehensionAttempts((existing) => [attempt, ...existing].slice(0, 200));
+    setSrsCards((existing) => {
+      const updated = ingestComprehensionAttempt(existing, attempt, Date.now());
+      saveSRSPool(updated);
+      return updated;
+    });
   }, []);
+
+  const handleStartSRSReview = useCallback(() => {
+    const dueCards = getDueCards(srsCards, Date.now());
+    setSrsSessionCards(dueCards.map((card) => ({ ...card })));
+    setViewState({ screen: 'active-srs-review' });
+  }, [setViewState, srsCards]);
+
+  const handleSRSCardReviewed = useCallback((cardKey: string, selfGradeCorrect: boolean) => {
+    setSrsCards((existing) => {
+      const updated = updateCardAfterReview(existing, cardKey, selfGradeCorrect, Date.now());
+      saveSRSPool(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleSRSCardStatusChange = useCallback((cardKey: string, status: SRSCardStatus) => {
+    setSrsCards((existing) => {
+      const updated = updateCardStatus(existing, cardKey, status);
+      saveSRSPool(updated);
+      return updated;
+    });
+  }, []);
+
+  const closeSRSReview = useCallback(() => {
+    setSrsSessionCards([]);
+    goHome();
+  }, [goHome]);
 
   const launchFeaturedArticle = useCallback(async ({
     fetchArticle,
@@ -1029,6 +1092,16 @@ export function App() {
       lastScore: lastAttempt?.overallScore ?? null,
     };
   }, [comprehensionAttempts]);
+
+  const srsDueCount = useMemo(() => {
+    const now = Date.now();
+    return srsCards.filter((c) => c.status === 'active' && c.nextDueAt <= now).length;
+  }, [srsCards]);
+
+  const srsDueCards = useMemo(() => {
+    if (viewState.screen !== 'active-srs-review') return [];
+    return srsSessionCards;
+  }, [srsSessionCards, viewState.screen]);
 
   const activeComprehensionSourceArticles = useMemo(() => {
     if (viewState.screen !== 'active-comprehension') return [];
@@ -1268,7 +1341,9 @@ export function App() {
                   ? closeActiveExercise
                   : headerBackAction === 'close-active-comprehension'
                     ? closeActiveComprehension
-                    : goHome
+                    : headerBackAction === 'close-srs-review'
+                      ? closeSRSReview
+                      : goHome
               }
             >
               Home
@@ -1324,6 +1399,8 @@ export function App() {
             continueInfo={continueInfo}
             comprehensionSummary={comprehensionSummary}
             comprehensionAttempts={comprehensionAttempts}
+            srsDueCount={srsDueCount}
+            onStartSRSReview={handleStartSRSReview}
           />
         )}
 
@@ -1478,6 +1555,17 @@ export function App() {
               onClose={closeActiveComprehension}
               onOpenSettings={() => navigate({ screen: 'settings' })}
               onAttemptSaved={handleComprehensionAttemptSaved}
+            />
+          </ComprehensionCheckBoundary>
+        )}
+
+        {viewState.screen === 'active-srs-review' && (
+          <ComprehensionCheckBoundary onClose={closeSRSReview}>
+            <SRSReviewSession
+              dueCards={srsDueCards}
+              onCardReviewed={handleSRSCardReviewed}
+              onCardStatusChange={handleSRSCardStatusChange}
+              onClose={closeSRSReview}
             />
           </ComprehensionCheckBoundary>
         )}

@@ -169,7 +169,7 @@ describe('storage-helpers with real storage functions', () => {
       ...defaults,
       predictionPreviewMode: 'unlimited',
       predictionPreviewSentenceCount: 5,
-      comprehensionGeminiModel: 'gemini-3-pro-preview',
+      comprehensionGeminiModel: 'gemini-3.1-pro-preview',
       generationDifficulty: 'hard',
       generationSweepReveal: false,
       themePreference: 'system',
@@ -182,7 +182,7 @@ describe('storage-helpers with real storage functions', () => {
     const loaded = loadSettings();
     expect(loaded.predictionPreviewMode).toBe('unlimited');
     expect(loaded.predictionPreviewSentenceCount).toBe(5);
-    expect(loaded.comprehensionGeminiModel).toBe('gemini-3-pro-preview');
+    expect(loaded.comprehensionGeminiModel).toBe('gemini-3.1-pro-preview');
     expect(loaded.generationDifficulty).toBe('hard');
     expect(loaded.generationSweepReveal).toBe(false);
     expect(loaded.themePreference).toBe('system');

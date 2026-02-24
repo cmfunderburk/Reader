@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Seed Reading Queue</title>
+<style>body{font-family:system-ui;max-width:600px;margin:40px auto;padding:0 20px;background:#111;color:#eee}
+h1{font-size:1.3em}p{line-height:1.5}#status{padding:12px;border-radius:8px;margin-top:20px}
+.ok{background:#1a3a1a;color:#6f6}.err{background:#3a1a1a;color:#f66}</style>
+</head>
+<body>
+<h1>Seed Reading Queue</h1>
+<p>Loading articles into localStorage...</p>
+<div id="status">Working...</div>
+<script>
+(async () => {
+  const el = document.getElementById('status');
+  try {
+    const resp = await fetch('/seed-articles.json');
+    if (!resp.ok) throw new Error('Failed to fetch seed-articles.json: ' + resp.status);
+    const newArticles = await resp.json();
+
+    // Merge with any existing articles (don't overwrite)
+    const existing = JSON.parse(localStorage.getItem('speedread_articles') || '[]');
+    const existingTitles = new Set(existing.map(a => a.title + '|' + a.group));
+    let added = 0;
+    for (const a of newArticles) {
+      const key = a.title + '|' + a.group;
+      if (!existingTitles.has(key)) {
+        existing.push(a);
+        existingTitles.add(key);
+        added++;
+      }
+    }
+    localStorage.setItem('speedread_articles', JSON.stringify(existing));
+
+    el.className = 'ok';
+    el.innerHTML = `Done! Added <strong>${added}</strong> articles (${newArticles.length - added} already existed).<br><br><a href="/" style="color:#6f6">Open Reader</a>`;
+  } catch (e) {
+    el.className = 'err';
+    el.textContent = 'Error: ' + e.message;
+  }
+})();
+</script>
+</body>
+</html>

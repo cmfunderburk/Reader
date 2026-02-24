@@ -17,6 +17,8 @@ const baseProps = {
   continueInfo: null,
   comprehensionSummary: { attemptCount: 0, lastScore: null as number | null },
   comprehensionAttempts: [] as ComprehensionAttempt[],
+  srsDueCount: 0,
+  onStartSRSReview: vi.fn(),
 };
 
 function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {
@@ -53,10 +55,10 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...baseProps} />);
 
     const pacedReadingHeading = screen.getByRole('heading', { name: 'Paced Reading' });
-    const pacedReadingCard = pacedReadingHeading.closest('button');
+    const pacedReadingCard = pacedReadingHeading.closest('.mode-card');
     expect(pacedReadingCard).toBeTruthy();
 
-    const pacedReading = within(pacedReadingCard as HTMLButtonElement);
+    const pacedReading = within(pacedReadingCard as HTMLElement);
     expect(pacedReading.getByText('RSVP')).toBeTruthy();
     expect(pacedReading.getByText('Saccade')).toBeTruthy();
     expect(pacedReading.getByText('Generation')).toBeTruthy();
@@ -77,10 +79,55 @@ describe('HomeScreen', () => {
     expect(screen.getByText(/Score 96%/i)).toBeTruthy();
   });
 
+  it('shows SRS review button disabled when no cards due', () => {
+    render(<HomeScreen {...baseProps} srsDueCount={0} />);
+    const reviewBtn = screen.getByRole('button', { name: 'Start Due Check (0 due)' });
+    expect(reviewBtn).toBeTruthy();
+    expect(reviewBtn.getAttribute('disabled')).not.toBeNull();
+  });
+
+  it('shows SRS review button enabled with due count', () => {
+    const onStart = vi.fn();
+    render(<HomeScreen {...baseProps} srsDueCount={5} onStartSRSReview={onStart} />);
+    const reviewBtn = screen.getByRole('button', { name: 'Start Due Check (5 due)' });
+    expect(reviewBtn.getAttribute('disabled')).toBeNull();
+    fireEvent.click(reviewBtn);
+    expect(onStart).toHaveBeenCalledOnce();
+  });
+
+  it('starts daily and random sessions from Wikipedia quick start', () => {
+    const onStartDaily = vi.fn();
+    const onStartRandom = vi.fn();
+    render(
+      <HomeScreen
+        {...baseProps}
+        onStartDaily={onStartDaily}
+        onStartRandom={onStartRandom}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Random' }));
+    expect(onStartRandom).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Daily' }));
+    expect(onStartDaily).toHaveBeenCalledOnce();
+  });
+
   it('shows an empty state when no history exists', () => {
     render(<HomeScreen {...baseProps} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Review History' }));
     expect(screen.getByText('No comprehension attempts yet.')).toBeTruthy();
+  });
+
+  it('shows N/A when attempts exist but lastScore is unavailable', () => {
+    render(
+      <HomeScreen
+        {...baseProps}
+        comprehensionSummary={{ attemptCount: 1, lastScore: null }}
+      />
+    );
+
+    expect(screen.getByText('Attempts: 1 · Last score: N/A')).toBeTruthy();
   });
 });

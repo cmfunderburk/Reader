@@ -28,8 +28,8 @@ The design goal is to reduce friction between reading and retention practice by 
 
 ### Generation
 - Line-paced reading with selective letter masking cues inspired by generation-effect tasks.
-- Masking excludes function words, proper nouns, acronyms, and numbers.
-- Difficulty presets (`Normal`, `Hard`) adjust per-word mask limits (`<=25%` / `<=40%`).
+- Masking excludes function words, proper nouns, acronyms, and numbers in Normal/Hard; for German lines, capitalization alone is not treated as a proper noun signal (to avoid exempting common nouns). Recall masks every word down to first/last letters.
+- Difficulty presets (`Normal`, `Hard`, `Recall`) adjust per-word masking (`<=25%`, `<=40%`, or first/last letters only).
 - Optional `Sweep reveal` progressively unmasks letters as the pacer passes.
 - Hold `R` to temporarily reveal full text; pacing pauses while held.
 - Uses the same page navigation and passage-capture workflow as saccade mode.
@@ -96,6 +96,29 @@ The design goal is to reduce friction between reading and retention practice by 
 - Prediction: `Tab` preview toggle.
 - Recall/training recall: `Enter`/`Space` submit or continue depending on state.
 - Training Random Drill (no scaffold): `Tab` timed preview of remaining words (previewed words are unscored).
+
+## Mobile Access via Tailscale
+Use this when you want to run Reader on a desktop/laptop and open it from a phone or tablet without exposing a public port.
+
+1. Install and sign in to Tailscale on both the host machine and the mobile device (same tailnet).
+2. Build the web app:
+   ```bash
+   bun run build
+   ```
+3. Serve the built app locally:
+   ```bash
+   npx serve dist --listen 3000
+   ```
+4. Publish that local port through Tailscale:
+   ```bash
+   tailscale serve 3000
+   ```
+5. Open the generated `https://<host>.<tailnet>.ts.net/` URL on the mobile device.
+
+To stop sharing, run:
+```bash
+tailscale serve reset
+```
 
 ## Development
 

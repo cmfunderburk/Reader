@@ -81,6 +81,15 @@ describe('generationMask', () => {
     expect(hardUnderscores).toBeGreaterThan(normalUnderscores);
   });
 
+  it('masks recall difficulty to first/last letters for every word', () => {
+    const line = 'we discussed entropy with Alice and NASA in 2026';
+    const maskedA = maskGenerationLine(line, 'recall', 1, 0);
+    const maskedB = maskGenerationLine(line, 'recall', 99, 0);
+
+    expect(maskedA).toBe(maskedB);
+    expect(maskedA).toBe('we d_______d e_____y w__h A___e a_d N__A in 2026');
+  });
+
   it('never places consecutive masked letters in a word', () => {
     const line = 'retrieval substantially unconventional groundbreaking methodologies';
     for (let seed = 0; seed < 24; seed++) {
@@ -101,5 +110,33 @@ describe('generationMask', () => {
     segments.forEach((segment) => {
       expect(maskCount(segment)).toBeGreaterThan(0);
     });
+  });
+
+  it('does not treat capitalized German common nouns as proper nouns', () => {
+    const line = 'Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.';
+    const masked = maskGenerationLine(line, 'hard', 17, 0);
+
+    expect(masked).not.toContain('Bedeutung');
+    expect(masked).not.toContain('Wortes');
+    expect(masked).not.toContain('Gebrauch');
+    expect(masked).not.toContain('Sprache');
+  });
+
+  it('preserves German multi-word names while masking nearby nouns', () => {
+    const line = 'Ich las die Notizen von Ludwig Wittgenstein gestern.';
+    const masked = maskGenerationLine(line, 'hard', 21, 0);
+
+    expect(masked).toContain('Ludwig');
+    expect(masked).toContain('Wittgenstein');
+    expect(masked).not.toContain('Notizen');
+  });
+
+  it('preserves names connected by lowercase particles', () => {
+    const line = 'Das Werk von Ludwig von Mises ist bekannt.';
+    const masked = maskGenerationLine(line, 'hard', 29, 0);
+
+    expect(masked).toContain('Ludwig');
+    expect(masked).toContain('Mises');
+    expect(masked).not.toContain('Werk');
   });
 });

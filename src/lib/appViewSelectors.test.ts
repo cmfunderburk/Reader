@@ -61,6 +61,7 @@ describe('appViewSelectors', () => {
     expect(getHeaderTitle({ screen: 'content-browser', activity: 'training' })).toBe('Training');
     expect(getHeaderTitle({ screen: 'content-browser', activity: 'comprehension-check' })).toBe('Comprehension Check');
     expect(getHeaderTitle({ screen: 'preview', activity: 'active-recall', article: makeArticle('h1') })).toBe('Active Recall');
+    expect(getHeaderTitle({ screen: 'active-srs-review' })).toBe('Spaced Review');
     expect(getHeaderTitle({ screen: 'settings' })).toBe('Settings');
     expect(getHeaderTitle({ screen: 'library-settings' })).toBe('Library Settings');
   });
@@ -120,6 +121,7 @@ describe('appViewSelectors', () => {
         sourceArticleIds: ['c3'],
       },
     })).toBe('close-active-comprehension');
+    expect(getHeaderBackAction({ screen: 'active-srs-review' })).toBe('close-srs-review');
     expect(getHeaderBackAction({ screen: 'active-reader' })).toBe('go-home');
   });
 });
