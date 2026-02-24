@@ -97,6 +97,29 @@ The design goal is to reduce friction between reading and retention practice by 
 - Recall/training recall: `Enter`/`Space` submit or continue depending on state.
 - Training Random Drill (no scaffold): `Tab` timed preview of remaining words (previewed words are unscored).
 
+## Mobile Access via Tailscale
+Use this when you want to run Reader on a desktop/laptop and open it from a phone or tablet without exposing a public port.
+
+1. Install and sign in to Tailscale on both the host machine and the mobile device (same tailnet).
+2. Build the web app:
+   ```bash
+   bun run build
+   ```
+3. Serve the built app locally:
+   ```bash
+   npx serve dist --listen 3000
+   ```
+4. Publish that local port through Tailscale:
+   ```bash
+   tailscale serve 3000
+   ```
+5. Open the generated `https://<host>.<tailnet>.ts.net/` URL on the mobile device.
+
+To stop sharing, run:
+```bash
+tailscale serve reset
+```
+
 ## Development
 
 ```bash
