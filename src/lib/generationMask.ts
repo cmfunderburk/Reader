@@ -23,10 +23,35 @@ interface MaskContext {
   tokenIndex: number;
   partsByTokenIndex: Map<number, CoreParts>;
   titleCaseLine: boolean;
+  likelyGermanLine: boolean;
 }
 
 const HYPHEN_SEPARATOR_REGEX = /[-\u2010\u2011\u2012\u2013\u2014]/;
 const HYPHEN_SPLIT_REGEX = /([-\u2010\u2011\u2012\u2013\u2014]+)/;
+const LETTER_REGEX = /\p{L}/u;
+const LETTER_OR_DIGIT_REGEX = /[\p{L}\p{N}]/u;
+const GERMAN_CHAR_REGEX = /[ÄÖÜäöüß]/;
+
+const GERMAN_CONTEXT_CUES: ReadonlySet<string> = new Set([
+  'der', 'die', 'das', 'den', 'dem', 'des',
+  'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
+  'und', 'nicht', 'mit', 'fuer', 'fur',
+  'ich', 'wir', 'sie', 'ist', 'sind', 'dass',
+  'vom', 'zum', 'zur', 'im', 'am',
+]);
+
+const NAME_PREFIXES: ReadonlySet<string> = new Set([
+  'von', 'van', 'de', 'del', 'da', 'di', 'du', 'la', 'le',
+]);
+
+const NAME_TITLES: ReadonlySet<string> = new Set([
+  'dr', 'prof', 'herr', 'frau',
+]);
+
+const GERMAN_DETERMINERS: ReadonlySet<string> = new Set([
+  'der', 'die', 'das', 'den', 'dem', 'des',
+  'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
+]);
 
 const DIFFICULTY_PROFILES: Record<GenerationDifficulty, MaskProfile> = {
   normal: { strategy: 'ratio', maxMaskRatio: 0.25 },
@@ -45,7 +70,7 @@ function hashToUnitInterval(input: string): number {
 }
 
 function splitCoreParts(token: string): CoreParts | null {
-  const match = token.match(/^([^A-Za-z0-9]*)([A-Za-z0-9][A-Za-z0-9'’-]*)([^A-Za-z0-9]*)$/);
+  const match = token.match(/^([^\p{L}\p{N}]*)([\p{L}\p{N}][\p{L}\p{N}'’-]*)([^\p{L}\p{N}]*)$/u);
   if (!match) return null;
   return {
     leading: match[1],
@@ -79,20 +104,25 @@ function extractTokens(lineText: string): TokenInfo[] {
 }
 
 function isAcronym(core: string): boolean {
-  const normalized = core.replace(/[^A-Za-z0-9]/g, '');
-  return /^[A-Z]{2,}$/.test(normalized);
+  const normalized = core.replace(/[^\p{L}]/gu, '');
+  return /^\p{Lu}{2,}$/u.test(normalized);
 }
 
 function normalizeAlpha(core: string): string {
-  return core.toLowerCase().replace(/[^a-z]/g, '');
+  return core
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/ß/g, 'ss')
+    .replace(/[^\p{L}]/gu, '');
 }
 
 function isSimpleTitleCase(core: string): boolean {
-  return /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)*$/.test(core);
+  return /^\p{Lu}\p{Ll}+(?:['’-]\p{Lu}?\p{Ll}+)*$/u.test(core);
 }
 
 function isInternalCapWord(core: string): boolean {
-  return /^[A-Z][a-z]+(?:[A-Z][a-z]+)+$/.test(core);
+  return /^\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)+$/u.test(core);
 }
 
 function isNameLikeTitleWord(core: string): boolean {
@@ -100,6 +130,7 @@ function isNameLikeTitleWord(core: string): boolean {
   const alphaOnly = normalizeAlpha(core);
   if (alphaOnly.length < 3) return false;
   if (FUNCTION_WORDS.has(alphaOnly)) return false;
+  if (GERMAN_CONTEXT_CUES.has(alphaOnly)) return false;
   return true;
 }
 
@@ -109,6 +140,39 @@ function hasAdjacentNameLikeTitleWord(tokenIndex: number, partsByTokenIndex: Map
   const next = partsByTokenIndex.get(tokenIndex + 1);
   if (next && isNameLikeTitleWord(next.core)) return true;
   return false;
+}
+
+function hasNameLikeWordAcrossPrefix(tokenIndex: number, partsByTokenIndex: Map<number, CoreParts>): boolean {
+  const prev = partsByTokenIndex.get(tokenIndex - 1);
+  const prevPrev = partsByTokenIndex.get(tokenIndex - 2);
+  if (prev && prevPrev) {
+    const prevAlpha = normalizeAlpha(prev.core);
+    if (NAME_PREFIXES.has(prevAlpha) && isNameLikeTitleWord(prevPrev.core)) {
+      return true;
+    }
+  }
+
+  const next = partsByTokenIndex.get(tokenIndex + 1);
+  const nextNext = partsByTokenIndex.get(tokenIndex + 2);
+  if (next && nextNext) {
+    const nextAlpha = normalizeAlpha(next.core);
+    const before = partsByTokenIndex.get(tokenIndex - 1);
+    const beforeAlpha = before ? normalizeAlpha(before.core) : '';
+    const precededByDeterminer = GERMAN_DETERMINERS.has(beforeAlpha);
+
+    if (!precededByDeterminer && NAME_PREFIXES.has(nextAlpha) && isNameLikeTitleWord(nextNext.core)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasHonorificBefore(tokenIndex: number, partsByTokenIndex: Map<number, CoreParts>): boolean {
+  const prev = partsByTokenIndex.get(tokenIndex - 1);
+  if (!prev) return false;
+  const prevAlpha = normalizeAlpha(prev.core);
+  return NAME_TITLES.has(prevAlpha);
 }
 
 function isLikelyTitleCaseLine(tokens: TokenInfo[], partsByTokenIndex: Map<number, CoreParts>): boolean {
@@ -131,10 +195,43 @@ function isLikelyTitleCaseLine(tokens: TokenInfo[], partsByTokenIndex: Map<numbe
   return (titleCaseCount / alphaTokenCount) >= 0.65;
 }
 
+function isLikelyGermanLine(tokens: TokenInfo[], partsByTokenIndex: Map<number, CoreParts>): boolean {
+  let alphaTokenCount = 0;
+  let germanCueCount = 0;
+  let hasGermanChar = false;
+
+  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
+    const parts = partsByTokenIndex.get(tokenIndex);
+    if (!parts) continue;
+    const alphaOnly = normalizeAlpha(parts.core);
+    if (alphaOnly.length === 0) continue;
+
+    alphaTokenCount += 1;
+    if (GERMAN_CONTEXT_CUES.has(alphaOnly)) {
+      germanCueCount += 1;
+    }
+    if (!hasGermanChar && GERMAN_CHAR_REGEX.test(parts.core)) {
+      hasGermanChar = true;
+    }
+  }
+
+  if (alphaTokenCount < 3) return false;
+  if (germanCueCount >= 2) return true;
+  return hasGermanChar && germanCueCount >= 1;
+}
+
 function isProperNoun(core: string, sentenceInitial: boolean, context: MaskContext): boolean {
   if (isInternalCapWord(core)) return true;
   if (sentenceInitial) return false;
   if (!isSimpleTitleCase(core)) return false;
+
+  if (context.likelyGermanLine) {
+    if (hasHonorificBefore(context.tokenIndex, context.partsByTokenIndex)) {
+      return true;
+    }
+    return hasAdjacentNameLikeTitleWord(context.tokenIndex, context.partsByTokenIndex)
+      || hasNameLikeWordAcrossPrefix(context.tokenIndex, context.partsByTokenIndex);
+  }
 
   if (!context.titleCaseLine) {
     return true;
@@ -159,7 +256,7 @@ function isMaskEligible(core: string, sentenceInitial: boolean, context: MaskCon
 function maskSingleCoreWord(core: string, maxMaskRatio: number, seed: string): string {
   const letters: number[] = [];
   for (let i = 0; i < core.length; i++) {
-    if (/[A-Za-z]/.test(core[i])) letters.push(i);
+    if (LETTER_REGEX.test(core[i])) letters.push(i);
   }
   if (letters.length <= 1) return core;
 
@@ -201,7 +298,7 @@ function maskCoreWord(core: string, maxMaskRatio: number, seed: string): string 
 function maskSingleCoreWordToFirstLast(core: string): string {
   const letters: number[] = [];
   for (let i = 0; i < core.length; i++) {
-    if (/[A-Za-z]/.test(core[i])) letters.push(i);
+    if (LETTER_REGEX.test(core[i])) letters.push(i);
   }
   if (letters.length <= 2) return core;
 
@@ -325,6 +422,7 @@ export function maskGenerationLine(
     partsByTokenIndex.set(tokenIndex, parts);
   }
   const titleCaseLine = isLikelyTitleCaseLine(tokens, partsByTokenIndex);
+  const likelyGermanLine = isLikelyGermanLine(tokens, partsByTokenIndex);
 
   let cursor = 0;
   let result = '';
@@ -341,8 +439,13 @@ export function maskGenerationLine(
     }
 
     const maskEligible = difficulty === 'recall'
-      ? normalizeAlpha(parts.core).length > 0
-      : isMaskEligible(parts.core, token.sentenceInitial, { tokenIndex, partsByTokenIndex, titleCaseLine });
+      ? LETTER_OR_DIGIT_REGEX.test(parts.core) && normalizeAlpha(parts.core).length > 0
+      : isMaskEligible(parts.core, token.sentenceInitial, {
+        tokenIndex,
+        partsByTokenIndex,
+        titleCaseLine,
+        likelyGermanLine,
+      });
 
     if (!maskEligible) {
       result += token.raw;

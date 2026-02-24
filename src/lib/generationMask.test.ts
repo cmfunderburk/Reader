@@ -111,4 +111,32 @@ describe('generationMask', () => {
       expect(maskCount(segment)).toBeGreaterThan(0);
     });
   });
+
+  it('does not treat capitalized German common nouns as proper nouns', () => {
+    const line = 'Die Bedeutung eines Wortes ist sein Gebrauch in der Sprache.';
+    const masked = maskGenerationLine(line, 'hard', 17, 0);
+
+    expect(masked).not.toContain('Bedeutung');
+    expect(masked).not.toContain('Wortes');
+    expect(masked).not.toContain('Gebrauch');
+    expect(masked).not.toContain('Sprache');
+  });
+
+  it('preserves German multi-word names while masking nearby nouns', () => {
+    const line = 'Ich las die Notizen von Ludwig Wittgenstein gestern.';
+    const masked = maskGenerationLine(line, 'hard', 21, 0);
+
+    expect(masked).toContain('Ludwig');
+    expect(masked).toContain('Wittgenstein');
+    expect(masked).not.toContain('Notizen');
+  });
+
+  it('preserves names connected by lowercase particles', () => {
+    const line = 'Das Werk von Ludwig von Mises ist bekannt.';
+    const masked = maskGenerationLine(line, 'hard', 29, 0);
+
+    expect(masked).toContain('Ludwig');
+    expect(masked).toContain('Mises');
+    expect(masked).not.toContain('Werk');
+  });
 });
