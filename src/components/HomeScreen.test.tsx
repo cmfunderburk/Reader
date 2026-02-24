@@ -55,10 +55,10 @@ describe('HomeScreen', () => {
     render(<HomeScreen {...baseProps} />);
 
     const pacedReadingHeading = screen.getByRole('heading', { name: 'Paced Reading' });
-    const pacedReadingCard = pacedReadingHeading.closest('button');
+    const pacedReadingCard = pacedReadingHeading.closest('.mode-card');
     expect(pacedReadingCard).toBeTruthy();
 
-    const pacedReading = within(pacedReadingCard as HTMLButtonElement);
+    const pacedReading = within(pacedReadingCard as HTMLElement);
     expect(pacedReading.getByText('RSVP')).toBeTruthy();
     expect(pacedReading.getByText('Saccade')).toBeTruthy();
     expect(pacedReading.getByText('Generation')).toBeTruthy();
@@ -81,7 +81,7 @@ describe('HomeScreen', () => {
 
   it('shows SRS review button disabled when no cards due', () => {
     render(<HomeScreen {...baseProps} srsDueCount={0} />);
-    const reviewBtn = screen.getByRole('button', { name: 'Review (0 due)' });
+    const reviewBtn = screen.getByRole('button', { name: 'Start Due Check (0 due)' });
     expect(reviewBtn).toBeTruthy();
     expect(reviewBtn.getAttribute('disabled')).not.toBeNull();
   });
@@ -89,10 +89,28 @@ describe('HomeScreen', () => {
   it('shows SRS review button enabled with due count', () => {
     const onStart = vi.fn();
     render(<HomeScreen {...baseProps} srsDueCount={5} onStartSRSReview={onStart} />);
-    const reviewBtn = screen.getByRole('button', { name: 'Review (5 due)' });
+    const reviewBtn = screen.getByRole('button', { name: 'Start Due Check (5 due)' });
     expect(reviewBtn.getAttribute('disabled')).toBeNull();
     fireEvent.click(reviewBtn);
     expect(onStart).toHaveBeenCalledOnce();
+  });
+
+  it('starts daily and random sessions from Wikipedia quick start', () => {
+    const onStartDaily = vi.fn();
+    const onStartRandom = vi.fn();
+    render(
+      <HomeScreen
+        {...baseProps}
+        onStartDaily={onStartDaily}
+        onStartRandom={onStartRandom}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Random' }));
+    expect(onStartRandom).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Daily' }));
+    expect(onStartDaily).toHaveBeenCalledOnce();
   });
 
   it('shows an empty state when no history exists', () => {

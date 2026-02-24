@@ -46,6 +46,40 @@ function formatEntryPoint(entryPoint: ComprehensionAttempt['entryPoint']): strin
   return entryPoint === 'post-reading' ? 'Post-reading' : 'Launcher';
 }
 
+function formatDisplayMode(mode: DisplayMode): string {
+  switch (mode) {
+    case 'rsvp':
+      return 'RSVP';
+    case 'saccade':
+      return 'Saccade';
+    case 'generation':
+      return 'Generation';
+    case 'prediction':
+      return 'Prediction';
+    case 'recall':
+      return 'Recall';
+    case 'training':
+      return 'Training';
+    default:
+      return mode;
+  }
+}
+
+function formatActivity(activity: Activity): string {
+  switch (activity) {
+    case 'paced-reading':
+      return 'Paced Reading';
+    case 'active-recall':
+      return 'Active Recall';
+    case 'training':
+      return 'Training';
+    case 'comprehension-check':
+      return 'Comprehension Check';
+    default:
+      return activity;
+  }
+}
+
 export function HomeScreen({
   onSelectActivity,
   onContinue,
@@ -65,141 +99,197 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const attemptsToShow = comprehensionAttempts.slice(0, MAX_HISTORY_ATTEMPTS);
+  const dailyStatusText = dailyStatus === 'loading'
+    ? 'Fetching...'
+    : dailyStatus === 'error'
+      ? dailyError ?? 'Failed to load'
+      : "Today's featured article";
+  const randomStatusText = randomStatus === 'loading'
+    ? 'Fetching...'
+    : randomStatus === 'error'
+      ? randomError ?? 'Failed to load'
+      : 'Wikipedia featured article';
 
   return (
     <div className="home-screen">
-      {continueInfo && (
-        <button
-          className="continue-banner"
-          onClick={() => onContinue(continueInfo)}
-        >
-          <span className="continue-label">Continue</span>
-          <span className="continue-title">{continueInfo.article.title}</span>
-          <span className="continue-meta">{continueInfo.displayMode.toUpperCase()}</span>
-        </button>
-      )}
+      <section className={`resume-card${continueInfo ? '' : ' resume-card-empty'}`}>
+        <div className="resume-copy">
+          <p className="launcher-label">Resume</p>
+          {continueInfo ? (
+            <>
+              <h2 className="resume-title">{continueInfo.article.title}</h2>
+              <p className="resume-meta">
+                {formatActivity(continueInfo.activity)} · {formatDisplayMode(continueInfo.displayMode)}
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="resume-title">Pick something to start</h2>
+              <p className="resume-meta">Choose a source or launch a practice mode below.</p>
+            </>
+          )}
+        </div>
+        {continueInfo && (
+          <button
+            className="resume-action"
+            onClick={() => onContinue(continueInfo)}
+          >
+            Continue
+          </button>
+        )}
+      </section>
 
-      <div className="featured-row">
-        <button
-          className="daily-banner"
-          onClick={onStartDaily}
-          disabled={dailyStatus === 'loading'}
-        >
-          <span className="daily-label">Daily Article</span>
-          <span className="daily-desc">
-            {dailyStatus === 'loading'
-              ? 'Fetching\u2026'
-              : dailyStatus === 'error'
-                ? dailyError ?? 'Failed to load'
-                : 'Today\u2019s Wikipedia featured article'}
-          </span>
-          <span className="daily-meta">Saccade</span>
-        </button>
-
-        <button
-          className="daily-banner"
-          onClick={onStartRandom}
-          disabled={randomStatus === 'loading'}
-        >
-          <span className="daily-label">Random Article</span>
-          <span className="daily-desc">
-            {randomStatus === 'loading'
-              ? 'Fetching\u2026'
-              : randomStatus === 'error'
-                ? randomError ?? 'Failed to load'
-                : 'Random Wikipedia featured article'}
-          </span>
-          <span className="daily-meta">Saccade</span>
-        </button>
-      </div>
-
-      <div className="activity-grid">
-        <button
-          className="activity-card"
-          onClick={() => onSelectActivity('paced-reading')}
-        >
-          <h2 className="activity-card-title">Paced Reading</h2>
-          <p className="activity-card-desc">Read with adjustable pace guidance</p>
-          <div className="activity-card-modes">
-            <span className="activity-card-mode">RSVP</span>
-            <span className="activity-card-mode">Saccade</span>
-            <span className="activity-card-mode">Generation</span>
+      <div className="launcher-overview-grid">
+        <section className="launcher-card start-new-card" aria-label="Wikipedia quick start">
+          <p className="launcher-label">Wikipedia</p>
+          <h2 className="launcher-card-title">Featured Articles</h2>
+          <div className="wikipedia-actions">
+            <div className={`wikipedia-action${dailyStatus === 'error' ? ' wikipedia-action-error' : ''}`}>
+              <div className="wikipedia-action-copy">
+                <h3 className="wikipedia-action-title">Daily article</h3>
+                <p className="wikipedia-action-desc">{dailyStatusText}</p>
+              </div>
+              <button
+                className="launcher-primary-btn wikipedia-launch-btn"
+                onClick={onStartDaily}
+                disabled={dailyStatus === 'loading'}
+              >
+                {dailyStatus === 'loading' ? 'Loading...' : 'Start Daily'}
+              </button>
+            </div>
+            <div className={`wikipedia-action${randomStatus === 'error' ? ' wikipedia-action-error' : ''}`}>
+              <div className="wikipedia-action-copy">
+                <h3 className="wikipedia-action-title">Random article</h3>
+                <p className="wikipedia-action-desc">{randomStatusText}</p>
+              </div>
+              <button
+                className="launcher-secondary-btn wikipedia-launch-btn"
+                onClick={onStartRandom}
+                disabled={randomStatus === 'loading'}
+              >
+                {randomStatus === 'loading' ? 'Loading...' : 'Start Random'}
+              </button>
+            </div>
           </div>
-        </button>
+        </section>
 
-        <button
-          className="activity-card"
-          onClick={() => onSelectActivity('active-recall')}
-        >
-          <h2 className="activity-card-title">Active Recall</h2>
-          <p className="activity-card-desc">Test working memory and retention</p>
-          <div className="activity-card-modes">
-            <span className="activity-card-mode">Prediction</span>
-            <span className="activity-card-mode">Recall</span>
+        <section className="launcher-card review-card" aria-label="Review status">
+          <p className="launcher-label">Review</p>
+          <div className="review-stats">
+            <p>
+              <span className="review-stat-label">Due checks</span>
+              <span className="review-stat-value">{srsDueCount}</span>
+            </p>
+            <p>
+              <span className="review-stat-label">Last score</span>
+              <span className="review-stat-value">
+                {comprehensionSummary.lastScore == null ? 'N/A' : `${comprehensionSummary.lastScore}%`}
+              </span>
+            </p>
+            <p>
+              <span className="review-stat-label">Attempts</span>
+              <span className="review-stat-value">{comprehensionSummary.attemptCount}</span>
+            </p>
           </div>
-        </button>
-
-        <div className="activity-card activity-card-split">
-          <h2 className="activity-card-title">Comprehension Check</h2>
-          <p className="activity-card-desc">LLM-generated questions with explanatory feedback</p>
-          <p className="activity-card-meta">
-            {comprehensionSummary.attemptCount > 0
-              ? `Attempts: ${comprehensionSummary.attemptCount} · Last score: ${comprehensionSummary.lastScore}%`
-              : 'No attempts yet'}
-          </p>
-          <div className="activity-card-actions">
+          <div className="launcher-card-actions review-actions">
             <button
-              className="activity-card-action"
-              onClick={() => onSelectActivity('comprehension-check')}
-            >
-              Start Check
-            </button>
-            <button
-              className="activity-card-action"
-              onClick={onStartComprehensionBuilder}
-            >
-              Build Exam
-            </button>
-            <button
-              className="activity-card-action"
+              className="launcher-primary-btn"
               onClick={onStartSRSReview}
               disabled={srsDueCount === 0}
             >
-              Review ({srsDueCount} due)
+              Start Due Check ({srsDueCount} due)
             </button>
             <button
-              className="activity-card-action"
+              className="launcher-secondary-btn"
               onClick={() => setIsHistoryOpen((value) => !value)}
             >
               {isHistoryOpen ? 'Hide History' : 'Review History'}
             </button>
           </div>
-          <div className="activity-card-modes">
-            <span className="activity-card-mode">Factual</span>
-            <span className="activity-card-mode">Inference</span>
-            <span className="activity-card-mode">Evaluative</span>
-          </div>
-        </div>
-
-        <div className="activity-card activity-card-split">
-          <h2 className="activity-card-title">Training</h2>
-          <p className="activity-card-desc">Structured read-recall loops with adaptive pacing</p>
-          <div className="activity-card-actions">
-            <button
-              className="activity-card-action"
-              onClick={() => onSelectActivity('training')}
-            >
-              Memorize
-            </button>
-            <button
-              className="activity-card-action"
-              onClick={onStartDrill}
-            >
-              Random Drill
-            </button>
-          </div>
-        </div>
+        </section>
       </div>
+
+      <section className="practice-modes" aria-label="Practice modes">
+        <div className="practice-modes-grid">
+          <article className="mode-card">
+            <h2 className="mode-card-title">Paced Reading</h2>
+            <p className="mode-card-desc">Read with adjustable pace guidance</p>
+            <div className="mode-card-chips">
+              <span className="mode-chip">RSVP</span>
+              <span className="mode-chip">Saccade</span>
+              <span className="mode-chip">Generation</span>
+            </div>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={() => onSelectActivity('paced-reading')}
+              >
+                Start
+              </button>
+            </div>
+          </article>
+
+          <article className="mode-card">
+            <h2 className="mode-card-title">Active Recall</h2>
+            <p className="mode-card-desc">Test working memory and retention</p>
+            <div className="mode-card-chips">
+              <span className="mode-chip">Prediction</span>
+              <span className="mode-chip">Recall</span>
+            </div>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={() => onSelectActivity('active-recall')}
+              >
+                Start
+              </button>
+            </div>
+          </article>
+
+          <article className="mode-card">
+            <h2 className="mode-card-title">Comprehension Check</h2>
+            <p className="mode-card-desc">LLM-generated questions with explanatory feedback</p>
+            <p className="mode-card-meta">
+              {comprehensionSummary.attemptCount > 0
+                ? `Attempts: ${comprehensionSummary.attemptCount} · Last score: ${comprehensionSummary.lastScore}%`
+                : 'No attempts yet'}
+            </p>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={() => onSelectActivity('comprehension-check')}
+              >
+                Start Check
+              </button>
+              <button
+                className="launcher-secondary-btn"
+                onClick={onStartComprehensionBuilder}
+              >
+                Build Exam
+              </button>
+            </div>
+          </article>
+
+          <article className="mode-card">
+            <h2 className="mode-card-title">Training</h2>
+            <p className="mode-card-desc">Structured read-recall loops with adaptive pacing</p>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={() => onSelectActivity('training')}
+              >
+                Memorize
+              </button>
+              <button
+                className="launcher-secondary-btn"
+                onClick={onStartDrill}
+              >
+                Random Drill
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
 
       {isHistoryOpen && (
         <section className="comprehension-history-panel" aria-label="Comprehension history">
