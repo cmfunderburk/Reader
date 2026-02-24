@@ -15,6 +15,7 @@ import {
 } from './srsScheduling';
 
 const STORAGE_KEY = 'speedread_srs_pool';
+const BACKFILL_INITIALIZED_KEY = 'speedread_srs_backfill_initialized';
 const MAX_CARDS = 500;
 
 const VALID_STATUSES: SRSCardStatus[] = ['active', 'complete', 'deferred'];
@@ -74,6 +75,22 @@ export function loadSRSPool(): SRSCard[] {
 
 export function saveSRSPool(cards: SRSCard[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cards.slice(0, MAX_CARDS)));
+}
+
+export function hasInitializedSRSBackfill(): boolean {
+  try {
+    return localStorage.getItem(BACKFILL_INITIALIZED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function markSRSBackfillInitialized(): void {
+  try {
+    localStorage.setItem(BACKFILL_INITIALIZED_KEY, '1');
+  } catch {
+    // no-op: best-effort sentinel to prevent repeated auto-backfill
+  }
 }
 
 function buildCardFromQuestion(

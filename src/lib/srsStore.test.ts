@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   backfillFromAttempts,
+  hasInitializedSRSBackfill,
   ingestComprehensionAttempt,
   loadSRSPool,
+  markSRSBackfillInitialized,
   saveSRSPool,
   updateCardAfterReview,
   updateCardStatus,
@@ -117,6 +119,19 @@ describe('srsStore', () => {
       const loaded = loadSRSPool();
       expect(loaded).toHaveLength(1);
       expect(loaded[0].key).toBe('a1::what is x?');
+    });
+  });
+
+  describe('backfill initialization sentinel', () => {
+    it('defaults to false and becomes true after marking initialized', () => {
+      expect(hasInitializedSRSBackfill()).toBe(false);
+      markSRSBackfillInitialized();
+      expect(hasInitializedSRSBackfill()).toBe(true);
+    });
+
+    it('treats non-sentinel values as not initialized', () => {
+      localStorage.setItem('speedread_srs_backfill_initialized', '0');
+      expect(hasInitializedSRSBackfill()).toBe(false);
     });
   });
 

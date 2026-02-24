@@ -119,4 +119,15 @@ describe('HomeScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review History' }));
     expect(screen.getByText('No comprehension attempts yet.')).toBeTruthy();
   });
+
+  it('shows N/A when attempts exist but lastScore is unavailable', () => {
+    render(
+      <HomeScreen
+        {...baseProps}
+        comprehensionSummary={{ attemptCount: 1, lastScore: null }}
+      />
+    );
+
+    expect(screen.getByText('Attempts: 1 · Last score: N/A')).toBeTruthy();
+  });
 });

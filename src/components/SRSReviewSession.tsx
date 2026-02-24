@@ -30,26 +30,34 @@ export function SRSReviewSession({
     setPhase('reveal');
   }, []);
 
+  const moveToNextCard = useCallback(() => {
+    setCurrentIndex((i) => i + 1);
+    setPhase('question');
+    setUserRecall('');
+  }, []);
+
   const handleSelfGrade = useCallback((correct: boolean) => {
     if (!card) return;
     const shouldShowGraduation = correct && card.box >= 5;
-    onCardReviewed(card.key, correct);
-    if (correct) setCorrectCount((c) => c + 1);
-    setReviewedCount((c) => c + 1);
 
     if (shouldShowGraduation && isGraduationEligible(card)) {
       setPhase('graduation');
       return;
     }
 
-    // Move to next card
-    setCurrentIndex((i) => i + 1);
-    setPhase('question');
-    setUserRecall('');
-  }, [card, onCardReviewed]);
+    onCardReviewed(card.key, correct);
+    if (correct) setCorrectCount((c) => c + 1);
+    setReviewedCount((c) => c + 1);
+    moveToNextCard();
+  }, [card, moveToNextCard, onCardReviewed]);
 
   const handleGraduationChoice = useCallback((choice: 'complete' | 'deferred' | 'keep') => {
     if (!card) return;
+
+    onCardReviewed(card.key, true);
+    setCorrectCount((c) => c + 1);
+    setReviewedCount((c) => c + 1);
+
     if (choice === 'complete') {
       onCardStatusChange(card.key, 'complete');
     } else if (choice === 'deferred') {
@@ -57,10 +65,8 @@ export function SRSReviewSession({
     }
     // 'keep' = do nothing, card stays active
 
-    setCurrentIndex((i) => i + 1);
-    setPhase('question');
-    setUserRecall('');
-  }, [card, onCardStatusChange]);
+    moveToNextCard();
+  }, [card, moveToNextCard, onCardReviewed, onCardStatusChange]);
 
   // Summary screen
   if (isComplete) {
@@ -131,7 +137,7 @@ export function SRSReviewSession({
         {phase === 'graduation' && (
           <>
             <div className="comprehension-meta">
-              <p>This card has reached Box 5 (30+ day interval). What would you like to do?</p>
+              <p>This card has reached Box 5 (30-day interval). What would you like to do?</p>
             </div>
             <div className="comprehension-actions">
               <button className="control-btn" onClick={() => handleGraduationChoice('complete')}>

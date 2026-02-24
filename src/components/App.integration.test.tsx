@@ -32,7 +32,7 @@ vi.mock('./HomeScreen', () => ({
     onSelectActivity: (activity: Activity) => void;
     onStartComprehensionBuilder: () => void;
     onStartDaily: () => void;
-    onStartSRSReview?: () => void;
+    onStartSRSReview: () => void;
     onContinue?: (info: { article: Article; activity: Activity; displayMode: string }) => void;
     continueInfo?: { article: Article; activity: Activity; displayMode: string } | null;
   }) => (
@@ -356,6 +356,43 @@ describe('App integration smoke', () => {
     await waitFor(() => {
       expect(screen.queryByText(/Reviewed: 2 cards/i)).not.toBeNull();
     });
+  });
+
+  it('records box-5 success only after graduation choice is made', async () => {
+    localStorage.setItem('speedread_srs_pool', JSON.stringify([
+      makeSrsCard({
+        key: 'a1::box five?',
+        prompt: 'Box Five?',
+        box: 5,
+        reviewCount: 0,
+      }),
+    ]));
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'start-srs-review' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Box Five?')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show Answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Got It' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/reached Box 5/i)).not.toBeNull();
+    });
+
+    const preChoicePool = JSON.parse(localStorage.getItem('speedread_srs_pool') || '[]') as SRSCard[];
+    expect(preChoicePool[0].reviewCount).toBe(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep Reviewing' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/Reviewed: 1 card/i)).not.toBeNull();
+    });
+
+    const postChoicePool = JSON.parse(localStorage.getItem('speedread_srs_pool') || '[]') as SRSCard[];
+    expect(postChoicePool[0].reviewCount).toBe(1);
   });
 
   it('resumes reading from snapshot when closing active exercise', async () => {

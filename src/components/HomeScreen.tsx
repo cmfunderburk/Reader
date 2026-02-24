@@ -251,7 +251,9 @@ export function HomeScreen({
             <p className="mode-card-desc">LLM-generated questions with explanatory feedback</p>
             <p className="mode-card-meta">
               {comprehensionSummary.attemptCount > 0
-                ? `Attempts: ${comprehensionSummary.attemptCount} · Last score: ${comprehensionSummary.lastScore}%`
+                ? `Attempts: ${comprehensionSummary.attemptCount} · Last score: ${
+                  comprehensionSummary.lastScore == null ? 'N/A' : `${comprehensionSummary.lastScore}%`
+                }`
                 : 'No attempts yet'}
             </p>
             <div className="mode-card-actions">

@@ -121,6 +121,8 @@ import {
   backfillFromAttempts,
   updateCardAfterReview,
   updateCardStatus,
+  hasInitializedSRSBackfill,
+  markSRSBackfillInitialized,
 } from '../lib/srsStore';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 
@@ -271,7 +273,7 @@ export function App() {
   const [comprehensionApiKeyStorageMode, setComprehensionApiKeyStorageMode] = useState<ComprehensionApiKeyStorageMode>('local');
   const [comprehensionAttempts, setComprehensionAttempts] = useState<ComprehensionAttempt[]>(() => loadComprehensionAttempts());
   const [srsCards, setSrsCards] = useState(() => loadSRSPool());
-  const [srsSessionCardKeys, setSrsSessionCardKeys] = useState<string[]>([]);
+  const [srsSessionCards, setSrsSessionCards] = useState<SRSCard[]>([]);
   const comprehensionAdapter = useMemo(() => {
     return createComprehensionAdapter({
       apiKey: comprehensionApiKey || undefined,
@@ -331,10 +333,13 @@ export function App() {
 
   // Auto-backfill SRS pool from existing comprehension attempts on first load
   useEffect(() => {
-    if (srsCards.length === 0 && comprehensionAttempts.length > 0) {
-      const backfilled = backfillFromAttempts(comprehensionAttempts);
-      setSrsCards(backfilled);
-      saveSRSPool(backfilled);
+    if (!hasInitializedSRSBackfill()) {
+      if (srsCards.length === 0 && comprehensionAttempts.length > 0) {
+        const backfilled = backfillFromAttempts(comprehensionAttempts);
+        setSrsCards(backfilled);
+        saveSRSPool(backfilled);
+      }
+      markSRSBackfillInitialized();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally empty — run once on mount
@@ -957,7 +962,7 @@ export function App() {
 
   const handleStartSRSReview = useCallback(() => {
     const dueCards = getDueCards(srsCards, Date.now());
-    setSrsSessionCardKeys(dueCards.map((card) => card.key));
+    setSrsSessionCards(dueCards.map((card) => ({ ...card })));
     setViewState({ screen: 'active-srs-review' });
   }, [setViewState, srsCards]);
 
@@ -978,7 +983,7 @@ export function App() {
   }, []);
 
   const closeSRSReview = useCallback(() => {
-    setSrsSessionCardKeys([]);
+    setSrsSessionCards([]);
     goHome();
   }, [goHome]);
 
@@ -1095,12 +1100,8 @@ export function App() {
 
   const srsDueCards = useMemo(() => {
     if (viewState.screen !== 'active-srs-review') return [];
-    if (srsSessionCardKeys.length === 0) return [];
-    const cardsByKey = new Map(srsCards.map((card) => [card.key, card]));
-    return srsSessionCardKeys
-      .map((cardKey) => cardsByKey.get(cardKey))
-      .filter((card): card is SRSCard => card !== undefined);
-  }, [srsCards, srsSessionCardKeys, viewState.screen]);
+    return srsSessionCards;
+  }, [srsSessionCards, viewState.screen]);
 
   const activeComprehensionSourceArticles = useMemo(() => {
     if (viewState.screen !== 'active-comprehension') return [];
