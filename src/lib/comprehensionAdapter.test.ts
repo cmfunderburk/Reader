@@ -106,14 +106,14 @@ describe('comprehensionAdapter', () => {
     }));
     const adapter = new GeminiComprehensionAdapter({
       apiKey: 'test-key',
-      model: 'gemini-3-pro-preview',
+      model: 'gemini-3.1-pro-preview',
       fetchImpl: fetchMock as unknown as typeof fetch,
     });
 
     await adapter.generateCheck('Passage', 8);
 
     const firstCall = fetchMock.mock.calls[0];
-    expect(String(firstCall?.[0])).toContain('/models/gemini-3-pro-preview:generateContent');
+    expect(String(firstCall?.[0])).toContain('/models/gemini-3.1-pro-preview:generateContent');
     expect(String(firstCall?.[0])).not.toContain('?key=');
   });
 

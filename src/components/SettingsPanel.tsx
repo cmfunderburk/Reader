@@ -42,7 +42,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
 ];
 
 const GEMINI_MODEL_LABELS: Record<ComprehensionGeminiModel, string> = {
-  'gemini-3-pro-preview': 'Gemini 3 Pro Preview',
+  'gemini-3.1-pro-preview': 'Gemini 3.1 Pro Preview',
   'gemini-3-flash-preview': 'Gemini 3 Flash Preview',
 };
 
