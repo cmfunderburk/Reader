@@ -63,7 +63,6 @@ import type {
   PassageCaptureKind,
   PassageReviewMode,
   PassageReviewState,
-  ThemePreference,
   ComprehensionAttempt,
   SRSCard,
   SRSCardStatus,
@@ -102,6 +101,8 @@ import {
 } from '../lib/featuredArticleLaunch';
 import { buildPassageReviewQueue } from '../lib/passageQueue';
 import {
+  captureKindLabel,
+  clipPassagePreview,
   normalizeCaptureLineText,
   planLastLinesCapture,
   planParagraphCapture,
@@ -125,33 +126,10 @@ import {
   markSRSBackfillInitialized,
 } from '../lib/srsStore';
 import { clampWpm } from '../lib/wpm';
+import { resolveThemePreference } from '../lib/theme';
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
 
-function clipPassagePreview(text: string, maxChars: number = 180): string {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxChars) return normalized;
-  return `${normalized.slice(0, maxChars - 1)}...`;
-}
-
-function resolveThemePreference(themePreference: ThemePreference, systemTheme: 'dark' | 'light'): 'dark' | 'light' {
-  if (themePreference === 'system') return systemTheme;
-  return themePreference;
-}
-
-function captureKindLabel(captureKind: PassageCaptureKind): string {
-  switch (captureKind) {
-    case 'sentence':
-      return 'sentence';
-    case 'paragraph':
-      return 'paragraph';
-    case 'last-lines':
-      return 'lines';
-    case 'line':
-    default:
-      return 'line';
-  }
-}
 
 export function App() {
   const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
