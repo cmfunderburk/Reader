@@ -139,4 +139,57 @@ describe('generationMask', () => {
     expect(masked).toContain('Mises');
     expect(masked).not.toContain('Werk');
   });
+
+  it('masks content words in mixed German/English text with German cues', () => {
+    const line = 'Die learning strategy ist retrieval practice.';
+    const masked = maskGenerationLine(line, 'hard', 50, 0);
+    // German cues (Die, ist) are not in FUNCTION_WORDS so they get masked too
+    expect(masked).not.toContain('Die');
+    expect(masked).not.toContain('ist');
+    expect(masked).not.toContain('learning');
+    expect(masked).not.toContain('strategy');
+  });
+
+  it('treats short lines (< 3 alpha tokens) as non-German regardless of cues', () => {
+    const line = 'Die Katze.';
+    const masked = maskGenerationLine(line, 'hard', 50, 0);
+    // Only 2 alpha tokens — too short for German detection
+    // "Katze" is title-cased mid-sentence, treated as proper noun in English mode
+    expect(masked).toContain('Katze');
+  });
+
+  it('treats all-caps tokens as acronyms and preserves them', () => {
+    const line = 'NASA FBI CIA DHS TSA';
+    const masked = maskGenerationLine(line, 'normal', 50, 0);
+    expect(masked).toBe(line);
+  });
+
+  it('returns function-word-only lines unmasked', () => {
+    const line = 'the and or but if so';
+    const masked = maskGenerationLine(line, 'normal', 50, 0);
+    expect(masked).toBe(line);
+  });
+
+  it('splits hyphenated tokens and masks each segment independently in recall mode', () => {
+    const line = 'state-of-the-art';
+    const masked = maskGenerationLine(line, 'recall', 1, 0);
+    const segments = masked.split('-');
+    expect(segments[0]).toBe('s___e'); // state
+    expect(segments[1]).toBe('of');    // too short
+    expect(segments[2]).toBe('t_e');   // 3 letters: first-last masks middle
+    expect(segments[3]).toBe('a_t');   // art
+  });
+
+  it('preserves whitespace structure of the original line', () => {
+    const line = '  retrieval   practice  ';
+    const masked = maskGenerationLine(line, 'normal', 50, 0);
+    expect(masked.startsWith('  ')).toBe(true);
+    expect(masked.endsWith('  ')).toBe(true);
+    expect(masked).toMatch(/\S {3}\S/);
+  });
+
+  it('handles empty and whitespace-only lines', () => {
+    expect(maskGenerationLine('', 'normal', 1, 0)).toBe('');
+    expect(maskGenerationLine('   ', 'normal', 1, 0)).toBe('   ');
+  });
 });

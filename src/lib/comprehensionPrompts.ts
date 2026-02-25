@@ -7,6 +7,7 @@ import type {
   GeneratedComprehensionCheck,
   GeneratedComprehensionQuestion,
 } from '../types';
+import { parseRawJsonObject } from './comprehensionJson';
 
 const DIMENSIONS: ComprehensionDimension[] = ['factual', 'inference', 'structural', 'evaluative'];
 const FORMATS: ComprehensionFormat[] = ['multiple-choice', 'true-false', 'short-answer', 'essay'];
@@ -17,26 +18,6 @@ const MAX_QUESTION_COUNT = 10;
 function clampQuestionCount(questionCount: number): number {
   if (!Number.isFinite(questionCount)) return DEFAULT_QUESTION_COUNT;
   return Math.max(MIN_QUESTION_COUNT, Math.min(MAX_QUESTION_COUNT, Math.round(questionCount)));
-}
-
-function extractFallbackJsonSnippet(rawResponse: string): string {
-  const trimmed = rawResponse.trim();
-  if (!trimmed) {
-    throw new Error('LLM response was empty');
-  }
-
-  const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    return fencedMatch[1].trim();
-  }
-
-  const firstBrace = trimmed.indexOf('{');
-  const lastBrace = trimmed.lastIndexOf('}');
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1);
-  }
-
-  throw new Error('LLM response did not contain JSON');
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -156,32 +137,6 @@ function parseGeneratedQuestion(value: unknown, index: number): GeneratedCompreh
   }
 
   return question;
-}
-
-function parseRawJsonObject(rawResponse: string): Record<string, unknown> {
-  const trimmed = rawResponse.trim();
-  if (!trimmed) {
-    throw new Error('LLM response was empty');
-  }
-
-  let parsed: unknown;
-  try {
-    // Schema-driven calls should return direct JSON; parse this path first.
-    parsed = JSON.parse(trimmed);
-  } catch {
-    const fallbackText = extractFallbackJsonSnippet(rawResponse);
-    try {
-      parsed = JSON.parse(fallbackText);
-    } catch {
-      throw new Error('LLM response JSON was invalid');
-    }
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw new Error('LLM response JSON must be an object');
-  }
-
-  return parsed as Record<string, unknown>;
 }
 
 export function buildGenerateCheckPrompt(passage: string, questionCount: number): string {

@@ -1,4 +1,5 @@
 import { isSentenceBoundaryChunk } from './predictionPreview';
+import type { PassageCaptureKind } from '../types';
 
 export interface FlatSaccadeCaptureLine {
   globalLineIndex: number;
@@ -168,4 +169,24 @@ export function planLastLinesCapture(
   }
 
   return selected.reverse();
+}
+
+export function clipPassagePreview(text: string, maxChars: number = 180): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxChars) return normalized;
+  return `${normalized.slice(0, maxChars - 1)}...`;
+}
+
+export function captureKindLabel(captureKind: PassageCaptureKind): string {
+  switch (captureKind) {
+    case 'sentence':
+      return 'sentence';
+    case 'paragraph':
+      return 'paragraph';
+    case 'last-lines':
+      return 'lines';
+    case 'line':
+    default:
+      return 'line';
+  }
 }

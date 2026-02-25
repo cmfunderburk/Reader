@@ -134,4 +134,131 @@ describe('trainingFeedback', () => {
       },
     });
   });
+
+  it('drill auto-adjust clamps WPM at max boundary on high score', () => {
+    const plan = planFinishRecallPhase({
+      stats: { totalWords: 10, exactMatches: 10, knownWords: 10, detailTotal: 0, detailKnown: 0 },
+      finalWord: null,
+      isDrill: true,
+      sentenceMode: false,
+      currentSentenceIndex: 0,
+      sentenceCount: 1,
+      includeDetailsInScore: true,
+      currentParagraphIndex: 0,
+      wpm: 360,
+      autoAdjustDifficulty: true,
+      drillMinWpm: 250,
+      drillMaxWpm: 360,
+      hasRepeatedParagraph: false,
+    });
+
+    expect(plan).toMatchObject({
+      type: 'to-feedback',
+      mode: 'drill',
+      nextWpm: 360,
+      wpmDelta: 0,
+      shouldApplyWpmChange: false,
+    });
+  });
+
+  it('drill auto-adjust clamps WPM at min boundary on low score', () => {
+    const plan = planFinishRecallPhase({
+      stats: { totalWords: 10, exactMatches: 5, knownWords: 5, detailTotal: 0, detailKnown: 0 },
+      finalWord: null,
+      isDrill: true,
+      sentenceMode: false,
+      currentSentenceIndex: 0,
+      sentenceCount: 1,
+      includeDetailsInScore: true,
+      currentParagraphIndex: 0,
+      wpm: 250,
+      autoAdjustDifficulty: true,
+      drillMinWpm: 250,
+      drillMaxWpm: 360,
+      hasRepeatedParagraph: false,
+    });
+
+    expect(plan).toMatchObject({
+      type: 'to-feedback',
+      mode: 'drill',
+      nextWpm: 250,
+      wpmDelta: 0,
+      shouldApplyWpmChange: false,
+    });
+  });
+
+  it('drill auto-adjust raises WPM by 10 on high score with room to grow', () => {
+    const plan = planFinishRecallPhase({
+      stats: { totalWords: 10, exactMatches: 10, knownWords: 10, detailTotal: 0, detailKnown: 0 },
+      finalWord: null,
+      isDrill: true,
+      sentenceMode: false,
+      currentSentenceIndex: 0,
+      sentenceCount: 1,
+      includeDetailsInScore: true,
+      currentParagraphIndex: 0,
+      wpm: 300,
+      autoAdjustDifficulty: true,
+      drillMinWpm: 250,
+      drillMaxWpm: 400,
+      hasRepeatedParagraph: false,
+    });
+
+    expect(plan).toMatchObject({
+      type: 'to-feedback',
+      mode: 'drill',
+      nextWpm: 310,
+      wpmDelta: 10,
+      shouldApplyWpmChange: true,
+    });
+  });
+
+  it('sentence mode on last sentence goes to feedback, not advance-sentence', () => {
+    const plan = planFinishRecallPhase({
+      stats: { totalWords: 5, exactMatches: 4, knownWords: 4, detailTotal: 0, detailKnown: 0 },
+      finalWord: null,
+      isDrill: false,
+      sentenceMode: true,
+      currentSentenceIndex: 1,
+      sentenceCount: 2,
+      includeDetailsInScore: true,
+      currentParagraphIndex: 0,
+      wpm: 300,
+      autoAdjustDifficulty: false,
+      drillMinWpm: 250,
+      drillMaxWpm: 360,
+      hasRepeatedParagraph: false,
+    });
+
+    expect(plan).toMatchObject({
+      type: 'to-feedback',
+      mode: 'article',
+    });
+  });
+
+  it('drill with autoAdjustDifficulty disabled leaves WPM unchanged', () => {
+    const plan = planFinishRecallPhase({
+      stats: { totalWords: 10, exactMatches: 2, knownWords: 2, detailTotal: 0, detailKnown: 0 },
+      finalWord: null,
+      isDrill: true,
+      sentenceMode: false,
+      currentSentenceIndex: 0,
+      sentenceCount: 1,
+      includeDetailsInScore: true,
+      currentParagraphIndex: 0,
+      wpm: 300,
+      autoAdjustDifficulty: false,
+      drillMinWpm: 250,
+      drillMaxWpm: 360,
+      hasRepeatedParagraph: false,
+    });
+
+    expect(plan).toMatchObject({
+      type: 'to-feedback',
+      mode: 'drill',
+      nextWpm: 300,
+      wpmDelta: 0,
+      shouldApplyWpmChange: false,
+    });
+  });
 });
