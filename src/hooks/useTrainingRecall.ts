@@ -87,6 +87,11 @@ export function useTrainingRecall({
   paused,
   onFinishRecall,
 }: UseTrainingRecallParams): UseTrainingRecallReturn {
+  // Stable ref for the finish callback to avoid cascading callback rebuilds.
+  // The parent passes a new arrow every render; this ref keeps deps stable.
+  const onFinishRecallRef = useRef(onFinishRecall);
+  onFinishRecallRef.current = onFinishRecall;
+
   // --- State ---
   const [recallInput, setRecallInput] = useState('');
   const [recallWordIndex, setRecallWordIndex] = useState(0);
@@ -175,13 +180,13 @@ export function useTrainingRecall({
 
     if (tokenPlan.nextIndex >= recallChunks.length) {
       setRecallWordIndex(recallChunks.length);
-      onFinishRecall(tokenPlan.nextStats, null);
+      onFinishRecallRef.current(tokenPlan.nextStats, null);
       return true;
     }
 
     setRecallWordIndex(tokenPlan.nextIndex);
     return false;
-  }, [paragraphStats, recallWordIndex, recallChunks, onFinishRecall, isChunkDetail, drillForfeitedWordKeys]);
+  }, [paragraphStats, recallWordIndex, recallChunks, isChunkDetail, drillForfeitedWordKeys]);
 
   const handleRecallInputChange = useCallback((value: string) => {
     if (isDrillPreviewing) return;
@@ -245,7 +250,7 @@ export function useTrainingRecall({
     setShowingMiss(false);
 
     if (transitionPlan.type === 'finish') {
-      onFinishRecall(paragraphStats, transitionPlan.finalWord);
+      onFinishRecallRef.current(paragraphStats, transitionPlan.finalWord);
     } else {
       setParagraphStats(prev => applyStatsDelta(prev, transitionPlan.statsDelta));
       setRecallWordIndex(transitionPlan.nextIndex);
@@ -256,7 +261,6 @@ export function useTrainingRecall({
     recallWordIndex,
     recallChunks,
     paragraphStats,
-    onFinishRecall,
     isChunkDetail,
     isDrill,
     showFirstLetterScaffold,
@@ -278,9 +282,9 @@ export function useTrainingRecall({
     setLastMissResult(null);
     setDrillPreviewWordKeys([]);
     setDrillPreviewVisibleCount(0);
-    onFinishRecall(finalStats, null);
+    onFinishRecallRef.current(finalStats, null);
     return true;
-  }, [recallWordIndex, recallChunks.length, paragraphStats, onFinishRecall, isChunkDetail]);
+  }, [recallWordIndex, recallChunks.length, paragraphStats, isChunkDetail]);
 
   const handleGiveUp = useCallback(() => {
     scoreRemainingAsMisses();
@@ -314,13 +318,13 @@ export function useTrainingRecall({
     });
 
     if (transitionPlan.type === 'finish') {
-      onFinishRecall(paragraphStats, transitionPlan.finalWord);
+      onFinishRecallRef.current(paragraphStats, transitionPlan.finalWord);
     } else {
       setParagraphStats(prev => applyStatsDelta(prev, transitionPlan.statsDelta));
       setRecallWordIndex(transitionPlan.nextIndex);
     }
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [recallWordIndex, recallChunks.length, paragraphStats, onFinishRecall, isChunkDetail]);
+  }, [recallWordIndex, recallChunks.length, paragraphStats, isChunkDetail]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
     // Scaffold mode keeps per-word flow (Space/Enter submit).

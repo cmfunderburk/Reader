@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { CorpusFamily, CorpusInfo, CorpusTier } from '../types/electron';
 import { loadDrillState, saveDrillState } from '../lib/storage';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
@@ -35,6 +35,10 @@ export function useTrainingDrillState({
   setWpm,
   onWpmChange,
 }: UseTrainingDrillStateParams): UseTrainingDrillStateReturn {
+  // Stable ref for the WPM change callback to avoid effect re-fires.
+  const onWpmChangeRef = useRef(onWpmChange);
+  onWpmChangeRef.current = onWpmChange;
+
   // Load persisted drill state once on mount (used as defaults below)
   const [savedDrill] = useState(() => loadDrillState());
 
@@ -110,12 +114,12 @@ export function useTrainingDrillState({
     if (!autoAdjustDifficulty) return;
     if (wpm < drillMinWpm) {
       setWpm(drillMinWpm);
-      onWpmChange(drillMinWpm);
+      onWpmChangeRef.current(drillMinWpm);
     } else if (wpm > drillMaxWpm) {
       setWpm(drillMaxWpm);
-      onWpmChange(drillMaxWpm);
+      onWpmChangeRef.current(drillMaxWpm);
     }
-  }, [autoAdjustDifficulty, drillMinWpm, drillMaxWpm, wpm, onWpmChange, setWpm]);
+  }, [autoAdjustDifficulty, drillMinWpm, drillMaxWpm, wpm, setWpm]);
 
   return {
     initialDrillWpm,
