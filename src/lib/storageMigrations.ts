@@ -1,5 +1,5 @@
 import type { Activity } from '../types';
-import type { DrillState } from './storage';
+import type { DrillState } from './storageTraining';
 import { MIN_WPM, MAX_WPM, clampWpmFromStorage as clampWpm } from './wpm';
 import { STORAGE_KEYS, CURRENT_STORAGE_SCHEMA_VERSION } from './storageKeys';
 
