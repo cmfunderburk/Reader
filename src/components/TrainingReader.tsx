@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
 import type { Article, Chunk, TrainingParagraphResult, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
-import type { CorpusArticle, CorpusFamily, CorpusInfo, CorpusTier } from '../types/electron';
+import type { CorpusArticle, CorpusFamily } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
 import {
   loadTrainingHistory,
   saveTrainingHistory,
   loadDrillState,
-  saveDrillState,
   loadTrainingSentenceMode,
   saveTrainingSentenceMode,
   loadTrainingScoreDetails,
@@ -20,10 +19,11 @@ import { makeRecallWordKey } from '../lib/trainingRecall';
 import { planTrainingReadingStart, planTrainingReadingStep } from '../lib/trainingReading';
 import type { TrainingFinalWord } from '../lib/trainingScoring';
 import { planFinishRecallPhase } from '../lib/trainingFeedback';
-import type { TrainingHistory, DrillState } from '../lib/storage';
+import type { TrainingHistory } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 import { useTrainingRecall } from '../hooks/useTrainingRecall';
+import { useTrainingDrillState, DRILL_TIERS } from '../hooks/useTrainingDrillState';
 
 type TrainingPhase = 'setup' | 'reading' | 'recall' | 'feedback' | 'complete';
 type DrillMode = 'article' | 'random';
@@ -34,7 +34,6 @@ const SESSION_PRESETS = [
   { label: '10 min', value: 10 * 60 },
   { label: '20 min', value: 20 * 60 },
 ] as const;
-const DRILL_TIERS: CorpusTier[] = ['easy', 'medium', 'hard'];
 const DRILL_FAMILIES: Array<{ id: CorpusFamily; label: string }> = [
   { id: 'wiki', label: 'Wikipedia' },
   { id: 'prose', label: 'Prose' },
@@ -102,13 +101,23 @@ export function TrainingReader({
     [paragraphs]
   );
 
-  // Load persisted drill state once on mount (used as defaults below)
-  const [savedDrill] = useState<DrillState | null>(() => loadDrillState());
-
   const [currentParagraphIndex, setCurrentParagraphIndex] = useState(0);
   const [phase, setPhase] = useState<TrainingPhase>('setup');
-  const [wpm, setWpm] = useState(savedDrill?.wpm ?? initialWpm);
   const [paused, setPaused] = useState(false);
+
+  const [wpm, setWpm] = useState(() => loadDrillState()?.wpm ?? initialWpm);
+
+  // --- Drill config state (corpus, tier, difficulty, WPM range, rolling scores) ---
+  const [drillMode, setDrillMode] = useState<DrillMode>('article');
+  const {
+    drillCorpusFamily, setDrillCorpusFamily,
+    drillTier, setDrillTier,
+    corpusInfo,
+    autoAdjustDifficulty, setAutoAdjustDifficulty,
+    drillMinWpm, setDrillMinWpm,
+    drillMaxWpm, setDrillMaxWpm,
+    rollingScores, setRollingScores,
+  } = useTrainingDrillState({ initialWpm, wpm, setWpm, onWpmChange });
 
   // Sentence mode: cycle read→recall per sentence within a paragraph
   const [sentenceMode, setSentenceModeState] = useState(() => loadTrainingSentenceMode());
@@ -139,81 +148,17 @@ export function TrainingReader({
   // Session history
   const [sessionHistory, setSessionHistory] = useState<TrainingParagraphResult[]>([]);
 
-  // --- Random Drill state ---
-  const [drillMode, setDrillMode] = useState<DrillMode>('article');
-  const [drillCorpusFamily, setDrillCorpusFamily] = useState<CorpusFamily>(() => savedDrill?.corpusFamily ?? 'wiki');
-  const [drillTier, setDrillTier] = useState<CorpusTier>(() => savedDrill?.tier ?? 'hard');
-  const [corpusInfo, setCorpusInfo] = useState<CorpusInfo | null>(null);
+  // --- Drill session state ---
   const [drillArticle, setDrillArticle] = useState<CorpusArticle | null>(null);
   const [drillSentenceIndex, setDrillSentenceIndex] = useState(0);
-  const [autoAdjustDifficulty, setAutoAdjustDifficulty] = useState(() => savedDrill?.autoAdjustDifficulty ?? false);
-  const [drillMinWpm, setDrillMinWpm] = useState(() => savedDrill?.minWpm ?? Math.max(MIN_WPM, (savedDrill?.wpm ?? initialWpm) - 50));
-  const [drillMaxWpm, setDrillMaxWpm] = useState(() => savedDrill?.maxWpm ?? Math.min(MAX_WPM, (savedDrill?.wpm ?? initialWpm) + 50));
   const [sessionTimeLimit, setSessionTimeLimit] = useState<number | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<number | null>(null);
-  const [rollingScores, setRollingScores] = useState<number[]>(() => savedDrill?.rollingScores ?? []);
   const [drillRoundsCompleted, setDrillRoundsCompleted] = useState(0);
   const [drillScoreSum, setDrillScoreSum] = useState(0);
   const [drillWpmStart, setDrillWpmStart] = useState(initialWpm);
   const [feedbackText, setFeedbackText] = useState('');
 
   const isDrill = drillMode === 'random';
-
-  // Check corpus availability on mount
-  useEffect(() => {
-    let cancelled = false;
-    window.corpus?.getInfo()
-      .then((info) => {
-        if (cancelled) return;
-        setCorpusInfo(info ?? null);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        console.warn('Failed to load corpus info', error);
-        setCorpusInfo(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Persist cross-session drill state whenever it changes
-  useEffect(() => {
-    saveDrillState({
-      wpm,
-      rollingScores,
-      corpusFamily: drillCorpusFamily,
-      tier: drillTier,
-      minWpm: drillMinWpm,
-      maxWpm: drillMaxWpm,
-      autoAdjustDifficulty,
-    });
-  }, [wpm, rollingScores, drillCorpusFamily, drillTier, drillMinWpm, drillMaxWpm, autoAdjustDifficulty]);
-
-  // Keep selected tier valid for the selected corpus family.
-  useEffect(() => {
-    const familyInfo = corpusInfo?.[drillCorpusFamily];
-    if (!familyInfo) return;
-    if (familyInfo[drillTier]?.available) return;
-    const fallbackTier = DRILL_TIERS.find(t => familyInfo[t]?.available);
-    if (fallbackTier) setDrillTier(fallbackTier);
-  }, [corpusInfo, drillCorpusFamily, drillTier]);
-
-  useEffect(() => {
-    if (drillMinWpm > drillMaxWpm) {
-      setDrillMaxWpm(drillMinWpm);
-      return;
-    }
-    if (!autoAdjustDifficulty) return;
-    if (wpm < drillMinWpm) {
-      setWpm(drillMinWpm);
-      onWpmChange(drillMinWpm);
-    } else if (wpm > drillMaxWpm) {
-      setWpm(drillMaxWpm);
-      onWpmChange(drillMaxWpm);
-    }
-  }, [autoAdjustDifficulty, drillMinWpm, drillMaxWpm, wpm, onWpmChange]);
 
   const isMountedRef = useRef(true);
   const drillFetchRequestRef = useRef(0);
@@ -420,6 +365,7 @@ export function TrainingReader({
     scoreDetails,
     sentenceChunks.length,
     sentenceMode,
+    setRollingScores,
     sessionHistory,
     wpm,
   ]);
