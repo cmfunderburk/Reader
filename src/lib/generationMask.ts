@@ -1,22 +1,32 @@
 import type { GenerationDifficulty } from '../types';
 import { FUNCTION_WORDS } from './tokenizer';
+import {
+  GERMAN_CHAR_REGEX,
+  GERMAN_CONTEXT_CUES,
+  GERMAN_DETERMINERS,
+  NAME_PREFIXES,
+  NAME_TITLES,
+} from './generationLanguage';
+import {
+  type TokenInfo,
+  type CoreParts,
+  HYPHEN_SEPARATOR_REGEX,
+  HYPHEN_SPLIT_REGEX,
+  LETTER_REGEX,
+  LETTER_OR_DIGIT_REGEX,
+  hashToUnitInterval,
+  splitCoreParts,
+  extractTokens,
+  isAcronym,
+  normalizeAlpha,
+  isSimpleTitleCase,
+  isInternalCapWord,
+  isLikelyTitleCaseLine,
+} from './generationTokens';
 
 interface MaskProfile {
   strategy: 'ratio' | 'first-last';
   maxMaskRatio: number;
-}
-
-interface TokenInfo {
-  raw: string;
-  start: number;
-  end: number;
-  sentenceInitial: boolean;
-}
-
-interface CoreParts {
-  leading: string;
-  core: string;
-  trailing: string;
 }
 
 interface MaskContext {
@@ -26,104 +36,11 @@ interface MaskContext {
   likelyGermanLine: boolean;
 }
 
-const HYPHEN_SEPARATOR_REGEX = /[-\u2010\u2011\u2012\u2013\u2014]/;
-const HYPHEN_SPLIT_REGEX = /([-\u2010\u2011\u2012\u2013\u2014]+)/;
-const LETTER_REGEX = /\p{L}/u;
-const LETTER_OR_DIGIT_REGEX = /[\p{L}\p{N}]/u;
-const GERMAN_CHAR_REGEX = /[ÄÖÜäöüß]/;
-
-const GERMAN_CONTEXT_CUES: ReadonlySet<string> = new Set([
-  'der', 'die', 'das', 'den', 'dem', 'des',
-  'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
-  'und', 'nicht', 'mit', 'fuer', 'fur',
-  'ich', 'wir', 'sie', 'ist', 'sind', 'dass',
-  'vom', 'zum', 'zur', 'im', 'am',
-]);
-
-const NAME_PREFIXES: ReadonlySet<string> = new Set([
-  'von', 'van', 'de', 'del', 'da', 'di', 'du', 'la', 'le',
-]);
-
-const NAME_TITLES: ReadonlySet<string> = new Set([
-  'dr', 'prof', 'herr', 'frau',
-]);
-
-const GERMAN_DETERMINERS: ReadonlySet<string> = new Set([
-  'der', 'die', 'das', 'den', 'dem', 'des',
-  'ein', 'eine', 'einen', 'einem', 'einer', 'eines',
-]);
-
 const DIFFICULTY_PROFILES: Record<GenerationDifficulty, MaskProfile> = {
   normal: { strategy: 'ratio', maxMaskRatio: 0.25 },
   hard: { strategy: 'ratio', maxMaskRatio: 0.4 },
   recall: { strategy: 'first-last', maxMaskRatio: 1 },
 };
-
-function hashToUnitInterval(input: string): number {
-  // FNV-1a 32-bit hash
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return ((hash >>> 0) & 0xffffffff) / 0x100000000;
-}
-
-function splitCoreParts(token: string): CoreParts | null {
-  const match = token.match(/^([^\p{L}\p{N}]*)([\p{L}\p{N}][\p{L}\p{N}'’-]*)([^\p{L}\p{N}]*)$/u);
-  if (!match) return null;
-  return {
-    leading: match[1],
-    core: match[2],
-    trailing: match[3],
-  };
-}
-
-function isSentenceBoundaryToken(token: string): boolean {
-  return /[.!?]["')\]]*$/.test(token);
-}
-
-function extractTokens(lineText: string): TokenInfo[] {
-  const regex = /\S+/g;
-  const tokens: TokenInfo[] = [];
-  let match;
-  let sentenceInitial = true;
-
-  while ((match = regex.exec(lineText)) !== null) {
-    const raw = match[0];
-    tokens.push({
-      raw,
-      start: match.index,
-      end: match.index + raw.length,
-      sentenceInitial,
-    });
-    sentenceInitial = isSentenceBoundaryToken(raw);
-  }
-
-  return tokens;
-}
-
-function isAcronym(core: string): boolean {
-  const normalized = core.replace(/[^\p{L}]/gu, '');
-  return /^\p{Lu}{2,}$/u.test(normalized);
-}
-
-function normalizeAlpha(core: string): string {
-  return core
-    .toLowerCase()
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
-    .replace(/ß/g, 'ss')
-    .replace(/[^\p{L}]/gu, '');
-}
-
-function isSimpleTitleCase(core: string): boolean {
-  return /^\p{Lu}\p{Ll}+(?:['’-]\p{Lu}?\p{Ll}+)*$/u.test(core);
-}
-
-function isInternalCapWord(core: string): boolean {
-  return /^\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)+$/u.test(core);
-}
 
 function isNameLikeTitleWord(core: string): boolean {
   if (!isSimpleTitleCase(core)) return false;
@@ -173,26 +90,6 @@ function hasHonorificBefore(tokenIndex: number, partsByTokenIndex: Map<number, C
   if (!prev) return false;
   const prevAlpha = normalizeAlpha(prev.core);
   return NAME_TITLES.has(prevAlpha);
-}
-
-function isLikelyTitleCaseLine(tokens: TokenInfo[], partsByTokenIndex: Map<number, CoreParts>): boolean {
-  let alphaTokenCount = 0;
-  let titleCaseCount = 0;
-
-  for (let tokenIndex = 0; tokenIndex < tokens.length; tokenIndex++) {
-    const parts = partsByTokenIndex.get(tokenIndex);
-    if (!parts) continue;
-    const alphaOnly = normalizeAlpha(parts.core);
-    if (alphaOnly.length === 0) continue;
-
-    alphaTokenCount += 1;
-    if (isSimpleTitleCase(parts.core) || isInternalCapWord(parts.core) || isAcronym(parts.core)) {
-      titleCaseCount += 1;
-    }
-  }
-
-  if (alphaTokenCount < 3) return false;
-  return (titleCaseCount / alphaTokenCount) >= 0.65;
 }
 
 function isLikelyGermanLine(tokens: TokenInfo[], partsByTokenIndex: Map<number, CoreParts>): boolean {
