@@ -28,7 +28,7 @@ import type {
   ComprehensionKeyPointResult,
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
-import { MAX_WPM, MIN_WPM } from './wpm';
+import { MAX_WPM, MIN_WPM, clampWpmFromStorage as clampWpm } from './wpm';
 import { STORAGE_KEYS, CURRENT_STORAGE_SCHEMA_VERSION } from './storageKeys';
 let lastKnownStorageSchemaVersion: number | null = null;
 
@@ -96,11 +96,6 @@ const DEFAULT_SETTINGS: Settings = {
   generationSweepReveal: true,
 };
 
-function clampWpm(value: unknown, fallback: number): number {
-  const n = typeof value === 'number' ? value : Number(value);
-  if (!Number.isFinite(n)) return fallback;
-  return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(n)));
-}
 
 function parseComprehensionGeminiModel(value: unknown): ComprehensionGeminiModel {
   if (

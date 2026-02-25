@@ -124,7 +124,7 @@ import {
   hasInitializedSRSBackfill,
   markSRSBackfillInitialized,
 } from '../lib/srsStore';
-import { MAX_WPM, MIN_WPM } from '../lib/wpm';
+import { clampWpm } from '../lib/wpm';
 
 const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
 
@@ -137,10 +137,6 @@ function clipPassagePreview(text: string, maxChars: number = 180): string {
 function resolveThemePreference(themePreference: ThemePreference, systemTheme: 'dark' | 'light'): 'dark' | 'light' {
   if (themePreference === 'system') return systemTheme;
   return themePreference;
-}
-
-function clampWpm(value: number): number {
-  return Math.max(MIN_WPM, Math.min(MAX_WPM, Math.round(value)));
 }
 
 function captureKindLabel(captureKind: PassageCaptureKind): string {
