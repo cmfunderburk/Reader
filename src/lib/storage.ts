@@ -28,9 +28,10 @@ import type {
   ComprehensionKeyPointResult,
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
-import { MAX_WPM, MIN_WPM, clampWpmFromStorage as clampWpm } from './wpm';
-import { STORAGE_KEYS, CURRENT_STORAGE_SCHEMA_VERSION } from './storageKeys';
-let lastKnownStorageSchemaVersion: number | null = null;
+import { clampWpmFromStorage as clampWpm } from './wpm';
+import { STORAGE_KEYS } from './storageKeys';
+import { runStorageMigrations, registerV3Migration, normalizeDrillState } from './storageMigrations';
+export { runStorageMigrations } from './storageMigrations';
 
 export interface Settings {
   defaultWpm: number;
@@ -116,93 +117,6 @@ function parseGenerationSweepReveal(value: unknown): boolean {
   return typeof value === 'boolean' ? value : DEFAULT_SETTINGS.generationSweepReveal;
 }
 
-function loadStorageSchemaVersion(): number {
-  const raw = localStorage.getItem(STORAGE_KEYS.schemaVersion);
-  if (!raw) return 0;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) return 0;
-  return parsed;
-}
-
-function saveStorageSchemaVersion(version: number): void {
-  localStorage.setItem(STORAGE_KEYS.schemaVersion, String(version));
-}
-
-function migrateSettingsToV1(): void {
-  const raw = localStorage.getItem(STORAGE_KEYS.settings);
-  if (!raw) return;
-
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown> & {
-      defaultWpm?: unknown;
-      wpmByActivity?: Partial<Record<Activity, unknown>>;
-      lastSession?: { articleId?: string; activity?: string; displayMode?: DisplayMode };
-    };
-
-    const legacyDefaultWpm = clampWpm(parsed.defaultWpm, DEFAULT_SETTINGS.defaultWpm);
-    const nextWpmByActivity = {
-      'paced-reading': clampWpm(parsed.wpmByActivity?.['paced-reading'], legacyDefaultWpm),
-      'active-recall': clampWpm(parsed.wpmByActivity?.['active-recall'], legacyDefaultWpm),
-      training: clampWpm(parsed.wpmByActivity?.training, legacyDefaultWpm),
-      'comprehension-check': clampWpm(parsed.wpmByActivity?.['comprehension-check'], legacyDefaultWpm),
-    } satisfies Record<Activity, number>;
-
-    const nextLastSession = parsed.lastSession?.activity
-      ? {
-          ...parsed.lastSession,
-          activity:
-            parsed.lastSession.activity === 'speed-reading'
-              ? 'paced-reading'
-              : parsed.lastSession.activity === 'comprehension'
-                ? 'active-recall'
-                : parsed.lastSession.activity,
-        }
-      : undefined;
-
-    const migrated = {
-      ...parsed,
-      wpmByActivity: nextWpmByActivity,
-      defaultWpm: nextWpmByActivity['paced-reading'],
-      ...(nextLastSession ? { lastSession: nextLastSession } : {}),
-    };
-
-    localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(migrated));
-  } catch {
-    // Keep existing data untouched when migration cannot parse settings.
-  }
-}
-
-function normalizeDrillState(parsed: Partial<DrillState>): DrillState {
-  const wpm = clampWpm(parsed.wpm, DEFAULT_SETTINGS.defaultWpm);
-  const minWpmRaw = parsed.minWpm ?? Math.max(MIN_WPM, wpm - 50);
-  const maxWpmRaw = parsed.maxWpm ?? Math.min(MAX_WPM, wpm + 50);
-  let minWpm = clampWpm(minWpmRaw, Math.max(MIN_WPM, wpm - 50));
-  let maxWpm = clampWpm(maxWpmRaw, Math.min(MAX_WPM, wpm + 50));
-  if (minWpm > maxWpm) [minWpm, maxWpm] = [maxWpm, minWpm];
-  const rollingScores = Array.isArray(parsed.rollingScores)
-    ? parsed.rollingScores.filter((n): n is number => typeof n === 'number' && Number.isFinite(n))
-    : [];
-
-  return {
-    ...parsed,
-    wpm,
-    minWpm,
-    maxWpm,
-    rollingScores,
-  };
-}
-
-function migrateDrillStateToV1(): void {
-  const raw = localStorage.getItem(STORAGE_KEYS.drillState);
-  if (!raw) return;
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<DrillState>;
-    localStorage.setItem(STORAGE_KEYS.drillState, JSON.stringify(normalizeDrillState(parsed)));
-  } catch {
-    // Keep existing data untouched when migration cannot parse drill state.
-  }
-}
 
 function migrateComprehensionAttemptsToV3(): void {
   const raw = localStorage.getItem(STORAGE_KEYS.comprehensionAttempts);
@@ -224,36 +138,7 @@ function migrateComprehensionAttemptsToV3(): void {
   }
 }
 
-function runStorageMigrations(): void {
-  const currentVersion = loadStorageSchemaVersion();
-  if (
-    currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION
-    && lastKnownStorageSchemaVersion === currentVersion
-  ) {
-    return;
-  }
-  if (currentVersion >= CURRENT_STORAGE_SCHEMA_VERSION) {
-    lastKnownStorageSchemaVersion = currentVersion;
-    return;
-  }
-
-  if (currentVersion < 1) {
-    migrateSettingsToV1();
-    migrateDrillStateToV1();
-  }
-
-  if (currentVersion < 2) {
-    // No-op: comprehension_attempts key didn't exist before V2.
-    // New installs and upgrades both start with empty attempts.
-  }
-
-  if (currentVersion < 3) {
-    migrateComprehensionAttemptsToV3();
-  }
-
-  saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);
-  lastKnownStorageSchemaVersion = CURRENT_STORAGE_SCHEMA_VERSION;
-}
+registerV3Migration(migrateComprehensionAttemptsToV3);
 
 /**
  * Load articles from localStorage.
