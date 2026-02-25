@@ -29,25 +29,7 @@ import type {
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
 import { MAX_WPM, MIN_WPM } from './wpm';
-
-const STORAGE_KEYS = {
-  schemaVersion: 'speedread_schema_version',
-  articles: 'speedread_articles',
-  feeds: 'speedread_feeds',
-  settings: 'speedread_settings',
-  passages: 'speedread_passages',
-  sessionSnapshot: 'speedread_session_snapshot',
-  drillState: 'speedread_drill_state',
-  trainingSentenceMode: 'speedread_training_sentence',
-  trainingScoreDetails: 'speedread_training_score_details',
-  trainingScaffold: 'speedread_training_scaffold',
-  dailyDate: 'speedread_daily_date',
-  dailyArticleId: 'speedread_daily_article_id',
-  comprehensionAttempts: 'speedread_comprehension_attempts',
-  comprehensionApiKey: 'speedread_comprehension_api_key',
-} as const;
-
-const CURRENT_STORAGE_SCHEMA_VERSION = 3;
+import { STORAGE_KEYS, CURRENT_STORAGE_SCHEMA_VERSION } from './storageKeys';
 let lastKnownStorageSchemaVersion: number | null = null;
 
 export interface Settings {
