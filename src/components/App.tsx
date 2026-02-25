@@ -229,6 +229,7 @@ export function App() {
   const comp = useComprehensionState({
     comprehensionGeminiModel: settings.comprehensionGeminiModel,
   });
+  const { srsCards, setSrsSessionCards } = comp;
 
   const resolvedTheme = useMemo(
     () => resolveThemePreference(displaySettings.themePreference, systemTheme),
@@ -859,15 +860,15 @@ export function App() {
   }, [articles, setViewState]);
 
   const handleStartSRSReview = useCallback(() => {
-    const dueCards = getDueCards(comp.srsCards, Date.now());
-    comp.setSrsSessionCards(dueCards.map((card) => ({ ...card })));
+    const dueCards = getDueCards(srsCards, Date.now());
+    setSrsSessionCards(dueCards.map((card) => ({ ...card })));
     setViewState({ screen: 'active-srs-review' });
-  }, [setViewState, comp.srsCards, comp.setSrsSessionCards]);
+  }, [setViewState, srsCards, setSrsSessionCards]);
 
   const closeSRSReview = useCallback(() => {
-    comp.setSrsSessionCards([]);
+    setSrsSessionCards([]);
     goHome();
-  }, [comp.setSrsSessionCards, goHome]);
+  }, [setSrsSessionCards, goHome]);
 
   const launchFeaturedArticle = useCallback(async ({
     fetchArticle,
@@ -977,8 +978,8 @@ export function App() {
 
   const srsDueCount = useMemo(() => {
     const now = Date.now();
-    return comp.srsCards.filter((c) => c.status === 'active' && c.nextDueAt <= now).length;
-  }, [comp.srsCards]);
+    return srsCards.filter((c) => c.status === 'active' && c.nextDueAt <= now).length;
+  }, [srsCards]);
 
   const srsDueCards = useMemo(() => {
     if (viewState.screen !== 'active-srs-review') return [];
