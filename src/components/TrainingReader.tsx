@@ -2,7 +2,6 @@ import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from
 import type { Article, Chunk, TrainingParagraphResult, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
 import type { CorpusArticle, CorpusFamily, CorpusInfo, CorpusTier } from '../types/electron';
 import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
-import { isExactMatch, isWordKnown, isDetailWord } from '../lib/levenshtein';
 import {
   loadTrainingHistory,
   saveTrainingHistory,
@@ -17,22 +16,14 @@ import {
 } from '../lib/storage';
 import { DRILL_WPM_STEP, getDrillRound } from '../lib/trainingDrill';
 import { planTrainingContinue, planTrainingStart } from '../lib/trainingPhase';
-import {
-  applyStatsDelta,
-  buildRemainingMissStats,
-  collectRemainingPreviewWordKeys,
-  consumeRecallTokens,
-  makeRecallWordKey,
-  parseNoScaffoldRecallInput,
-  planScaffoldMissContinue,
-  planScaffoldRecallSubmission,
-} from '../lib/trainingRecall';
+import { makeRecallWordKey } from '../lib/trainingRecall';
 import { planTrainingReadingStart, planTrainingReadingStep } from '../lib/trainingReading';
 import type { TrainingFinalWord } from '../lib/trainingScoring';
 import { planFinishRecallPhase } from '../lib/trainingFeedback';
 import type { TrainingHistory, DrillState } from '../lib/storage';
 import { SaccadeLineComponent } from './SaccadeReader';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
+import { useTrainingRecall } from '../hooks/useTrainingRecall';
 
 type TrainingPhase = 'setup' | 'reading' | 'recall' | 'feedback' | 'complete';
 type DrillMode = 'article' | 'random';
@@ -77,10 +68,6 @@ interface ParagraphStats {
   knownWords: number;
   detailTotal: number;
   detailKnown: number;
-}
-
-function createEmptyParagraphStats(): ParagraphStats {
-  return { totalWords: 0, exactMatches: 0, knownWords: 0, detailTotal: 0, detailKnown: 0 };
 }
 
 export function TrainingReader({
@@ -148,18 +135,6 @@ export function TrainingReader({
   const [currentLineIndex, setCurrentLineIndex] = useState(-1);
   const [readingLeadIn, setReadingLeadIn] = useState(false);
   const readingStepRef = useRef(0);
-
-  // Recall phase state
-  const [recallInput, setRecallInput] = useState('');
-  const [recallWordIndex, setRecallWordIndex] = useState(0);
-  const [showingMiss, setShowingMiss] = useState(false);
-  const [lastMissResult, setLastMissResult] = useState<{ predicted: string; actual: string } | null>(null);
-  const [lastPreviewPenaltyCount, setLastPreviewPenaltyCount] = useState(0);
-  const [drillForfeitedWordKeys, setDrillForfeitedWordKeys] = useState<Set<WordKey>>(new Set());
-  const [drillPreviewWordKeys, setDrillPreviewWordKeys] = useState<WordKey[]>([]);
-  const [drillPreviewVisibleCount, setDrillPreviewVisibleCount] = useState(0);
-  const [completedWords, setCompletedWords] = useState<Map<WordKey, CompletedWord>>(new Map());
-  const [paragraphStats, setParagraphStats] = useState<ParagraphStats>(createEmptyParagraphStats);
 
   // Session history
   const [sessionHistory, setSessionHistory] = useState<TrainingParagraphResult[]>([]);
@@ -240,14 +215,10 @@ export function TrainingReader({
     }
   }, [autoAdjustDifficulty, drillMinWpm, drillMaxWpm, wpm, onWpmChange]);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-  const inputContainerRef = useRef<HTMLSpanElement>(null);
   const isMountedRef = useRef(true);
   const drillFetchRequestRef = useRef(0);
   const lastDrillAdjRef = useRef({ wpmDelta: 0 });
   const lastDetailCountRef = useRef(0);
-  const drillPreviewTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const drillPreviewHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -293,21 +264,18 @@ export function TrainingReader({
     [currentText]
   );
 
-  const currentRecallChunk = recallData.chunks[recallWordIndex] ?? null;
-  const isDrillPreviewing = drillPreviewWordKeys.length > 0;
-  const drillPreviewVisibleWordKeys = useMemo(
-    () => new Set(drillPreviewWordKeys.slice(0, drillPreviewVisibleCount)),
-    [drillPreviewWordKeys, drillPreviewVisibleCount]
-  );
+  // Stable ref for finishRecallPhase to break circular dependency with the hook
+  const finishRecallRef = useRef<(stats: ParagraphStats, finalWord: TrainingFinalWord | null) => void>(() => {});
 
-  // Determine if a recall chunk is a detail word (proper noun or number)
-  const isChunkDetail = useCallback((chunkIndex: number) => {
-    const chunk = recallData.chunks[chunkIndex];
-    if (!chunk) return false;
-    const isFirst = chunkIndex === 0 ||
-      /[.?!]$/.test(recallData.chunks[chunkIndex - 1].text);
-    return isDetailWord(chunk.text, isFirst);
-  }, [recallData.chunks]);
+  const recall = useTrainingRecall({
+    phase,
+    recallChunks: recallData.chunks,
+    wpm,
+    isDrill,
+    showFirstLetterScaffold,
+    paused,
+    onFinishRecall: (stats, finalWord) => finishRecallRef.current(stats, finalWord),
+  });
 
   // --- Reading phase timer ---
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -369,67 +337,6 @@ export function TrainingReader({
     };
   }, [phase, paused, readingLeadIn, bodyLineIndices, saccadeData.page.lines, wpm, currentParagraphIndex]);
 
-  // Focus input when entering recall phase
-  useEffect(() => {
-    if (phase === 'recall' && !showingMiss) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [phase, showingMiss, recallWordIndex]);
-
-  // Scroll current word into view
-  useEffect(() => {
-    if (phase === 'recall' && inputContainerRef.current) {
-      inputContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [phase, recallWordIndex]);
-
-  // Random drill Tab preview: reveal remaining words at current WPM, then hide.
-  useEffect(() => {
-    if (drillPreviewTimerRef.current) {
-      clearInterval(drillPreviewTimerRef.current);
-      drillPreviewTimerRef.current = null;
-    }
-    if (drillPreviewHideTimerRef.current) {
-      clearTimeout(drillPreviewHideTimerRef.current);
-      drillPreviewHideTimerRef.current = null;
-    }
-    if (drillPreviewWordKeys.length === 0) {
-      setDrillPreviewVisibleCount(0);
-      return;
-    }
-
-    const stepMs = Math.max(80, Math.round(60000 / Math.max(MIN_WPM, wpm)));
-    let shown = 0;
-    setDrillPreviewVisibleCount(0);
-
-    drillPreviewTimerRef.current = setInterval(() => {
-      shown += 1;
-      setDrillPreviewVisibleCount(shown);
-      if (shown >= drillPreviewWordKeys.length) {
-        if (drillPreviewTimerRef.current) {
-          clearInterval(drillPreviewTimerRef.current);
-          drillPreviewTimerRef.current = null;
-        }
-        drillPreviewHideTimerRef.current = setTimeout(() => {
-          setDrillPreviewWordKeys([]);
-          setDrillPreviewVisibleCount(0);
-          drillPreviewHideTimerRef.current = null;
-        }, stepMs);
-      }
-    }, stepMs);
-
-    return () => {
-      if (drillPreviewTimerRef.current) {
-        clearInterval(drillPreviewTimerRef.current);
-        drillPreviewTimerRef.current = null;
-      }
-      if (drillPreviewHideTimerRef.current) {
-        clearTimeout(drillPreviewHideTimerRef.current);
-        drillPreviewHideTimerRef.current = null;
-      }
-    };
-  }, [drillPreviewWordKeys, wpm]);
-
   // --- Recall handlers ---
   const finishRecallPhase = useCallback((stats: ParagraphStats, finalWord: TrainingFinalWord | null) => {
     const finishPlan = planFinishRecallPhase({
@@ -449,19 +356,12 @@ export function TrainingReader({
     });
 
     if (finishPlan.type === 'advance-sentence') {
-      setParagraphStats(finishPlan.finalStats);
+      recall.resetRecallState();
+      recall.setParagraphStats(finishPlan.finalStats);
       setCurrentSentenceIndex(finishPlan.nextSentenceIndex);
-      setRecallInput('');
-      setRecallWordIndex(0);
-      setCompletedWords(new Map());
-      setShowingMiss(false);
-      setLastMissResult(null);
       setCurrentLineIndex(-1);
       readingStepRef.current = 0;
       setReadingLeadIn(true);
-      setDrillForfeitedWordKeys(new Set());
-      setDrillPreviewWordKeys([]);
-      setDrillPreviewVisibleCount(0);
       setPhase('reading');
       return;
     }
@@ -504,10 +404,7 @@ export function TrainingReader({
     }
 
     lastDetailCountRef.current = finishPlan.lastDetailCount;
-    setLastPreviewPenaltyCount(drillForfeitedWordKeys.size);
-    setDrillForfeitedWordKeys(new Set());
-    setDrillPreviewWordKeys([]);
-    setDrillPreviewVisibleCount(0);
+    recall.snapshotPreviewPenalty();
     setPhase('feedback');
   }, [
     articleId,
@@ -515,232 +412,18 @@ export function TrainingReader({
     currentParagraphIndex,
     currentSentenceIndex,
     currentText,
-    drillForfeitedWordKeys,
     drillMaxWpm,
     drillMinWpm,
     isDrill,
     onWpmChange,
+    recall,
     scoreDetails,
     sentenceChunks.length,
     sentenceMode,
     sessionHistory,
     wpm,
   ]);
-
-  const processRecallTokens = useCallback((tokens: string[]) => {
-    if (tokens.length === 0) return false;
-
-    const tokenPlan = consumeRecallTokens({
-      tokens,
-      chunks: recallData.chunks,
-      startIndex: recallWordIndex,
-      stats: paragraphStats,
-      forfeitedWordKeys: drillForfeitedWordKeys,
-      isWordKnown,
-      isExactMatch,
-      isDetailChunk: isChunkDetail,
-    });
-
-    setCompletedWords(prev => {
-      const next = new Map(prev);
-      for (const scored of tokenPlan.scoredWords) {
-        next.set(scored.key, {
-          text: scored.text,
-          correct: scored.correct,
-          forfeited: scored.forfeited,
-        });
-      }
-      return next;
-    });
-    setParagraphStats(tokenPlan.nextStats);
-
-    if (tokenPlan.nextIndex >= recallData.chunks.length) {
-      setRecallWordIndex(recallData.chunks.length);
-      finishRecallPhase(tokenPlan.nextStats, null);
-      return true;
-    }
-
-    setRecallWordIndex(tokenPlan.nextIndex);
-    return false;
-  }, [paragraphStats, recallWordIndex, recallData.chunks, finishRecallPhase, isChunkDetail, drillForfeitedWordKeys]);
-
-  const handleRecallInputChange = useCallback((value: string) => {
-    if (isDrillPreviewing) return;
-    // Scaffold mode remains single-token input (no spaces).
-    if (showFirstLetterScaffold) {
-      setRecallInput(value.replace(/\s/g, ''));
-      return;
-    }
-
-    // No-scaffold mode: consume complete space-delimited tokens immediately.
-    const { completeTokens, pendingToken } = parseNoScaffoldRecallInput(value);
-
-    if (completeTokens.length > 0) {
-      const finished = processRecallTokens(completeTokens);
-      if (finished) {
-        setRecallInput('');
-        return;
-      }
-    }
-
-    setRecallInput(pendingToken);
-  }, [showFirstLetterScaffold, processRecallTokens, isDrillPreviewing]);
-
-  const handleRecallSubmit = useCallback(() => {
-    if (isDrillPreviewing) return;
-    if (!currentRecallChunk || recallInput.trim() === '') return;
-
-    // No-scaffold mode: submit current in-progress token (prediction-style flow).
-    if (!showFirstLetterScaffold) {
-      processRecallTokens([recallInput.trim()]);
-      setRecallInput('');
-      setLastMissResult(null);
-      setShowingMiss(false);
-      return;
-    }
-
-    const transitionPlan = planScaffoldRecallSubmission({
-      predicted: recallInput.trim(),
-      chunk: currentRecallChunk,
-      isDrill,
-      currentIndex: recallWordIndex,
-      chunkCount: recallData.chunks.length,
-      isDetail: isChunkDetail(recallWordIndex),
-      isWordKnown,
-      isExactMatch,
-    });
-
-    setCompletedWords(prev => new Map(prev).set(transitionPlan.completedWord.key, {
-      text: transitionPlan.completedWord.text,
-      correct: transitionPlan.completedWord.correct,
-    }));
-
-    if (transitionPlan.type === 'show-miss') {
-      setLastMissResult(transitionPlan.missResult);
-      setShowingMiss(true);
-      return;
-    }
-
-    setRecallInput('');
-    setLastMissResult(null);
-    setShowingMiss(false);
-
-    if (transitionPlan.type === 'finish') {
-      finishRecallPhase(paragraphStats, transitionPlan.finalWord);
-    } else {
-      setParagraphStats(prev => applyStatsDelta(prev, transitionPlan.statsDelta));
-      setRecallWordIndex(transitionPlan.nextIndex);
-    }
-  }, [
-    recallInput,
-    currentRecallChunk,
-    recallWordIndex,
-    recallData.chunks,
-    paragraphStats,
-    finishRecallPhase,
-    isChunkDetail,
-    isDrill,
-    showFirstLetterScaffold,
-    processRecallTokens,
-    isDrillPreviewing,
-  ]);
-
-  const scoreRemainingAsMisses = useCallback(() => {
-    const finalStats = buildRemainingMissStats({
-      chunkCount: recallData.chunks.length,
-      currentIndex: recallWordIndex,
-      stats: paragraphStats,
-      isDetailChunk: isChunkDetail,
-    });
-    if (!finalStats) return false;
-
-    setRecallInput('');
-    setShowingMiss(false);
-    setLastMissResult(null);
-    setDrillPreviewWordKeys([]);
-    setDrillPreviewVisibleCount(0);
-    finishRecallPhase(finalStats, null);
-    return true;
-  }, [recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail]);
-
-  const handleGiveUp = useCallback(() => {
-    scoreRemainingAsMisses();
-  }, [scoreRemainingAsMisses]);
-
-  const handleTabPreviewRemaining = useCallback(() => {
-    if (isDrillPreviewing) return;
-    const previewKeys: WordKey[] = collectRemainingPreviewWordKeys(recallData.chunks, recallWordIndex);
-    if (previewKeys.length === 0) return;
-    setRecallInput('');
-    setShowingMiss(false);
-    setLastMissResult(null);
-    setDrillForfeitedWordKeys(prev => {
-      const next = new Set(prev);
-      for (const key of previewKeys) next.add(key);
-      return next;
-    });
-    setDrillPreviewWordKeys(previewKeys);
-    setDrillPreviewVisibleCount(0);
-  }, [isDrillPreviewing, recallData.chunks, recallWordIndex]);
-
-  const handleMissContinue = useCallback(() => {
-    setShowingMiss(false);
-    setLastMissResult(null);
-    setRecallInput('');
-
-    const transitionPlan = planScaffoldMissContinue({
-      currentIndex: recallWordIndex,
-      chunkCount: recallData.chunks.length,
-      isDetail: isChunkDetail(recallWordIndex),
-    });
-
-    if (transitionPlan.type === 'finish') {
-      finishRecallPhase(paragraphStats, transitionPlan.finalWord);
-    } else {
-      setParagraphStats(prev => applyStatsDelta(prev, transitionPlan.statsDelta));
-      setRecallWordIndex(transitionPlan.nextIndex);
-    }
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }, [recallWordIndex, recallData.chunks.length, paragraphStats, finishRecallPhase, isChunkDetail]);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-    // Scaffold mode keeps per-word flow (Space/Enter submit).
-    // No-scaffold mode allows spaces for full-sentence typing (Enter submit).
-    if (e.key === 'Tab' && isDrill && !showFirstLetterScaffold) {
-      e.preventDefault();
-      e.stopPropagation();
-      handleTabPreviewRemaining();
-      return;
-    }
-    const submitOnSpace = showFirstLetterScaffold;
-    if (isDrillPreviewing && ((submitOnSpace && e.key === ' ') || e.key === 'Enter')) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    if ((submitOnSpace && e.key === ' ') || e.key === 'Enter') {
-      e.preventDefault();
-      e.stopPropagation();
-      handleRecallSubmit();
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      handleGiveUp();
-    }
-  }, [handleRecallSubmit, handleGiveUp, handleTabPreviewRemaining, showFirstLetterScaffold, isDrill, isDrillPreviewing]);
-
-  // Global key listener for miss state
-  useEffect(() => {
-    if (showingMiss) {
-      const handler = (e: globalThis.KeyboardEvent) => {
-        if (e.key === ' ' || e.key === 'Enter') {
-          e.preventDefault();
-          handleMissContinue();
-        }
-      };
-      window.addEventListener('keydown', handler);
-      return () => window.removeEventListener('keydown', handler);
-    }
-  }, [showingMiss, handleMissContinue]);
+  finishRecallRef.current = finishRecallPhase;
 
   // --- Feedback phase handlers ---
   const lastResult = sessionHistory[sessionHistory.length - 1];
@@ -752,22 +435,13 @@ export function TrainingReader({
   const shouldRepeat = !isDrill && lastScore < 90;
 
   const resetRecallRoundState = useCallback((nextLeadIn: boolean) => {
-    setRecallInput('');
-    setRecallWordIndex(0);
-    setShowingMiss(false);
-    setLastMissResult(null);
-    setCompletedWords(new Map());
-    setParagraphStats(createEmptyParagraphStats());
+    recall.resetRecallState();
     setCurrentLineIndex(-1);
     readingStepRef.current = 0;
     setReadingLeadIn(nextLeadIn);
     setCurrentSentenceIndex(0);
-    setDrillForfeitedWordKeys(new Set());
-    setDrillPreviewWordKeys([]);
-    setDrillPreviewVisibleCount(0);
-    setLastPreviewPenaltyCount(0);
     setFeedbackText('');
-  }, []);
+  }, [recall]);
 
   const fetchDrillArticle = useCallback((onMissing: 'complete' | 'stay') => {
     const corpus = window.corpus;
@@ -906,13 +580,6 @@ export function TrainingReader({
       };
     }
   }, [phase, handleContinue]);
-
-  // Refocus input when unpausing recall
-  useEffect(() => {
-    if (phase === 'recall' && !paused && !showingMiss) {
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [phase, paused, showingMiss]);
 
   // --- Compute session summary ---
   const sessionSummary = useMemo(() => {
@@ -1318,9 +985,9 @@ export function TrainingReader({
               ({lastDetailCountRef.current} name{lastDetailCountRef.current !== 1 ? 's' : ''}/date{lastDetailCountRef.current !== 1 ? 's' : ''} {scoreDetails ? 'included' : 'excluded'})
             </div>
           )}
-          {isDrill && lastPreviewPenaltyCount > 0 && (
+          {isDrill && recall.lastPreviewPenaltyCount > 0 && (
             <div className="training-score-detail">
-              Tab preview used: {lastPreviewPenaltyCount} remaining word{lastPreviewPenaltyCount === 1 ? '' : 's'} scored 0
+              Tab preview used: {recall.lastPreviewPenaltyCount} remaining word{recall.lastPreviewPenaltyCount === 1 ? '' : 's'} scored 0
             </div>
           )}
           {isDrill ? (
@@ -1415,10 +1082,10 @@ export function TrainingReader({
         <span className="training-phase-label">{paused ? 'Paused' : 'Recall'}</span>
         <span className="training-progress">
           {isDrill
-            ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · 1 sentence · ${recallWordIndex} / ${totalRecallWords} words`
+            ? `${drillArticle?.title ?? ''} · ${Math.min(drillSentenceIndex + drillRoundSentenceCount, drillSentences.length)}/${drillSentences.length} · 1 sentence · ${recall.recallWordIndex} / ${totalRecallWords} words`
             : sentenceMode && sentenceChunks.length > 1
-              ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recallWordIndex} / ${totalRecallWords} words`
-              : `${recallWordIndex} / ${totalRecallWords} words`
+              ? `Sentence ${currentSentenceIndex + 1} / ${sentenceChunks.length} · ${recall.recallWordIndex} / ${totalRecallWords} words`
+              : `${recall.recallWordIndex} / ${totalRecallWords} words`
           }
         </span>
         <span className="training-wpm">{wpm} WPM</span>
@@ -1455,17 +1122,17 @@ export function TrainingReader({
               <TrainingRecallLine
                 lineText={line.text}
                 lineChunks={lineChunks}
-                currentChunk={currentRecallChunk}
-                completedWords={completedWords}
+                currentChunk={recall.currentRecallChunk}
+                completedWords={recall.completedWords}
                 showFirstLetterScaffold={showFirstLetterScaffold}
                 isHeading={isHeading}
-                showingMiss={showingMiss}
-                input={recallInput}
-                setInput={handleRecallInputChange}
-                onKeyDown={handleKeyDown}
-                inputRef={inputRef}
-                inputContainerRef={inputContainerRef}
-                previewWordKeys={drillPreviewVisibleWordKeys}
+                showingMiss={recall.showingMiss}
+                input={recall.recallInput}
+                setInput={recall.handleRecallInputChange}
+                onKeyDown={recall.handleKeyDown}
+                inputRef={recall.inputRef}
+                inputContainerRef={recall.inputContainerRef}
+                previewWordKeys={recall.drillPreviewVisibleWordKeys}
               />
             </div>
           );
@@ -1473,12 +1140,12 @@ export function TrainingReader({
       </div>
       )}
 
-      {!paused && showingMiss && lastMissResult && (
+      {!paused && recall.showingMiss && recall.lastMissResult && (
         <div className="prediction-feedback">
           <div className="prediction-comparison">
-            <span className="prediction-you-said">"{lastMissResult.predicted}"</span>
+            <span className="prediction-you-said">"{recall.lastMissResult.predicted}"</span>
             <span className="prediction-arrow">→</span>
-            <span className="prediction-actual">"{lastMissResult.actual}"</span>
+            <span className="prediction-actual">"{recall.lastMissResult.actual}"</span>
           </div>
           <div className="prediction-continue-hint">
             Press Space to continue
@@ -1486,12 +1153,12 @@ export function TrainingReader({
         </div>
       )}
 
-      {!paused && !showingMiss && (recallWordIndex > 0 || (isDrill && !showFirstLetterScaffold)) && (
+      {!paused && !recall.showingMiss && (recall.recallWordIndex > 0 || (isDrill && !showFirstLetterScaffold)) && (
         <div className="prediction-continue-hint">
-          {isDrillPreviewing
+          {recall.isDrillPreviewing
             ? `Previewing remaining words at ${wpm} WPM...`
             : isDrill && !showFirstLetterScaffold
-            ? `${drillForfeitedWordKeys.size > 0 ? 'Preview used; remaining words are practice-only (score 0).' : 'Tab to preview remaining (remaining words score 0).'}${recallWordIndex > 0 ? ' · Esc to skip remaining' : ''}`
+            ? `${recall.drillForfeitedWordKeys.size > 0 ? 'Preview used; remaining words are practice-only (score 0).' : 'Tab to preview remaining (remaining words score 0).'}${recall.recallWordIndex > 0 ? ' · Esc to skip remaining' : ''}`
             : 'Esc to skip remaining'}
         </div>
       )}
