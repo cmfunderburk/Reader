@@ -65,8 +65,15 @@ The design goal is to reduce friction between reading and retention practice by 
 - `Standard`/`Deep` results include key-point hit/miss breakdown when available.
 - Results support `Quick`/`Standard`/`Deep` review depth plus `All questions` / `Needs review` filtering.
 - Review prior attempts from Home via `Comprehension Check -> Review History`.
+- Scored questions are automatically ingested into a Leitner-box SRS pool for spaced review:
+  - 5 boxes with increasing intervals (1 / 3 / 7 / 14 / 30 days).
+  - Needs-review questions start at Box 1; correct ones at Box 3.
+  - Binary self-grading (`Got It` / `Missed It`) advances one box or lapses to Box 1.
+  - Box 5 graduation prompt: `Mark Complete`, `Defer`, or `Keep Reviewing`.
+  - Auto-backfills from existing comprehension attempts on first load (500-card cap).
+  - Launch review sessions from the Home screen when cards are due.
 - Configure API key in `Settings -> Comprehension Check API Key` (this key is only required for comprehension checks).
-- Configure model in `Settings -> Comprehension Check API Key` (currently `gemini-3-pro-preview` or `gemini-3-flash-preview`).
+- Configure model in `Settings -> Comprehension Check API Key` (currently `gemini-3.1-pro-preview`).
 - In Electron builds, API keys are stored in OS-backed secure encrypted storage when available (with local app-storage fallback if the OS keyring is unavailable); in web builds they use browser local storage.
 - Current Gemini REST integration sends the API key via `x-goog-api-key` request header.
 

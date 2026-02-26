@@ -3495,11 +3495,6 @@ button {
   /* No special style by default -- words render inline normally */
 }
 
-.epub-word-highlight {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
-  border-radius: 2px;
-}
-
 .epub-sweep {
   position: absolute;
   top: 0;
