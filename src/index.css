@@ -3302,3 +3302,213 @@ button {
     padding-bottom: 1rem;
   }
 }
+
+/* ─── EPUB Reader ─────────────────────────────────────────── */
+
+.epub-reader {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.epub-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.epub-toolbar-title {
+  flex: 1;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.epub-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.epub-toolbar-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+}
+
+.epub-toc {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--bg-primary);
+  overflow-y: auto;
+  padding: 1rem;
+}
+
+.epub-toc-heading {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.epub-toc ul {
+  list-style: none;
+  padding: 0;
+}
+
+.epub-toc-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.epub-toc-item:hover {
+  background: var(--bg-secondary);
+}
+
+.epub-toc-item.active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.epub-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem 1rem;
+  color: var(--text-primary);
+  font-size: 1.05rem;
+  line-height: 1.7;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.epub-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.epub-content h1,
+.epub-content h2,
+.epub-content h3,
+.epub-content h4,
+.epub-content h5,
+.epub-content h6 {
+  color: var(--text-primary);
+  margin-top: 1.2em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.epub-content p {
+  margin-bottom: 0.8em;
+}
+
+.epub-content a {
+  color: var(--accent);
+}
+
+.epub-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.epub-controls-position {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  min-width: 4rem;
+  text-align: center;
+}
+
+.epub-mode-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.epub-mode-controls .control-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #1c1a17;
+}
+
+/* Word annotation styles (used by pacer and generation modes) */
+[data-word-idx] {
+  /* No special style by default -- words render inline normally */
+}
+
+.epub-word-highlight {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 2px;
+}
+
+.epub-word-masked {
+  color: transparent;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
+  user-select: none;
+}
+
+.epub-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 1.1rem;
+}
+
+.epub-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  height: 100%;
+  color: var(--error);
+  font-size: 1rem;
+  padding: 2rem;
+  text-align: center;
+}

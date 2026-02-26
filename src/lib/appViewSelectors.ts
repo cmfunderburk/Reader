@@ -37,6 +37,8 @@ export function getHeaderTitle(viewState: ViewState): string {
       return 'Build Exam';
     case 'active-srs-review':
       return 'Spaced Review';
+    case 'epub-reader':
+      return 'EPUB Reader';
     case 'content-browser':
       return ACTIVITY_LABELS[viewState.activity];
     case 'preview':

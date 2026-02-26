@@ -19,6 +19,7 @@ const baseProps = {
   comprehensionAttempts: [] as ComprehensionAttempt[],
   srsDueCount: 0,
   onStartSRSReview: vi.fn(),
+  onOpenEpub: vi.fn(),
 };
 
 function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {

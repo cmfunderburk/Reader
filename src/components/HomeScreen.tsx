@@ -23,6 +23,7 @@ interface HomeScreenProps {
   comprehensionAttempts: ComprehensionAttempt[];
   srsDueCount: number;
   onStartSRSReview: () => void;
+  onOpenEpub: () => void;
 }
 
 const MAX_HISTORY_ATTEMPTS = 30;
@@ -96,6 +97,7 @@ export function HomeScreen({
   comprehensionAttempts,
   srsDueCount,
   onStartSRSReview,
+  onOpenEpub,
 }: HomeScreenProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const attemptsToShow = comprehensionAttempts.slice(0, MAX_HISTORY_ATTEMPTS);
@@ -287,6 +289,19 @@ export function HomeScreen({
                 onClick={onStartDrill}
               >
                 Random Drill
+              </button>
+            </div>
+          </article>
+
+          <article className="mode-card">
+            <h2 className="mode-card-title">EPUB Reader</h2>
+            <p className="mode-card-desc">Read EPUB books with pacer and generation modes</p>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={onOpenEpub}
+              >
+                Open EPUB
               </button>
             </div>
           </article>

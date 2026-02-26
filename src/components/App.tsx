@@ -16,8 +16,10 @@ import { ComprehensionCheck } from './ComprehensionCheck';
 import { ComprehensionCheckBoundary } from './ComprehensionCheckBoundary';
 import { ComprehensionExamBuilder } from './ComprehensionExamBuilder';
 import { SRSReviewSession } from './SRSReviewSession';
+import { EpubReader } from './EpubReader';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
+import { useEpubReader } from '../hooks/useEpubReader';
 import { useComprehensionState } from '../hooks/useComprehensionState';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
 import {
@@ -230,6 +232,7 @@ export function App() {
     comprehensionGeminiModel: settings.comprehensionGeminiModel,
   });
   const { srsCards, setSrsSessionCards } = comp;
+  const epub = useEpubReader();
 
   const resolvedTheme = useMemo(
     () => resolveThemePreference(displaySettings.themePreference, systemTheme),
@@ -870,6 +873,20 @@ export function App() {
     goHome();
   }, [setSrsSessionCards, goHome]);
 
+  const handleOpenEpub = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.epub';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const buffer = await file.arrayBuffer();
+      await epub.loadBook(buffer);
+      setViewState({ screen: 'epub-reader' });
+    };
+    input.click();
+  }, [epub, setViewState]);
+
   const launchFeaturedArticle = useCallback(async ({
     fetchArticle,
     source,
@@ -1284,6 +1301,7 @@ export function App() {
             comprehensionAttempts={comp.comprehensionAttempts}
             srsDueCount={srsDueCount}
             onStartSRSReview={handleStartSRSReview}
+            onOpenEpub={handleOpenEpub}
           />
         )}
 
@@ -1451,6 +1469,11 @@ export function App() {
               onClose={closeSRSReview}
             />
           </ComprehensionCheckBoundary>
+        )}
+
+        {/* EPUB Reader */}
+        {viewState.screen === 'epub-reader' && (
+          <EpubReader epub={epub} onBack={goHome} />
         )}
 
         {/* Add Article */}

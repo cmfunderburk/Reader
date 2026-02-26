@@ -249,6 +249,21 @@ export interface ComprehensionQuestionScore {
   keyPointResults?: ComprehensionKeyPointResult[];
 }
 
+// EPUB types
+export interface BookChapter {
+  id: string;
+  title: string;
+  html: string;
+  href: string;
+}
+
+export interface BookState {
+  title: string;
+  lastChapterIndex: number;
+  lastWordIndex: number;
+  lastOpenedAt: number;
+}
+
 // SRS (Spaced Repetition) types
 export type SRSCardStatus = 'active' | 'complete' | 'deferred';
 export type LeitnerBox = 1 | 2 | 3 | 4 | 5;

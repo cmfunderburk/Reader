@@ -32,6 +32,7 @@ export type ViewState =
   | { screen: 'library-settings' }
   | { screen: 'comprehension-builder'; }
   | { screen: 'active-srs-review' }
+  | { screen: 'epub-reader' }
   | { screen: 'add' };
 
 export type ViewAction =
@@ -44,6 +45,7 @@ export type ViewAction =
   | { type: 'open-active-training'; article?: Article }
   | { type: 'open-comprehension-builder' }
   | { type: 'open-srs-review' }
+  | { type: 'open-epub-reader' }
   | { type: 'open-settings' }
   | { type: 'open-library-settings' }
   | { type: 'open-add' };
@@ -78,6 +80,8 @@ export function appViewStateReducer(_state: ViewState, action: ViewAction): View
       return { screen: 'comprehension-builder' };
     case 'open-srs-review':
       return { screen: 'active-srs-review' };
+    case 'open-epub-reader':
+      return { screen: 'epub-reader' };
     case 'open-settings':
       return { screen: 'settings' };
     case 'open-library-settings':
@@ -114,6 +118,8 @@ export function viewStateToAction(state: ViewState): ViewAction {
       return { type: 'open-comprehension-builder' };
     case 'active-srs-review':
       return { type: 'open-srs-review' };
+    case 'epub-reader':
+      return { type: 'open-epub-reader' };
     case 'settings':
       return { type: 'open-settings' };
     case 'library-settings':
