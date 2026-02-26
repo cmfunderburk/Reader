@@ -2,29 +2,29 @@ import type {
   Chunk,
   DisplayMode,
   GenerationDifficulty,
-  SaccadePage,
-  SaccadePacerStyle,
-  SaccadeFocusTarget,
+  GuidedPage,
+  GuidedPacerStyle,
+  GuidedFocusTarget,
 } from '../types';
 import { isBreakChunk } from '../lib/rsvp';
 import { calculateORP, FUNCTION_WORDS } from '../lib/tokenizer';
-import { SaccadeReader } from './SaccadeReader';
+import { GuidedReader } from './GuidedReader';
 
 interface ReaderProps {
   chunk: Chunk | null;
   isPlaying: boolean;
   displayMode: DisplayMode;
-  saccadePage?: SaccadePage | null;
+  guidedPage?: GuidedPage | null;
   showPacer?: boolean;
   wpm: number;
   colorPhase?: 'a' | 'b';
   showORP?: boolean;
-  saccadeShowOVP?: boolean;
-  saccadeShowSweep?: boolean;
-  saccadePacerStyle?: SaccadePacerStyle;
-  saccadeFocusTarget?: SaccadeFocusTarget;
-  saccadeMergeShortFunctionWords?: boolean;
-  saccadeLength?: number;
+  guidedShowOVP?: boolean;
+  guidedShowSweep?: boolean;
+  guidedPacerStyle?: GuidedPacerStyle;
+  guidedFocusTarget?: GuidedFocusTarget;
+  guidedMergeShortFunctionWords?: boolean;
+  guidedLength?: number;
   generationDifficulty?: GenerationDifficulty;
   generationSweepReveal?: boolean;
   generationMaskSeed?: number;
@@ -35,30 +35,30 @@ export function Reader({
   chunk,
   isPlaying,
   displayMode,
-  saccadePage,
+  guidedPage,
   showPacer = true,
   wpm,
   colorPhase,
   showORP = true,
-  saccadeShowOVP,
-  saccadeShowSweep,
-  saccadePacerStyle,
-  saccadeFocusTarget,
-  saccadeMergeShortFunctionWords,
-  saccadeLength,
+  guidedShowOVP,
+  guidedShowSweep,
+  guidedPacerStyle,
+  guidedFocusTarget,
+  guidedMergeShortFunctionWords,
+  guidedLength,
   generationDifficulty = 'normal',
   generationSweepReveal = true,
   generationMaskSeed = 0,
   generationReveal = false,
 }: ReaderProps) {
-  // Saccade mode uses its own reader component
-  if (displayMode === 'saccade') {
-    return <SaccadeReader page={saccadePage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} saccadeShowOVP={saccadeShowOVP} saccadeShowSweep={saccadeShowSweep} saccadePacerStyle={saccadePacerStyle} saccadeFocusTarget={saccadeFocusTarget} saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords} saccadeLength={saccadeLength} />;
+  // Guided mode uses its own reader component
+  if (displayMode === 'guided') {
+    return <GuidedReader page={guidedPage ?? null} chunk={chunk} isPlaying={isPlaying} showPacer={showPacer} wpm={wpm} guidedShowOVP={guidedShowOVP} guidedShowSweep={guidedShowSweep} guidedPacerStyle={guidedPacerStyle} guidedFocusTarget={guidedFocusTarget} guidedMergeShortFunctionWords={guidedMergeShortFunctionWords} guidedLength={guidedLength} />;
   }
   if (displayMode === 'generation') {
     return (
-      <SaccadeReader
-        page={saccadePage ?? null}
+      <GuidedReader
+        page={guidedPage ?? null}
         chunk={chunk}
         isPlaying={isPlaying}
         showPacer={showPacer}
@@ -68,11 +68,11 @@ export function Reader({
         generationSweepReveal={generationSweepReveal}
         generationMaskSeed={generationMaskSeed}
         generationReveal={generationReveal}
-        saccadeShowOVP={false}
-        saccadePacerStyle="sweep"
-        saccadeFocusTarget="fixation"
-        saccadeMergeShortFunctionWords={false}
-        saccadeLength={saccadeLength}
+        guidedShowOVP={false}
+        guidedPacerStyle="sweep"
+        guidedFocusTarget="fixation"
+        guidedMergeShortFunctionWords={false}
+        guidedLength={guidedLength}
       />
     );
   }
@@ -102,7 +102,7 @@ export function Reader({
 
   // For multi-word chunks, place ORP on the first content word (skip function words).
   // Function words are predictable enough to process from a nearby fixation even
-  // without the parafoveal preview that natural saccadic reading provides.
+  // without the parafoveal preview that natural guided reading provides.
   // For single words or when all words are function words, fall back to chunk center.
   let orp = calculateORP(text);
   if (text.includes(' ')) {

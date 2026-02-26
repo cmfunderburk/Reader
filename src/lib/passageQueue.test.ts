@@ -7,7 +7,7 @@ function makePassage(id: string, reviewState: PassageReviewState, updatedAt: num
     id,
     articleId: 'article-1',
     articleTitle: 'Article 1',
-    sourceMode: 'saccade',
+    sourceMode: 'guided',
     captureKind: 'sentence',
     text: 'text',
     createdAt: 1,

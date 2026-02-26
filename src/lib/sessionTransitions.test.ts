@@ -38,7 +38,7 @@ describe('sessionTransitions', () => {
 
   it('goes home and clears snapshot when reading article no longer exists', () => {
     const snapshot: SessionSnapshot = {
-      reading: { articleId: 'missing', chunkIndex: 42, displayMode: 'saccade' },
+      reading: { articleId: 'missing', chunkIndex: 42, displayMode: 'guided' },
       updatedAt: 1,
     };
     expect(planCloseActiveExercise(snapshot, [], 10)).toEqual({
@@ -72,7 +72,7 @@ describe('sessionTransitions', () => {
     });
   });
 
-  it('normalizes non-reading display modes to saccade when resuming', () => {
+  it('normalizes non-reading display modes to guided when resuming', () => {
     const article = makeArticle('a2');
     const snapshot: SessionSnapshot = {
       reading: { articleId: 'a2', chunkIndex: 7, displayMode: 'prediction' },
@@ -83,7 +83,7 @@ describe('sessionTransitions', () => {
       type: 'resume-reading',
       plan: {
         article,
-        displayMode: 'saccade',
+        displayMode: 'guided',
         chunkIndex: 7,
         snapshot: {
           reading: { articleId: 'a2', chunkIndex: 7, displayMode: 'prediction' },
@@ -124,11 +124,11 @@ describe('sessionTransitions', () => {
       article,
       clearSnapshot: true,
       syncWpmActivity: 'paced-reading',
-      loadOptions: { displayMode: 'saccade' },
+      loadOptions: { displayMode: 'guided' },
       saveLastSession: {
         articleId: 'f1',
         activity: 'paced-reading',
-        displayMode: 'saccade',
+        displayMode: 'guided',
       },
       nextView: { screen: 'active-reader' },
       autoPlay: true,
@@ -141,11 +141,11 @@ describe('sessionTransitions', () => {
       article,
       clearSnapshot: true,
       syncWpmActivity: 'paced-reading',
-      loadOptions: { displayMode: 'saccade', mode: 'custom' },
+      loadOptions: { displayMode: 'guided', mode: 'custom' },
       saveLastSession: {
         articleId: 'p1',
         activity: 'paced-reading',
-        displayMode: 'saccade',
+        displayMode: 'guided',
       },
       nextView: { screen: 'active-reader' },
       autoPlay: true,
@@ -175,7 +175,7 @@ describe('sessionTransitions', () => {
       article,
       clearSnapshot: true,
       syncWpmActivity: 'paced-reading',
-      loadOptions: { displayMode: 'saccade' },
+      loadOptions: { displayMode: 'guided' },
       saveLastSession: undefined,
       nextView: { screen: 'active-reader' },
       autoPlay: true,
@@ -203,7 +203,7 @@ describe('sessionTransitions', () => {
       article,
       clearSnapshot: true,
       syncWpmActivity: 'paced-reading',
-      loadOptions: { displayMode: 'saccade' },
+      loadOptions: { displayMode: 'guided' },
       saveLastSession: undefined,
       nextView: { screen: 'active-reader' },
       autoPlay: true,

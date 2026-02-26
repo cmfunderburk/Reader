@@ -1,6 +1,6 @@
 import type {
   TokenMode, PredictionLineWidth, PredictionPreviewMode, ThemePreference,
-  RampCurve, Activity, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget,
+  RampCurve, Activity, DisplayMode, GuidedPacerStyle, GuidedFocusTarget,
   GenerationDifficulty, ComprehensionGeminiModel,
 } from '../types';
 import { COMPREHENSION_GEMINI_MODELS } from '../types';
@@ -13,7 +13,7 @@ export interface Settings {
   wpmByActivity: Record<Activity, number>;
   defaultMode: TokenMode;
   rsvpFontSize: number;
-  saccadeFontSize: number;
+  guidedFontSize: number;
   predictionFontSize: number;
   predictionLineWidth: PredictionLineWidth;
   predictionPreviewMode: PredictionPreviewMode;
@@ -27,12 +27,12 @@ export interface Settings {
   rampInterval: number;
   rsvpAlternateColors: boolean;
   rsvpShowORP: boolean;
-  saccadeShowOVP: boolean;
-  saccadeShowSweep: boolean;
-  saccadePacerStyle: SaccadePacerStyle;
-  saccadeFocusTarget: SaccadeFocusTarget;
-  saccadeMergeShortFunctionWords: boolean;
-  saccadeLength: number;
+  guidedShowOVP: boolean;
+  guidedShowSweep: boolean;
+  guidedPacerStyle: GuidedPacerStyle;
+  guidedFocusTarget: GuidedFocusTarget;
+  guidedMergeShortFunctionWords: boolean;
+  guidedLength: number;
   generationDifficulty: GenerationDifficulty;
   generationSweepReveal: boolean;
   lastSession?: { articleId: string; activity: Activity; displayMode: DisplayMode };
@@ -48,7 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   defaultMode: 'word',
   rsvpFontSize: 2.5,
-  saccadeFontSize: 1.0,
+  guidedFontSize: 1.0,
   predictionFontSize: 1.25,
   predictionLineWidth: 'medium',
   predictionPreviewMode: 'sentences',
@@ -62,12 +62,12 @@ export const DEFAULT_SETTINGS: Settings = {
   rampInterval: 30,
   rsvpAlternateColors: false,
   rsvpShowORP: true,
-  saccadeShowOVP: true,
-  saccadeShowSweep: true,
-  saccadePacerStyle: 'sweep',
-  saccadeFocusTarget: 'fixation',
-  saccadeMergeShortFunctionWords: false,
-  saccadeLength: 10,
+  guidedShowOVP: true,
+  guidedShowSweep: true,
+  guidedPacerStyle: 'sweep',
+  guidedFocusTarget: 'fixation',
+  guidedMergeShortFunctionWords: false,
+  guidedLength: 10,
   generationDifficulty: 'normal',
   generationSweepReveal: true,
 };
@@ -113,11 +113,11 @@ export function loadSettings(): Settings {
     // Keep legacy field aligned with paced reading for older code paths/migrations.
     settings.defaultWpm = settings.wpmByActivity['paced-reading'];
     // Backfill pacer style from legacy sweep toggle.
-    if (!parsed || !('saccadePacerStyle' in parsed)) {
-      settings.saccadePacerStyle = settings.saccadeShowSweep === false ? 'focus' : 'sweep';
+    if (!parsed || !('guidedPacerStyle' in parsed)) {
+      settings.guidedPacerStyle = settings.guidedShowSweep === false ? 'focus' : 'sweep';
     }
     // Clamp values that may have been saved under old wider ranges
-    settings.saccadeLength = Math.max(7, Math.min(15, settings.saccadeLength));
+    settings.guidedLength = Math.max(7, Math.min(15, settings.guidedLength));
     settings.predictionPreviewMode = settings.predictionPreviewMode === 'unlimited' ? 'unlimited' : 'sentences';
     settings.predictionPreviewSentenceCount = Math.max(
       1,

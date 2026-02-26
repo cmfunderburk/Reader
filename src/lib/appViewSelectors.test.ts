@@ -101,7 +101,7 @@ describe('appViewSelectors', () => {
     });
 
     expect(resolveContinueSessionInfo(
-      { articleId: 'missing', activity: 'paced-reading', displayMode: 'saccade' },
+      { articleId: 'missing', activity: 'paced-reading', displayMode: 'guided' },
       [a1]
     )).toBeNull();
     expect(resolveContinueSessionInfo(undefined, [a1])).toBeNull();

@@ -1,25 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import { calculateSaccadeLineDuration, computeFocusTargetTimings, computeFocusTargets, computeLineFixations, computeWordFixations, computeWordFocusTargetsAndFixations, computeWordTargets, flowTextIntoLines, segmentIntoParagraphs, tokenizeParagraphSaccade, tokenizeParagraphRecall, tokenizeRecall, tokenizeSaccade } from './saccade';
+import { calculateGuidedLineDuration, computeFocusTargetTimings, computeFocusTargets, computeLineFixations, computeWordFixations, computeWordFocusTargetsAndFixations, computeWordTargets, flowTextIntoLines, segmentIntoParagraphs, tokenizeParagraphGuided, tokenizeParagraphRecall, tokenizeRecall, tokenizeGuided } from './saccade';
 
-describe('calculateSaccadeLineDuration', () => {
+describe('calculateGuidedLineDuration', () => {
   it('returns 0 for empty text or zero WPM', () => {
-    expect(calculateSaccadeLineDuration(0, 300)).toBe(0);
-    expect(calculateSaccadeLineDuration(50, 0)).toBe(0);
-    expect(calculateSaccadeLineDuration(-1, 300)).toBe(0);
-    expect(calculateSaccadeLineDuration(50, -10)).toBe(0);
+    expect(calculateGuidedLineDuration(0, 300)).toBe(0);
+    expect(calculateGuidedLineDuration(50, 0)).toBe(0);
+    expect(calculateGuidedLineDuration(-1, 300)).toBe(0);
+    expect(calculateGuidedLineDuration(50, -10)).toBe(0);
   });
 
   it('treats 5 characters as 1 word', () => {
     // At 300 WPM, 1 word = 60000/300 = 200ms
     // 5 chars = 1 word = 200ms
-    expect(calculateSaccadeLineDuration(5, 300)).toBe(200);
+    expect(calculateGuidedLineDuration(5, 300)).toBe(200);
   });
 
   it('scales linearly with character count', () => {
     const wpm = 300;
-    const dur10 = calculateSaccadeLineDuration(10, wpm);
-    const dur20 = calculateSaccadeLineDuration(20, wpm);
-    const dur40 = calculateSaccadeLineDuration(40, wpm);
+    const dur10 = calculateGuidedLineDuration(10, wpm);
+    const dur20 = calculateGuidedLineDuration(20, wpm);
+    const dur40 = calculateGuidedLineDuration(40, wpm);
 
     expect(dur20).toBe(dur10 * 2);
     expect(dur40).toBe(dur10 * 4);
@@ -27,28 +27,28 @@ describe('calculateSaccadeLineDuration', () => {
 
   it('scales inversely with WPM', () => {
     const chars = 50; // 10 "words"
-    const dur300 = calculateSaccadeLineDuration(chars, 300);
-    const dur600 = calculateSaccadeLineDuration(chars, 600);
+    const dur300 = calculateGuidedLineDuration(chars, 300);
+    const dur600 = calculateGuidedLineDuration(chars, 600);
 
     expect(dur300).toBe(dur600 * 2);
   });
 
   it('computes correct duration for a typical 80-char line', () => {
     // 80 chars = 16 words. At 300 WPM: 16/300 * 60000 = 3200ms
-    expect(calculateSaccadeLineDuration(80, 300)).toBe(3200);
+    expect(calculateGuidedLineDuration(80, 300)).toBe(3200);
   });
 
   it('computes correct duration at common WPM settings', () => {
     const chars = 50; // 10 words
 
     // 200 WPM: 10/200 * 60000 = 3000ms
-    expect(calculateSaccadeLineDuration(chars, 200)).toBe(3000);
+    expect(calculateGuidedLineDuration(chars, 200)).toBe(3000);
 
     // 400 WPM: 10/400 * 60000 = 1500ms
-    expect(calculateSaccadeLineDuration(chars, 400)).toBe(1500);
+    expect(calculateGuidedLineDuration(chars, 400)).toBe(1500);
 
     // 600 WPM: 10/600 * 60000 = 1000ms
-    expect(calculateSaccadeLineDuration(chars, 600)).toBe(1000);
+    expect(calculateGuidedLineDuration(chars, 600)).toBe(1000);
   });
 });
 
@@ -245,7 +245,7 @@ describe('figure handling', () => {
 
   it('uses figure caption text for saccade chunks', () => {
     const text = '[FIGURE:fig2_3]\n\n[FIGURE 2.3. Posterior predictive check.]';
-    const { pages, chunks } = tokenizeSaccade(text, 15, 'file:///tmp/statistical/');
+    const { pages, chunks } = tokenizeGuided(text, 15, 'file:///tmp/statistical/');
 
     expect(pages.length).toBe(1);
     expect(pages[0].lines[0].type).toBe('figure');
@@ -289,7 +289,7 @@ describe('figure handling', () => {
       '',
       'Delta after figure.',
     ].join('\n');
-    const { pages } = tokenizeSaccade(text, 6, 'file:///tmp/statistical/');
+    const { pages } = tokenizeGuided(text, 6, 'file:///tmp/statistical/');
 
     expect(pages.length).toBeGreaterThanOrEqual(3);
     expect(pages[0].lines.some((line) => line.type === 'figure')).toBe(false);
@@ -354,7 +354,7 @@ describe('figure handling', () => {
 
   it('uses equation placeholders as saccade chunks instead of raw marker text', () => {
     const text = '[EQN_IMAGE:12]';
-    const { pages, chunks } = tokenizeSaccade(
+    const { pages, chunks } = tokenizeGuided(
       text,
       15,
       'file:///tmp/bayesian-stats/',
@@ -379,7 +379,7 @@ describe('figure handling', () => {
       '',
       'Delta line.',
     ].join('\n');
-    const { pages } = tokenizeSaccade(
+    const { pages } = tokenizeGuided(
       text,
       6,
       'file:///tmp/bayesian-stats/',
@@ -443,25 +443,25 @@ describe('segmentIntoParagraphs', () => {
   });
 });
 
-describe('tokenizeParagraphSaccade', () => {
+describe('tokenizeParagraphGuided', () => {
   it('produces one chunk per non-blank line', () => {
     const text = 'The quick brown fox jumps over the lazy dog near the river.';
-    const { page, chunks } = tokenizeParagraphSaccade(text);
+    const { page, chunks } = tokenizeParagraphGuided(text);
     const bodyLines = page.lines.filter(l => l.type !== 'blank' && l.text.trim().length > 0);
     expect(chunks.length).toBe(bodyLines.length);
   });
 
   it('sets pageIndex to 0 for all chunks', () => {
     const text = 'Some text for testing the tokenizer output.';
-    const { chunks } = tokenizeParagraphSaccade(text);
+    const { chunks } = tokenizeParagraphGuided(text);
     for (const chunk of chunks) {
-      expect(chunk.saccade?.pageIndex).toBe(0);
+      expect(chunk.guided?.pageIndex).toBe(0);
     }
   });
 
   it('returns page with lines and lineChunks', () => {
     const text = 'Hello world.';
-    const { page } = tokenizeParagraphSaccade(text);
+    const { page } = tokenizeParagraphGuided(text);
     expect(page.lines.length).toBeGreaterThan(0);
     expect(page.lineChunks.length).toBe(page.lines.length);
   });
@@ -487,7 +487,7 @@ describe('tokenizeParagraphRecall', () => {
     const text = 'A few words here';
     const { chunks } = tokenizeParagraphRecall(text);
     for (const chunk of chunks) {
-      expect(chunk.saccade?.pageIndex).toBe(0);
+      expect(chunk.guided?.pageIndex).toBe(0);
     }
   });
 });

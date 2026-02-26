@@ -2,7 +2,7 @@
 export type Activity = 'paced-reading' | 'active-recall' | 'training' | 'comprehension-check';
 
 // Display mode: how text is presented
-export type DisplayMode = 'rsvp' | 'saccade' | 'generation' | 'prediction' | 'recall' | 'training';
+export type DisplayMode = 'rsvp' | 'guided' | 'generation' | 'prediction' | 'recall' | 'training';
 
 // Token/chunk mode: how text is chunked
 export type TokenMode = 'word' | 'custom';
@@ -12,8 +12,8 @@ export type RampCurve = 'linear' | 'logarithmic';
 export type PredictionLineWidth = 'narrow' | 'medium' | 'wide';
 export type PredictionPreviewMode = 'sentences' | 'unlimited';
 export type ThemePreference = 'dark' | 'light' | 'system';
-export type SaccadePacerStyle = 'sweep' | 'focus';
-export type SaccadeFocusTarget = 'fixation' | 'word';
+export type GuidedPacerStyle = 'sweep' | 'focus';
+export type GuidedFocusTarget = 'fixation' | 'word';
 export type GenerationDifficulty = 'normal' | 'hard' | 'recall';
 
 export const PREDICTION_LINE_WIDTHS: Record<PredictionLineWidth, number> = {
@@ -22,11 +22,11 @@ export const PREDICTION_LINE_WIDTHS: Record<PredictionLineWidth, number> = {
   wide: 85,
 };
 
-export type SaccadeLineType = 'body' | 'heading' | 'blank' | 'figure';
+export type GuidedLineType = 'body' | 'heading' | 'blank' | 'figure';
 
-export interface SaccadeLine {
+export interface GuidedLine {
   text: string;
-  type: SaccadeLineType;
+  type: GuidedLineType;
   level?: number;  // 1-6 for headings
   figureId?: string;
   figureSrc?: string;
@@ -35,12 +35,12 @@ export interface SaccadeLine {
   equationIndex?: number;
 }
 
-export interface SaccadePage {
-  lines: SaccadeLine[];
+export interface GuidedPage {
+  lines: GuidedLine[];
   lineChunks: Chunk[][];  // lineChunks[lineIndex] = chunks for that line
 }
 
-export interface SaccadePosition {
+export interface GuidedPosition {
   pageIndex: number;
   lineIndex: number;
   startChar: number;
@@ -51,7 +51,7 @@ export interface Chunk {
   text: string;
   wordCount: number;
   orpIndex: number; // character index of the ORP within the chunk
-  saccade?: SaccadePosition; // present only in saccade mode
+  guided?: GuidedPosition; // present only in guided mode
 }
 
 export interface Article {
@@ -63,7 +63,7 @@ export interface Article {
   assetBaseUrl?: string;
   url?: string;
   addedAt: number;
-  readPosition: number; // chunk index for RSVP/saccade
+  readPosition: number; // chunk index for RSVP/guided
   predictionPosition?: number; // word index for prediction mode
   isRead: boolean;
   charCount?: number;

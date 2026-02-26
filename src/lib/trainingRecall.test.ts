@@ -89,7 +89,7 @@ describe('trainingRecall', () => {
   it('plans scaffold submission result including completed word and miss details', () => {
     const plan = planScaffoldRecallSubmission({
       predicted: 'alpah',
-      chunk: { text: 'alpha', saccade: { lineIndex: 2, startChar: 5 } },
+      chunk: { text: 'alpha', guided: { lineIndex: 2, startChar: 5 } },
       isDrill: false,
       currentIndex: 1,
       chunkCount: 3,
@@ -105,7 +105,7 @@ describe('trainingRecall', () => {
     });
   });
 
-  it('plans scaffold submission advance with fallback key for non-saccade chunk', () => {
+  it('plans scaffold submission advance with fallback key for non-guided chunk', () => {
     const plan = planScaffoldRecallSubmission({
       predicted: 'beta',
       chunk: { text: 'beta' },
@@ -188,11 +188,11 @@ describe('trainingRecall', () => {
     });
   });
 
-  it('collects preview keys from remaining saccade chunks', () => {
+  it('collects preview keys from remaining guided chunks', () => {
     const keys = collectRemainingPreviewWordKeys([
       { text: 'skip' },
-      { text: 'alpha', saccade: { lineIndex: 2, startChar: 3 } },
-      { text: 'beta', saccade: { lineIndex: 2, startChar: 10 } },
+      { text: 'alpha', guided: { lineIndex: 2, startChar: 3 } },
+      { text: 'beta', guided: { lineIndex: 2, startChar: 10 } },
       { text: 'gamma' },
     ], 1);
 
@@ -203,9 +203,9 @@ describe('trainingRecall', () => {
     const result = consumeRecallTokens({
       tokens: ['alpha', 'beta', 'gamma'],
       chunks: [
-        { text: 'alpha', saccade: { lineIndex: 0, startChar: 0 } },
-        { text: 'beta', saccade: { lineIndex: 0, startChar: 6 } },
-        { text: 'gamma', saccade: { lineIndex: 1, startChar: 0 } },
+        { text: 'alpha', guided: { lineIndex: 0, startChar: 0 } },
+        { text: 'beta', guided: { lineIndex: 0, startChar: 6 } },
+        { text: 'gamma', guided: { lineIndex: 1, startChar: 0 } },
       ],
       startIndex: 0,
       stats: { totalWords: 2, exactMatches: 1, knownWords: 1, detailTotal: 1, detailKnown: 0 },

@@ -213,17 +213,17 @@ export function SettingsPanel({
           </div>
 
           <div className="settings-row">
-            <span className="settings-label">Saccade</span>
+            <span className="settings-label">Guided</span>
             <input
               className="settings-slider"
               type="range"
               min="0.5"
               max="2"
               step="0.1"
-              value={settings.saccadeFontSize}
-              onChange={e => update({ saccadeFontSize: parseFloat(e.target.value) })}
+              value={settings.guidedFontSize}
+              onChange={e => update({ guidedFontSize: parseFloat(e.target.value) })}
             />
-            <span className="settings-value">{settings.saccadeFontSize.toFixed(2)} rem</span>
+            <span className="settings-value">{settings.guidedFontSize.toFixed(2)} rem</span>
           </div>
 
           <div className="settings-row">

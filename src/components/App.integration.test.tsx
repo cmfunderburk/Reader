@@ -161,8 +161,8 @@ describe('App integration smoke', () => {
       chunks: [],
       currentChunk: null,
       currentChunkIndex: 0,
-      currentSaccadePage: null,
-      currentSaccadePageIndex: 0,
+      currentGuidedPage: null,
+      currentGuidedPageIndex: 0,
       displayMode: 'rsvp' as const,
       effectiveWpm: 300,
       goToIndex: vi.fn(),
@@ -181,7 +181,7 @@ describe('App integration smoke', () => {
       rampEnabled: false,
       reset: vi.fn(),
       resetPredictionStats: vi.fn(),
-      saccadePages: [],
+      guidedPages: [],
       setDisplayMode: vi.fn(),
       setLinesPerPage: vi.fn(),
       setMode: vi.fn(),
@@ -272,7 +272,7 @@ describe('App integration smoke', () => {
     expect(mockFetchDailyArticle).not.toHaveBeenCalled();
     expect(mockRsvp.loadArticle).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'a1' }),
-      { displayMode: 'saccade' }
+      { displayMode: 'guided' }
     );
   });
 
@@ -543,16 +543,16 @@ describe('App integration smoke', () => {
         text: string;
         wordCount: number;
         orpIndex: number;
-        saccade?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
+        guided?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
       }>;
       currentChunk: {
         text: string;
         wordCount: number;
         orpIndex: number;
-        saccade?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
+        guided?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
       } | null;
       currentChunkIndex: number;
-      saccadePages: Array<{ lines: Array<{ type: string; text: string }> }>;
+      guidedPages: Array<{ lines: Array<{ type: string; text: string }> }>;
     };
     const article: Article = {
       id: 'a1',
@@ -564,18 +564,18 @@ describe('App integration smoke', () => {
       isRead: false,
     };
     rsvp.article = article;
-    rsvp.displayMode = 'saccade';
+    rsvp.displayMode = 'guided';
     rsvp.chunks = [
       {
         text: 'Alpha',
         wordCount: 1,
         orpIndex: 0,
-        saccade: { pageIndex: 0, lineIndex: 0, startChar: 0, endChar: 5 },
+        guided: { pageIndex: 0, lineIndex: 0, startChar: 0, endChar: 5 },
       },
     ];
     rsvp.currentChunk = rsvp.chunks[0];
     rsvp.currentChunkIndex = 0;
-    rsvp.saccadePages = [
+    rsvp.guidedPages = [
       {
         lines: [{ type: 'body', text: 'Alpha beta gamma.' }],
       },
@@ -616,7 +616,7 @@ describe('App integration smoke', () => {
     expect(savedPassages[0]).toMatchObject({
       articleId: 'a1',
       captureKind: 'sentence',
-      sourceMode: 'saccade',
+      sourceMode: 'guided',
       text: 'Alpha beta gamma.',
     });
   });

@@ -60,7 +60,7 @@ describe('HomeScreen', () => {
 
     const pacedReading = within(pacedReadingCard as HTMLElement);
     expect(pacedReading.getByText('RSVP')).toBeTruthy();
-    expect(pacedReading.getByText('Saccade')).toBeTruthy();
+    expect(pacedReading.getByText('Guided')).toBeTruthy();
     expect(pacedReading.getByText('Generation')).toBeTruthy();
   });
 

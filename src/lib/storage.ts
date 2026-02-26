@@ -185,7 +185,7 @@ export function updateArticlePosition(articleId: string, position: number): void
 }
 
 /**
- * Update prediction position for an article (separate from RSVP/saccade position).
+ * Update prediction position for an article (separate from RSVP/guided position).
  */
 export function updateArticlePredictionPosition(articleId: string, position: number): void {
   updateArticleInStorage(articleId, (article) => (

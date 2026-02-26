@@ -17,10 +17,10 @@ html, body, #root {
   --error:          #e98585;
   --text-color-a:   #8ec8a0;
   --text-color-b:   #b4a0c4;
-  --saccade-ovp-color: #e0b038;
-  --saccade-ovp-active-color: #e9be66;
-  --saccade-focus-highlight: rgba(224, 176, 56, 0.16);
-  --saccade-sweep-color: rgba(212, 160, 74, 0.06);
+  --guided-ovp-color: #e0b038;
+  --guided-ovp-active-color: #e9be66;
+  --guided-focus-highlight: rgba(224, 176, 56, 0.16);
+  --guided-sweep-color: rgba(212, 160, 74, 0.06);
   --noise-opacity:   0.025;
 }
 
@@ -38,10 +38,10 @@ html[data-theme='dark'] {
   --error:          #e98585;
   --text-color-a:   #8ec8a0;
   --text-color-b:   #b4a0c4;
-  --saccade-ovp-color: #e0b038;
-  --saccade-ovp-active-color: #e9be66;
-  --saccade-focus-highlight: rgba(224, 176, 56, 0.16);
-  --saccade-sweep-color: rgba(212, 160, 74, 0.06);
+  --guided-ovp-color: #e0b038;
+  --guided-ovp-active-color: #e9be66;
+  --guided-focus-highlight: rgba(224, 176, 56, 0.16);
+  --guided-sweep-color: rgba(212, 160, 74, 0.06);
 }
 
 html[data-theme='light'] {
@@ -58,10 +58,10 @@ html[data-theme='light'] {
   --error:          #b24a40;
   --text-color-a:   #2d7f61;
   --text-color-b:   #6c5897;
-  --saccade-ovp-color: #84470f;
-  --saccade-ovp-active-color: #a9601a;
-  --saccade-focus-highlight: rgba(145, 82, 20, 0.15);
-  --saccade-sweep-color: rgba(145, 82, 20, 0.1);
+  --guided-ovp-color: #84470f;
+  --guided-ovp-active-color: #a9601a;
+  --guided-focus-highlight: rgba(145, 82, 20, 0.15);
+  --guided-sweep-color: rgba(145, 82, 20, 0.1);
   --noise-opacity:  0.015;
 }
 
@@ -226,29 +226,29 @@ button {
   letter-spacing: 0.5em;
 }
 
-/* Saccade Mode */
-.saccade-reader {
+/* Guided Mode */
+.guided-reader {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.saccade-page {
+.guided-page {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', 'Cascadia Code', 'Source Code Pro', 'Menlo', 'Monaco', 'Consolas', monospace;
-  font-size: var(--saccade-font-size, 1rem);
+  font-size: var(--guided-font-size, 1rem);
   line-height: 1.7;
   text-align: left;
   max-width: 82ch;  /* 80 chars + buffer */
   max-height: 100%;
 }
 
-.saccade-line {
+.guided-line {
   display: block;
   min-height: 1.7em;
   white-space: pre;
 }
 
-.saccade-line-figure {
+.guided-line-figure {
   white-space: normal;
   min-height: 0;
   margin: 0.4rem 0 1rem;
@@ -261,32 +261,32 @@ button {
   align-items: center;
 }
 
-.saccade-line-equation {
+.guided-line-equation {
   margin: 0.2rem 0 0.5rem;
   padding: 0.35rem 0.5rem;
 }
 
-.saccade-line-figure-active {
+.guided-line-figure-active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.saccade-figure-image {
+.guided-figure-image {
   display: block;
   width: auto;
   max-width: 100%;
-  max-height: var(--saccade-figure-max-height, clamp(180px, 46vh, 520px));
+  max-height: var(--guided-figure-max-height, clamp(180px, 46vh, 520px));
   height: auto;
   object-fit: contain;
   border-radius: 6px;
   background: var(--bg-secondary);
 }
 
-.saccade-line-equation .saccade-figure-image {
+.guided-line-equation .guided-figure-image {
   max-height: clamp(24px, 7vh, 88px);
 }
 
-.saccade-figure-button {
+.guided-figure-button {
   border: none;
   background: transparent;
   padding: 0;
@@ -294,28 +294,28 @@ button {
   cursor: zoom-in;
 }
 
-.saccade-figure-button:disabled {
+.guided-figure-button:disabled {
   cursor: default;
 }
 
-.saccade-figure-button:not(:disabled):hover .saccade-figure-image {
+.guided-figure-button:not(:disabled):hover .guided-figure-image {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
-.saccade-figure-caption {
+.guided-figure-caption {
   margin-top: 0.55rem;
   color: var(--text-secondary);
   font-size: 0.88em;
   line-height: 1.45;
 }
 
-.saccade-figure-missing {
+.guided-figure-missing {
   color: var(--text-muted);
   font-style: italic;
   font-size: 0.9em;
 }
 
-.saccade-figure-lightbox {
+.guided-figure-lightbox {
   position: fixed;
   inset: 0;
   z-index: 10001;
@@ -326,7 +326,7 @@ button {
   padding: 1.25rem;
 }
 
-.saccade-figure-lightbox-dialog {
+.guided-figure-lightbox-dialog {
   position: relative;
   max-width: min(96vw, 1300px);
   max-height: 92vh;
@@ -340,7 +340,7 @@ button {
   align-items: center;
 }
 
-.saccade-figure-lightbox-image {
+.guided-figure-lightbox-image {
   display: block;
   width: auto;
   max-width: 100%;
@@ -351,7 +351,7 @@ button {
   margin: 0 auto;
 }
 
-.saccade-figure-lightbox-caption {
+.guided-figure-lightbox-caption {
   margin-top: 0.75rem;
   color: var(--text-secondary);
   font-size: 0.9rem;
@@ -359,7 +359,7 @@ button {
   align-self: stretch;
 }
 
-.saccade-figure-lightbox-close {
+.guided-figure-lightbox-close {
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
@@ -375,18 +375,18 @@ button {
   place-items: center;
 }
 
-/* Saccade headings */
-.saccade-line-heading {
+/* Guided headings */
+.guided-line-heading {
   text-align: center;
 }
 
 /* Body text styling */
-.saccade-body {
+.guided-body {
   color: var(--text-primary);
 }
 
 /* Heading text styling */
-.saccade-heading {
+.guided-heading {
   font-weight: 600;
 }
 
@@ -418,43 +418,43 @@ button {
 }
 
 /* Inline fixation-point highlights */
-.saccade-fixation {
-  color: var(--saccade-ovp-color);
+.guided-fixation {
+  color: var(--guided-ovp-color);
   font-weight: 600;
 }
 
-.saccade-line-focus {
+.guided-line-focus {
   position: relative;
 }
 
-.saccade-focus-target {
+.guided-focus-target {
   background: transparent;
 }
 
 /* Active fixation target — amber pulse, flows through ORPs via staggered delays */
-.saccade-fixation-active {
+.guided-fixation-active {
   animation-name: fixation-active;
   animation-timing-function: step-start;
   animation-fill-mode: both;
 }
 
 @keyframes fixation-active {
-  0%, 100% { color: var(--saccade-ovp-color); }
-  1%, 99% { color: var(--saccade-ovp-active-color); }
+  0%, 100% { color: var(--guided-ovp-color); }
+  1%, 99% { color: var(--guided-ovp-active-color); }
 }
 
 /* Line sweep pacer — stepped to align with fixation positions */
-.saccade-line-sweep {
+.guided-line-sweep {
   position: relative;
 }
 
-.saccade-sweep {
+.guided-sweep {
   position: absolute;
   top: 0;
   left: 0;
   bottom: 0;
   width: 0;
-  background: var(--saccade-sweep-color);
+  background: var(--guided-sweep-color);
   pointer-events: none;
 }
 

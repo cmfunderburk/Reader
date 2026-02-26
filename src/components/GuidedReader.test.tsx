@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import type { SaccadeLine } from '../types';
-import { SaccadeLineComponent } from './SaccadeReader';
-import type { SaccadeLineProps } from './SaccadeReader';
+import type { GuidedLine } from '../types';
+import { GuidedLineComponent } from './GuidedReader';
+import type { GuidedLineProps } from './GuidedReader';
 
-function renderLine(line: SaccadeLine, overrides: Partial<SaccadeLineProps> = {}) {
+function renderLine(line: GuidedLine, overrides: Partial<GuidedLineProps> = {}) {
   return render(
-    <SaccadeLineComponent
+    <GuidedLineComponent
       line={line}
       lineIndex={0}
       isActiveLine
@@ -14,24 +14,24 @@ function renderLine(line: SaccadeLine, overrides: Partial<SaccadeLineProps> = {}
       isFutureLine={false}
       showPacer
       wpm={300}
-      saccadePacerStyle="sweep"
+      guidedPacerStyle="sweep"
       {...overrides}
     />
   );
 }
 
-describe('SaccadeLineComponent', () => {
+describe('GuidedLineComponent', () => {
   it('centers sweep start for heading lines', () => {
     const headingText = 'Centered heading';
     const { container } = renderLine({ text: headingText, type: 'heading' });
-    const sweep = container.querySelector('.saccade-sweep') as HTMLSpanElement | null;
+    const sweep = container.querySelector('.guided-sweep') as HTMLSpanElement | null;
     expect(sweep).not.toBeNull();
     expect(sweep?.style.left).toBe(`calc(50% - ${headingText.length / 2}ch)`);
   });
 
   it('keeps sweep start at left edge for body lines', () => {
     const { container } = renderLine({ text: 'body line', type: 'body' });
-    const sweep = container.querySelector('.saccade-sweep') as HTMLSpanElement | null;
+    const sweep = container.querySelector('.guided-sweep') as HTMLSpanElement | null;
     expect(sweep).not.toBeNull();
     expect(sweep?.style.left).toBe('0px');
   });

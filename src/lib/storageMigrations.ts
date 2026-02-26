@@ -105,6 +105,49 @@ function migrateDrillStateToV1(): void {
   }
 }
 
+// --- V4 migration: rename saccade* settings keys to guided* ---
+
+const SACCADE_TO_GUIDED_KEYS: [string, string][] = [
+  ['saccadeFontSize', 'guidedFontSize'],
+  ['saccadeShowOVP', 'guidedShowOVP'],
+  ['saccadeShowSweep', 'guidedShowSweep'],
+  ['saccadePacerStyle', 'guidedPacerStyle'],
+  ['saccadeFocusTarget', 'guidedFocusTarget'],
+  ['saccadeMergeShortFunctionWords', 'guidedMergeShortFunctionWords'],
+  ['saccadeLength', 'guidedLength'],
+];
+
+function migrateSettingsToV4(): void {
+  const raw = localStorage.getItem(STORAGE_KEYS.settings);
+  if (!raw) return;
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    let changed = false;
+
+    for (const [oldKey, newKey] of SACCADE_TO_GUIDED_KEYS) {
+      if (oldKey in parsed && !(newKey in parsed)) {
+        parsed[newKey] = parsed[oldKey];
+        delete parsed[oldKey];
+        changed = true;
+      }
+    }
+
+    // Migrate lastSession.displayMode from 'saccade' to 'guided'
+    const lastSession = parsed.lastSession as { displayMode?: string } | undefined;
+    if (lastSession?.displayMode === 'saccade') {
+      lastSession.displayMode = 'guided';
+      changed = true;
+    }
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEYS.settings, JSON.stringify(parsed));
+    }
+  } catch {
+    // Keep existing data untouched when migration cannot parse settings.
+  }
+}
+
 // --- Migration runner ---
 
 export function runStorageMigrations(): void {
@@ -132,6 +175,10 @@ export function runStorageMigrations(): void {
 
   if (currentVersion < 3) {
     migrateToV3?.();
+  }
+
+  if (currentVersion < 4) {
+    migrateSettingsToV4();
   }
 
   saveStorageSchemaVersion(CURRENT_STORAGE_SCHEMA_VERSION);

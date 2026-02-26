@@ -15,4 +15,4 @@ export const STORAGE_KEYS = {
   comprehensionApiKey: 'speedread_comprehension_api_key',
 } as const;
 
-export const CURRENT_STORAGE_SCHEMA_VERSION = 3;
+export const CURRENT_STORAGE_SCHEMA_VERSION = 4;

@@ -4,7 +4,7 @@ import type { ViewState } from './appViewState';
 
 interface ResumeReadingPlan {
   article: Article;
-  displayMode: 'saccade' | 'generation' | 'rsvp';
+  displayMode: 'guided' | 'generation' | 'rsvp';
   chunkIndex: number;
   snapshot: SessionSnapshot;
 }
@@ -30,15 +30,15 @@ export interface SessionLaunchPlan {
   autoPlay: boolean;
 }
 
-function normalizeReadingDisplayMode(displayMode: DisplayMode): 'saccade' | 'generation' | 'rsvp' {
-  return displayMode === 'saccade' || displayMode === 'generation' || displayMode === 'rsvp'
+function normalizeReadingDisplayMode(displayMode: DisplayMode): 'guided' | 'generation' | 'rsvp' {
+  return displayMode === 'guided' || displayMode === 'generation' || displayMode === 'rsvp'
     ? displayMode
-    : 'saccade';
+    : 'guided';
 }
 
 function createPacedReadingLaunchPlan(
   article: Article,
-  displayMode: 'saccade' | 'generation' | 'rsvp',
+  displayMode: 'guided' | 'generation' | 'rsvp',
   mode?: TokenMode
 ): SessionLaunchPlan {
   return {
@@ -88,7 +88,7 @@ export function planCloseActiveExercise(
 }
 
 export function planFeaturedArticleLaunch(article: Article): SessionLaunchPlan {
-  return createPacedReadingLaunchPlan(article, 'saccade');
+  return createPacedReadingLaunchPlan(article, 'guided');
 }
 
 export function planStartReadingFromPreview(
@@ -97,7 +97,7 @@ export function planStartReadingFromPreview(
   mode: TokenMode
 ): SessionLaunchPlan | null {
   if (activity === 'paced-reading') {
-    return createPacedReadingLaunchPlan(article, 'saccade', mode);
+    return createPacedReadingLaunchPlan(article, 'guided', mode);
   }
 
   if (activity === 'active-recall') {
@@ -141,7 +141,7 @@ export function planContinueSession(info: ContinueSessionInfo): SessionLaunchPla
 
   if (info.activity === 'comprehension-check') {
     return {
-      ...createPacedReadingLaunchPlan(info.article, 'saccade'),
+      ...createPacedReadingLaunchPlan(info.article, 'guided'),
       saveLastSession: undefined,
     };
   }

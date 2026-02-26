@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo, KeyboardEvent } from 'react';
-import type { Article, Chunk, TrainingParagraphResult, SaccadePacerStyle, SaccadeFocusTarget } from '../types';
+import type { Article, Chunk, TrainingParagraphResult, GuidedPacerStyle, GuidedFocusTarget } from '../types';
 import type { CorpusArticle, CorpusFamily } from '../types/electron';
-import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphSaccade, tokenizeParagraphRecall, calculateSaccadeLineDuration, countWords } from '../lib/saccade';
+import { segmentIntoParagraphs, segmentIntoSentences, tokenizeParagraphGuided, tokenizeParagraphRecall, calculateGuidedLineDuration, countWords } from '../lib/saccade';
 import {
   loadTrainingHistory,
   saveTrainingHistory,
@@ -20,7 +20,7 @@ import { planTrainingReadingStart, planTrainingReadingStep } from '../lib/traini
 import type { TrainingFinalWord } from '../lib/trainingScoring';
 import { planFinishRecallPhase } from '../lib/trainingFeedback';
 import type { TrainingHistory } from '../lib/storage';
-import { SaccadeLineComponent } from './SaccadeReader';
+import { GuidedLineComponent } from './GuidedReader';
 import { MAX_WPM, MIN_WPM } from '../lib/wpm';
 import { useTrainingRecall } from '../hooks/useTrainingRecall';
 import { useTrainingDrillState, DRILL_TIERS } from '../hooks/useTrainingDrillState';
@@ -42,12 +42,12 @@ const DRILL_FAMILIES: Array<{ id: CorpusFamily; label: string }> = [
 interface TrainingReaderProps {
   article?: Article;
   initialWpm: number;
-  saccadeShowOVP?: boolean;
-  saccadeShowSweep?: boolean;
-  saccadePacerStyle?: SaccadePacerStyle;
-  saccadeFocusTarget?: SaccadeFocusTarget;
-  saccadeMergeShortFunctionWords?: boolean;
-  saccadeLength?: number;
+  guidedShowOVP?: boolean;
+  guidedShowSweep?: boolean;
+  guidedPacerStyle?: GuidedPacerStyle;
+  guidedFocusTarget?: GuidedFocusTarget;
+  guidedMergeShortFunctionWords?: boolean;
+  guidedLength?: number;
   onClose: () => void;
   onWpmChange: (wpm: number) => void;
   onSelectArticle?: () => void;
@@ -72,12 +72,12 @@ interface ParagraphStats {
 export function TrainingReader({
   article,
   initialWpm,
-  saccadeShowOVP,
-  saccadeShowSweep,
-  saccadePacerStyle,
-  saccadeFocusTarget,
-  saccadeMergeShortFunctionWords,
-  saccadeLength,
+  guidedShowOVP,
+  guidedShowSweep,
+  guidedPacerStyle,
+  guidedFocusTarget,
+  guidedMergeShortFunctionWords,
+  guidedLength,
   onClose,
   onWpmChange,
   onSelectArticle,
@@ -197,9 +197,9 @@ export function TrainingReader({
     ? drillRoundText
     : (sentenceChunks[currentSentenceIndex] ?? currentParagraph);
 
-  // Saccade data for reading phase
-  const saccadeData = useMemo(
-    () => tokenizeParagraphSaccade(currentText),
+  // Guided data for reading phase
+  const guidedData = useMemo(
+    () => tokenizeParagraphGuided(currentText),
     [currentText]
   );
 
@@ -228,14 +228,14 @@ export function TrainingReader({
   // Find non-blank line indices
   const bodyLineIndices = useMemo(() => {
     const indices: number[] = [];
-    for (let i = 0; i < saccadeData.page.lines.length; i++) {
-      const line = saccadeData.page.lines[i];
+    for (let i = 0; i < guidedData.page.lines.length; i++) {
+      const line = guidedData.page.lines[i];
       if (line.type !== 'blank' && line.text.trim().length > 0) {
         indices.push(i);
       }
     }
     return indices;
-  }, [saccadeData.page.lines]);
+  }, [guidedData.page.lines]);
 
   // Lead-in: show text with static ORPs for 1s before sweep begins
   useEffect(() => {
@@ -268,8 +268,8 @@ export function TrainingReader({
       const lineIdx = stepPlan.lineIndex;
       setCurrentLineIndex(lineIdx);
 
-      const lineText = saccadeData.page.lines[lineIdx].text;
-      const duration = calculateSaccadeLineDuration(lineText.length, wpm);
+      const lineText = guidedData.page.lines[lineIdx].text;
+      const duration = calculateGuidedLineDuration(lineText.length, wpm);
 
       readingStepRef.current = stepPlan.nextStep;
       timerRef.current = setTimeout(advanceLine, duration);
@@ -280,7 +280,7 @@ export function TrainingReader({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [phase, paused, readingLeadIn, bodyLineIndices, saccadeData.page.lines, wpm, currentParagraphIndex]);
+  }, [phase, paused, readingLeadIn, bodyLineIndices, guidedData.page.lines, wpm, currentParagraphIndex]);
 
   // --- Recall handlers ---
   const finishRecallPhase = useCallback((stats: ParagraphStats, finalWord: TrainingFinalWord | null) => {
@@ -554,15 +554,15 @@ export function TrainingReader({
       : 'WPM stays fixed at your setting and each round is one sentence.';
     const drillDescription = drillCorpusFamily === 'wiki'
       ? (drillTier === 'easy'
-        ? 'Simple English Wikipedia (Good and Very Good articles). Read at saccade pace, then recall.'
+        ? 'Simple English Wikipedia (Good and Very Good articles). Read at guided pace, then recall.'
         : drillTier === 'hard'
-          ? 'Standard Wikipedia Good Article introductions. Read at saccade pace, then recall.'
-          : 'Readability-graded Standard Wikipedia articles (familiar vocabulary, moderate sentence length). Read at saccade pace, then recall.')
+          ? 'Standard Wikipedia Good Article introductions. Read at guided pace, then recall.'
+          : 'Readability-graded Standard Wikipedia articles (familiar vocabulary, moderate sentence length). Read at guided pace, then recall.')
       : (drillTier === 'easy'
-        ? 'Short stories and essays, easiest readability tier. Read at saccade pace, then recall.'
+        ? 'Short stories and essays, easiest readability tier. Read at guided pace, then recall.'
         : drillTier === 'hard'
-          ? 'Short stories and essays, hardest readability tier. Read at saccade pace, then recall.'
-          : 'Short stories and essays, medium readability tier. Read at saccade pace, then recall.');
+          ? 'Short stories and essays, hardest readability tier. Read at guided pace, then recall.'
+          : 'Short stories and essays, medium readability tier. Read at guided pace, then recall.');
     return (
       <div className="training-reader">
         <div className="training-setup">
@@ -588,7 +588,7 @@ export function TrainingReader({
           <p className="training-setup-desc">
             {isDrill
               ? drillDescription
-              : 'Read each paragraph at saccade pace, then recall its words.'
+              : 'Read each paragraph at guided pace, then recall its words.'
             }
             {' '}{isDrill ? drillPacingText : 'WPM adjusts based on your comprehension score.'}
           </p>
@@ -994,9 +994,9 @@ export function TrainingReader({
             Exit
           </button>
         </div>
-        <div className="saccade-page">
-          {saccadeData.page.lines.map((line, lineIndex) => (
-            <SaccadeLineComponent
+        <div className="guided-page">
+          {guidedData.page.lines.map((line, lineIndex) => (
+            <GuidedLineComponent
               key={lineIndex}
               line={line}
               lineIndex={lineIndex}
@@ -1005,12 +1005,12 @@ export function TrainingReader({
               isFutureLine={!paused && !readingLeadIn && currentLineIndex >= 0 && lineIndex > currentLineIndex}
               showPacer={!paused && !readingLeadIn}
               wpm={wpm}
-              saccadeShowOVP={saccadeShowOVP}
-              saccadeShowSweep={saccadeShowSweep}
-              saccadePacerStyle={saccadePacerStyle}
-              saccadeFocusTarget={saccadeFocusTarget}
-              saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords}
-              saccadeLength={saccadeLength}
+              guidedShowOVP={guidedShowOVP}
+              guidedShowSweep={guidedShowSweep}
+              guidedPacerStyle={guidedPacerStyle}
+              guidedFocusTarget={guidedFocusTarget}
+              guidedMergeShortFunctionWords={guidedMergeShortFunctionWords}
+              guidedLength={guidedLength}
             />
           ))}
         </div>
@@ -1047,11 +1047,11 @@ export function TrainingReader({
           <span className="training-paused-text">Paused</span>
         </div>
       ) : (
-      <div className="saccade-page">
+      <div className="guided-page">
         {recallPage.lines.map((line, lineIndex) => {
           if (line.type === 'blank') {
             return (
-              <div key={lineIndex} className="saccade-line">
+              <div key={lineIndex} className="guided-line">
                 <span>{'\u00A0'}</span>
               </div>
             );
@@ -1063,7 +1063,7 @@ export function TrainingReader({
           return (
             <div
               key={lineIndex}
-              className={`saccade-line ${isHeading ? 'saccade-line-heading' : ''}`}
+              className={`guided-line ${isHeading ? 'guided-line-heading' : ''}`}
             >
               <TrainingRecallLine
                 lineText={line.text}
@@ -1146,7 +1146,7 @@ function TrainingRecallLine({
   previewWordKeys,
 }: TrainingRecallLineProps) {
   if (lineChunks.length === 0) {
-    const className = isHeading ? 'saccade-heading' : 'saccade-body';
+    const className = isHeading ? 'guided-heading' : 'guided-body';
     return <span className={className}>{lineText || '\u00A0'}</span>;
   }
 
@@ -1155,7 +1155,7 @@ function TrainingRecallLine({
 
   for (let i = 0; i < lineChunks.length; i++) {
     const chunk = lineChunks[i];
-    const sac = chunk.saccade!;
+    const sac = chunk.guided!;
 
     if (sac.startChar > lastEnd) {
       elements.push(
@@ -1165,18 +1165,18 @@ function TrainingRecallLine({
       );
     }
 
-    const isCurrent = currentChunk?.saccade &&
-      sac.lineIndex === currentChunk.saccade.lineIndex &&
-      sac.startChar === currentChunk.saccade.startChar;
+    const isCurrent = currentChunk?.guided &&
+      sac.lineIndex === currentChunk.guided.lineIndex &&
+      sac.startChar === currentChunk.guided.startChar;
 
     const wordKey = makeRecallWordKey(sac.lineIndex, sac.startChar);
     const completed = completedWords.get(wordKey);
 
     if (completed) {
       const cls = completed.forfeited
-        ? (isHeading ? 'saccade-heading recall-forfeited' : 'recall-forfeited')
+        ? (isHeading ? 'guided-heading recall-forfeited' : 'recall-forfeited')
         : isHeading
-          ? completed.correct ? 'saccade-heading recall-correct' : 'saccade-heading recall-wrong'
+          ? completed.correct ? 'guided-heading recall-correct' : 'guided-heading recall-wrong'
           : completed.correct ? 'recall-correct' : 'recall-wrong';
       elements.push(
         <span key={`word-${i}`} className={cls}>{completed.text}</span>
@@ -1218,7 +1218,7 @@ function TrainingRecallLine({
       const word = chunk.text;
       const firstLetter = word[0] || '';
       const rest = word.slice(1);
-      const cls = isHeading ? 'saccade-heading' : '';
+      const cls = isHeading ? 'guided-heading' : '';
       elements.push(
         <span key={`word-${i}`} className={cls}>
           {showFirstLetterScaffold ? (

@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
-import type { Chunk, SaccadePage, PredictionResult, PredictionStats } from '../types';
+import type { Chunk, GuidedPage, PredictionResult, PredictionStats } from '../types';
 import { normalizedLoss, isWordKnown } from '../lib/levenshtein';
 import { LossMeter } from './LossMeter';
 import { PredictionComplete } from './PredictionComplete';
 
 interface RecallReaderProps {
-  pages: SaccadePage[];
+  pages: GuidedPage[];
   chunks: Chunk[];
   currentChunkIndex: number;
   onAdvance: () => void;
@@ -52,7 +52,7 @@ export function RecallReader({
   const currentChunk = chunks[currentChunkIndex] ?? null;
   const isComplete = currentChunkIndex >= chunks.length;
 
-  const currentPageIndex = currentChunk?.saccade?.pageIndex ?? 0;
+  const currentPageIndex = currentChunk?.guided?.pageIndex ?? 0;
   const currentPage = pages[currentPageIndex] ?? null;
 
   // Focus input when ready
@@ -90,9 +90,9 @@ export function RecallReader({
     onPredictionResult(result);
 
     const key = makeWordKey(
-      currentChunk.saccade!.pageIndex,
-      currentChunk.saccade!.lineIndex,
-      currentChunk.saccade!.startChar
+      currentChunk.guided!.pageIndex,
+      currentChunk.guided!.lineIndex,
+      currentChunk.guided!.startChar
     );
 
     if (known) {
@@ -170,7 +170,7 @@ export function RecallReader({
 
   if (!currentPage) {
     return (
-      <div className="reader saccade-reader">
+      <div className="reader guided-reader">
         <div className="reader-display">
           <span className="reader-placeholder">No article loaded</span>
         </div>
@@ -180,11 +180,11 @@ export function RecallReader({
 
   return (
     <div className="recall-reader">
-      <div className="saccade-page">
+      <div className="guided-page">
         {currentPage.lines.map((line, lineIndex) => {
           if (line.type === 'blank') {
             return (
-              <div key={lineIndex} className="saccade-line">
+              <div key={lineIndex} className="guided-line">
                 <span>{'\u00A0'}</span>
               </div>
             );
@@ -196,7 +196,7 @@ export function RecallReader({
           return (
             <div
               key={lineIndex}
-              className={`saccade-line ${isHeading ? 'saccade-line-heading' : ''}`}
+              className={`guided-line ${isHeading ? 'guided-line-heading' : ''}`}
             >
               <RecallLine
                 lineText={line.text}
@@ -261,7 +261,7 @@ function RecallLine({
   inputContainerRef,
 }: RecallLineProps) {
   if (lineChunks.length === 0) {
-    const className = isHeading ? 'saccade-heading' : 'saccade-body';
+    const className = isHeading ? 'guided-heading' : 'guided-body';
     return <span className={className}>{lineText || '\u00A0'}</span>;
   }
 
@@ -270,7 +270,7 @@ function RecallLine({
 
   for (let i = 0; i < lineChunks.length; i++) {
     const chunk = lineChunks[i];
-    const sac = chunk.saccade!;
+    const sac = chunk.guided!;
 
     // Add spacing before this word
     if (sac.startChar > lastEnd) {
@@ -281,10 +281,10 @@ function RecallLine({
       );
     }
 
-    const isCurrent = currentChunk?.saccade &&
-      sac.pageIndex === currentChunk.saccade.pageIndex &&
-      sac.lineIndex === currentChunk.saccade.lineIndex &&
-      sac.startChar === currentChunk.saccade.startChar;
+    const isCurrent = currentChunk?.guided &&
+      sac.pageIndex === currentChunk.guided.pageIndex &&
+      sac.lineIndex === currentChunk.guided.lineIndex &&
+      sac.startChar === currentChunk.guided.startChar;
 
     const wordKey = makeWordKey(sac.pageIndex, sac.lineIndex, sac.startChar);
     const completed = completedWords.get(wordKey);
@@ -292,7 +292,7 @@ function RecallLine({
     if (completed) {
       // Revealed word
       const cls = isHeading
-        ? completed.correct ? 'saccade-heading recall-correct' : 'saccade-heading recall-wrong'
+        ? completed.correct ? 'guided-heading recall-correct' : 'guided-heading recall-wrong'
         : completed.correct ? 'recall-correct' : 'recall-wrong';
       elements.push(
         <span key={`word-${i}`} className={cls}>{completed.text}</span>
@@ -326,7 +326,7 @@ function RecallLine({
       const word = chunk.text;
       const firstLetter = word[0] || '';
       const rest = word.slice(1);
-      const cls = isHeading ? 'saccade-heading' : '';
+      const cls = isHeading ? 'guided-heading' : '';
       elements.push(
         <span key={`word-${i}`} className={cls}>
           <span className="recall-scaffold-first">{firstLetter}</span>

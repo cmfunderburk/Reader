@@ -1,7 +1,7 @@
 import { isSentenceBoundaryChunk } from './predictionPreview';
 import type { PassageCaptureKind } from '../types';
 
-export interface FlatSaccadeCaptureLine {
+export interface FlatGuidedCaptureLine {
   globalLineIndex: number;
   pageIndex: number;
   lineIndex: number;
@@ -18,10 +18,10 @@ interface SentenceTokenMatch {
 
 interface CaptureSentencePlan {
   sentenceText: string;
-  sentenceLines: FlatSaccadeCaptureLine[];
+  sentenceLines: FlatGuidedCaptureLine[];
 }
 
-interface CaptureSegment extends FlatSaccadeCaptureLine {
+interface CaptureSegment extends FlatGuidedCaptureLine {
   start: number;
   end: number;
 }
@@ -31,7 +31,7 @@ export function normalizeCaptureLineText(text: string): string {
 }
 
 export function getContiguousNonBlankLineRange(
-  flatLines: FlatSaccadeCaptureLine[],
+  flatLines: FlatGuidedCaptureLine[],
   centerGlobalLineIndex: number
 ): [number, number] | null {
   if (centerGlobalLineIndex < 0 || centerGlobalLineIndex >= flatLines.length) return null;
@@ -57,7 +57,7 @@ function buildSentenceTokenMatches(paragraphText: string): SentenceTokenMatch[] 
   }));
 }
 
-function buildCaptureSegments(paragraphRefs: FlatSaccadeCaptureLine[]): CaptureSegment[] {
+function buildCaptureSegments(paragraphRefs: FlatGuidedCaptureLine[]): CaptureSegment[] {
   let cursor = 0;
   return paragraphRefs.map((line) => {
     const text = normalizeCaptureLineText(line.text);
@@ -69,7 +69,7 @@ function buildCaptureSegments(paragraphRefs: FlatSaccadeCaptureLine[]): CaptureS
 }
 
 export function planSentenceCapture(
-  flatLines: FlatSaccadeCaptureLine[],
+  flatLines: FlatGuidedCaptureLine[],
   centerGlobalLineIndex: number
 ): CaptureSentencePlan | null {
   const paragraphRange = getContiguousNonBlankLineRange(flatLines, centerGlobalLineIndex);
@@ -141,9 +141,9 @@ export function planSentenceCapture(
 }
 
 export function planParagraphCapture(
-  flatLines: FlatSaccadeCaptureLine[],
+  flatLines: FlatGuidedCaptureLine[],
   centerGlobalLineIndex: number
-): FlatSaccadeCaptureLine[] | null {
+): FlatGuidedCaptureLine[] | null {
   const paragraphRange = getContiguousNonBlankLineRange(flatLines, centerGlobalLineIndex);
   if (!paragraphRange) return null;
   const [start, end] = paragraphRange;
@@ -151,15 +151,15 @@ export function planParagraphCapture(
 }
 
 export function planLastLinesCapture(
-  flatLines: FlatSaccadeCaptureLine[],
+  flatLines: FlatGuidedCaptureLine[],
   centerGlobalLineIndex: number,
   lineCount: number
-): FlatSaccadeCaptureLine[] {
+): FlatGuidedCaptureLine[] {
   if (lineCount <= 0) return [];
   const centerLine = flatLines[centerGlobalLineIndex];
   if (!centerLine) return [];
 
-  const selected: FlatSaccadeCaptureLine[] = [];
+  const selected: FlatGuidedCaptureLine[] = [];
   for (let i = centerGlobalLineIndex; i >= 0 && selected.length < lineCount; i--) {
     const line = flatLines[i];
     if (line.pageIndex !== centerLine.pageIndex) break;

@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import type { Chunk, TokenMode, Article, SaccadePage, DisplayMode, PredictionStats, PredictionResult, RampCurve } from '../types';
+import type { Chunk, TokenMode, Article, GuidedPage, DisplayMode, PredictionStats, PredictionResult, RampCurve } from '../types';
 import { tokenize } from '../lib/tokenizer';
-import { tokenizeSaccade, tokenizeRecall, calculateSaccadeLineDuration } from '../lib/saccade';
+import { tokenizeGuided, tokenizeRecall, calculateGuidedLineDuration } from '../lib/saccade';
 import { calculateDisplayTime, getEffectiveWpm } from '../lib/rsvp';
 import { mapChunkIndexByProgress } from '../lib/indexMapping';
 import { updateArticlePosition, updateArticlePredictionPosition } from '../lib/storage';
@@ -20,7 +20,7 @@ interface UseRSVPOptions {
   rampStartPercent?: number;
   rampRate?: number;
   rampInterval?: number;
-  saccadeLength?: number;
+  guidedLength?: number;
   onComplete?: () => void;
 }
 
@@ -33,9 +33,9 @@ interface UseRSVPReturn {
   mode: TokenMode;
   displayMode: DisplayMode;
   article: Article | null;
-  saccadePages: SaccadePage[];
-  currentSaccadePage: SaccadePage | null;
-  currentSaccadePageIndex: number;
+  guidedPages: GuidedPage[];
+  currentGuidedPage: GuidedPage | null;
+  currentGuidedPageIndex: number;
   showPacer: boolean;
   linesPerPage: number;
   predictionStats: PredictionStats;
@@ -86,7 +86,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     rampStartPercent = 50,
     rampRate = 25,
     rampInterval = 30,
-    saccadeLength = 10,
+    guidedLength = 10,
     onComplete,
   } = options;
 
@@ -96,7 +96,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const [wpm, setWpm] = useState(initialWpm);
   const [mode, setMode] = useState<TokenMode>(initialMode);
   const [displayMode, setDisplayModeState] = useState<DisplayMode>(initialDisplayMode);
-  const [saccadePages, setSaccadePages] = useState<SaccadePage[]>([]);
+  const [guidedPages, setGuidedPages] = useState<GuidedPage[]>([]);
   const [showPacer, setShowPacer] = useState(true);
   const [linesPerPage, setLinesPerPageState] = useState(PACED_LINE_DEFAULT_LINES_PER_PAGE);
   const [predictionStats, setPredictionStats] = useState<PredictionStats>({
@@ -108,7 +108,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const [rampEnabled, setRampEnabledState] = useState(initialRampEnabled);
 
   const isSelfPacedDisplay = displayMode === 'recall' || displayMode === 'training';
-  const isLinePacedDisplay = displayMode === 'saccade' || displayMode === 'generation';
+  const isLinePacedDisplay = displayMode === 'guided' || displayMode === 'generation';
   const shouldAutoPlay = !isSelfPacedDisplay && (!isLinePacedDisplay || showPacer);
 
   const chunksRef = useLatestRef(chunks);
@@ -119,7 +119,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const modeRef = useLatestRef(mode);
   const linesPerPageRef = useLatestRef(linesPerPage);
 
-  const saccadeLengthRef = useLatestRef(saccadeLength);
+  const guidedLengthRef = useLatestRef(guidedLength);
   const rampEnabledRef = useLatestRef(rampEnabled);
   const rampCurveRef = useLatestRef(rampCurve);
   const rampStartPercentRef = useLatestRef(rampStartPercent);
@@ -128,7 +128,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
   const playStartTimeRef = useRef<number | null>(null);
   const accumulatedPlayTimeRef = useRef(0);
 
-  // Prediction mode position tracking (word index, separate from RSVP/saccade)
+  // Prediction mode position tracking (word index, separate from RSVP/guided)
   const predictionWordIndexRef = useRef<number>(0);
   const lastPersistedReadingRef = useRef<{ articleId: string | null; index: number | null }>({
     articleId: null,
@@ -171,9 +171,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       );
     }
 
-    // Saccade mode: character-based timing to match continuous sweep
-    if ((displayModeRef.current === 'saccade' || displayModeRef.current === 'generation') && chunk.text) {
-      return calculateSaccadeLineDuration(chunk.text.length, effectiveWpm);
+    // Guided mode: character-based timing to match continuous sweep
+    if ((displayModeRef.current === 'guided' || displayModeRef.current === 'generation') && chunk.text) {
+      return calculateGuidedLineDuration(chunk.text.length, effectiveWpm);
     }
 
     return calculateDisplayTime(chunk, effectiveWpm, modeRef.current);
@@ -200,11 +200,11 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     pageLines: number = PACED_LINE_DEFAULT_LINES_PER_PAGE,
     figureAssetBaseUrl?: string,
     sourcePath?: string
-  ): { chunks: Chunk[]; pages: SaccadePage[] } => {
+  ): { chunks: Chunk[]; pages: GuidedPage[] } => {
     if (dm === 'training') {
       return { chunks: [], pages: [] };
-    } else if (dm === 'saccade' || dm === 'generation') {
-      const result = tokenizeSaccade(content, pageLines, figureAssetBaseUrl, sourcePath);
+    } else if (dm === 'guided' || dm === 'generation') {
+      const result = tokenizeGuided(content, pageLines, figureAssetBaseUrl, sourcePath);
       return { chunks: result.chunks, pages: result.pages };
     } else if (dm === 'recall') {
       const result = tokenizeRecall(content, pageLines);
@@ -229,15 +229,15 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
       activeArticle.content,
       dm,
       tm,
-      saccadeLengthRef.current,
+      guidedLengthRef.current,
       pageLines,
       activeArticle.assetBaseUrl,
       activeArticle.sourcePath
     );
-    setSaccadePages(pages);
+    setGuidedPages(pages);
     setChunks(newChunks);
     return newChunks;
-  }, [linesPerPageRef, retokenize, saccadeLengthRef]);
+  }, [linesPerPageRef, retokenize, guidedLengthRef]);
 
   const persistReadingPosition = useCallback((articleId: string, index: number, totalChunks: number): void => {
     const nextIndex = clampChunkIndex(index, totalChunks);
@@ -255,7 +255,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     lastPersistedPredictionRef.current = { articleId, index: nextIndex };
   }, []);
 
-  // Retokenize when saccadeLength changes in custom RSVP mode
+  // Retokenize when guidedLength changes in custom RSVP mode
   useEffect(() => {
     const activeArticle = articleRef.current;
     if (!activeArticle || modeRef.current !== 'custom' || displayModeRef.current !== 'rsvp') return;
@@ -266,7 +266,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setCurrentChunkIndex(
       mapChunkIndexByProgress(previousIndex, previousChunkCount, newChunks.length)
     );
-  }, [articleRef, chunksRef, displayModeRef, indexRef, modeRef, retokenizeArticle, saccadeLength]);
+  }, [articleRef, chunksRef, displayModeRef, indexRef, modeRef, retokenizeArticle, guidedLength]);
 
   // Advance to next chunk
   const { isPlaying, play: startTimer, pause: stopTimer } = usePlaybackTimer({
@@ -358,34 +358,34 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     setCurrentChunkIndex(clampChunkIndex(index, chunks.length));
   }, [chunks.length]);
 
-  // Page navigation for saccade mode
+  // Page navigation for guided mode
   const nextPage = useCallback(() => {
-    if ((displayMode !== 'saccade' && displayMode !== 'generation') || saccadePages.length === 0) return;
+    if ((displayMode !== 'guided' && displayMode !== 'generation') || guidedPages.length === 0) return;
 
-    const currentPageIndex = chunks[currentChunkIndex]?.saccade?.pageIndex ?? 0;
-    if (currentPageIndex >= saccadePages.length - 1) return;
+    const currentPageIndex = chunks[currentChunkIndex]?.guided?.pageIndex ?? 0;
+    if (currentPageIndex >= guidedPages.length - 1) return;
 
     // Find first chunk of next page
     const nextPageIndex = currentPageIndex + 1;
-    const firstChunkOfNextPage = chunks.findIndex(c => c.saccade?.pageIndex === nextPageIndex);
+    const firstChunkOfNextPage = chunks.findIndex(c => c.guided?.pageIndex === nextPageIndex);
     if (firstChunkOfNextPage !== -1) {
       setCurrentChunkIndex(firstChunkOfNextPage);
     }
-  }, [displayMode, saccadePages.length, chunks, currentChunkIndex]);
+  }, [displayMode, guidedPages.length, chunks, currentChunkIndex]);
 
   const prevPage = useCallback(() => {
-    if ((displayMode !== 'saccade' && displayMode !== 'generation') || saccadePages.length === 0) return;
+    if ((displayMode !== 'guided' && displayMode !== 'generation') || guidedPages.length === 0) return;
 
-    const currentPageIndex = chunks[currentChunkIndex]?.saccade?.pageIndex ?? 0;
+    const currentPageIndex = chunks[currentChunkIndex]?.guided?.pageIndex ?? 0;
     if (currentPageIndex <= 0) return;
 
     // Find first chunk of previous page
     const prevPageIndex = currentPageIndex - 1;
-    const firstChunkOfPrevPage = chunks.findIndex(c => c.saccade?.pageIndex === prevPageIndex);
+    const firstChunkOfPrevPage = chunks.findIndex(c => c.guided?.pageIndex === prevPageIndex);
     if (firstChunkOfPrevPage !== -1) {
       setCurrentChunkIndex(firstChunkOfPrevPage);
     }
-  }, [displayMode, saccadePages.length, chunks, currentChunkIndex]);
+  }, [displayMode, guidedPages.length, chunks, currentChunkIndex]);
 
   const handleSetMode = useCallback((newMode: TokenMode) => {
     modeRef.current = newMode;
@@ -445,7 +445,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
           knownWords: 0,
         });
       } else {
-        // Entering RSVP/Saccade: use ratio-based mapping
+        // Entering RSVP/Guided: use ratio-based mapping
         setCurrentChunkIndex(
           mapChunkIndexByProgress(currentChunkIndex, chunks.length, newChunks.length)
         );
@@ -469,7 +469,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     const activeArticle = articleRef.current;
     if (
       activeArticle
-      && (displayModeRef.current === 'saccade' || displayModeRef.current === 'generation' || displayModeRef.current === 'recall')
+      && (displayModeRef.current === 'guided' || displayModeRef.current === 'generation' || displayModeRef.current === 'recall')
     ) {
       const newChunks = retokenizeArticle(activeArticle, displayModeRef.current, modeRef.current, lines);
       setCurrentChunkIndex(
@@ -565,17 +565,17 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     ? wpm
     : getEffectiveWpm(wpm, getElapsedPlayTimeMs(), rampRate, rampInterval, rampCurve, rampStartPercent);
 
-  // Compute current saccade page
+  // Compute current guided page
   const currentChunk = chunks[currentChunkIndex] ?? null;
-  const currentSaccadePageIndex = useMemo(() => {
-    if ((displayMode !== 'saccade' && displayMode !== 'generation') || !currentChunk?.saccade) return 0;
-    return currentChunk.saccade.pageIndex;
+  const currentGuidedPageIndex = useMemo(() => {
+    if ((displayMode !== 'guided' && displayMode !== 'generation') || !currentChunk?.guided) return 0;
+    return currentChunk.guided.pageIndex;
   }, [displayMode, currentChunk]);
 
-  const currentSaccadePage = useMemo(() => {
-    if (displayMode !== 'saccade' && displayMode !== 'generation') return null;
-    return saccadePages[currentSaccadePageIndex] ?? null;
-  }, [displayMode, saccadePages, currentSaccadePageIndex]);
+  const currentGuidedPage = useMemo(() => {
+    if (displayMode !== 'guided' && displayMode !== 'generation') return null;
+    return guidedPages[currentGuidedPageIndex] ?? null;
+  }, [displayMode, guidedPages, currentGuidedPageIndex]);
 
   return {
     chunks,
@@ -586,9 +586,9 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     mode,
     displayMode,
     article,
-    saccadePages,
-    currentSaccadePage,
-    currentSaccadePageIndex,
+    guidedPages,
+    currentGuidedPage,
+    currentGuidedPageIndex,
     showPacer,
     linesPerPage,
     predictionStats,
