@@ -18,7 +18,13 @@ export interface EpubBookData {
  * Recursively flatten a TOC tree into an ordered list of { href, label } entries.
  * Handles nested sub-items (e.g. sub-chapters) that epubjs exposes via `subitems`.
  */
-export function flattenToc(items: Array<{ href: string; label: string; subitems?: any[] }>): Array<{ href: string; label: string }> {
+interface TocItem {
+  href: string;
+  label: string;
+  subitems?: TocItem[];
+}
+
+export function flattenToc(items: TocItem[]): Array<{ href: string; label: string }> {
   const result: Array<{ href: string; label: string }> = [];
   for (const item of items) {
     result.push({ href: item.href, label: item.label });

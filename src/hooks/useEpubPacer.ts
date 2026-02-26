@@ -47,7 +47,8 @@ export function useEpubPacer({
     clearTimer();
     setCurrentWordIndex(initialWordIndex ?? 0);
     setIsPlaying(false);
-  }, [wordCount, clearTimer]); // intentionally omit initialWordIndex — only react to new chapter
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit initialWordIndex; only react to new chapter
+  }, [wordCount, clearTimer]);
 
   // Core interval effect: run the timer when playing and enabled
   useEffect(() => {
