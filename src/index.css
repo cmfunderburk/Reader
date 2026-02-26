@@ -3412,6 +3412,7 @@ button {
   max-width: 720px;
   margin: 0 auto;
   width: 100%;
+  position: relative;
 }
 
 .epub-content.paged {
@@ -3497,6 +3498,15 @@ button {
 .epub-word-highlight {
   background: color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 2px;
+}
+
+.epub-sweep {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  background: var(--guided-sweep-color);
+  pointer-events: none;
 }
 
 .epub-word-masked {

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { UseEpubReaderResult, EpubReadingMode } from '../hooks/useEpubReader';
 import type { GenerationDifficulty } from '../types';
-import { useEpubPacer } from '../hooks/useEpubPacer';
+import { useEpubLineSweep } from '../hooks/useEpubLineSweep';
 import { selectMaskedWords } from '../lib/epubGenerationMask';
 
 interface EpubReaderProps {
@@ -33,7 +33,6 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   const [revealed, setRevealed] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const prevHighlightRef = useRef<Element | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -45,19 +44,40 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   const isPacerMode = epub.mode === 'pacer';
   const isGenerationMode = epub.mode === 'generation';
 
-  const pacer = useEpubPacer({
+  // In paged mode, scroll to a given pixel offset by navigating to the right page
+  const scrollToOffset = useCallback((offsetTop: number) => {
+    if (!isPaged || !contentRef.current) return;
+    // In paged (CSS columns) mode, content flows horizontally.
+    // Find which page contains this vertical offset by checking the
+    // element at that position. For simplicity, we locate the word span
+    // nearest the offset and read its offsetLeft to determine the page.
+    const el = contentRef.current;
+    const pageWidth = el.clientWidth;
+    if (pageWidth <= 0) return;
+
+    // In CSS columns, offsetLeft of children tells us which column they're in
+    // We need to find a word span near this offsetTop
+    const spans = el.querySelectorAll<HTMLElement>('[data-word-idx]');
+    let targetLeft = 0;
+    for (const span of spans) {
+      if (Math.abs(span.offsetTop - offsetTop) < 4) {
+        targetLeft = span.offsetLeft;
+        break;
+      }
+    }
+    const page = Math.floor(targetLeft / pageWidth);
+    const clamped = Math.max(0, Math.min(page, totalPages - 1));
+    setCurrentPage(clamped);
+    el.scrollTo({ left: clamped * pageWidth, behavior: 'instant' as ScrollBehavior });
+  }, [isPaged, totalPages]);
+
+  const sweep = useEpubLineSweep({
+    contentRef,
     wordCount: epub.wordCount,
     wpm: pacerWpm,
     enabled: isPacerMode,
-    initialWordIndex: epub.currentWordIndex,
+    scrollToOffset: isPaged ? scrollToOffset : undefined,
   });
-
-  // Sync pacer position back to epub for persistence
-  useEffect(() => {
-    if (isPacerMode) {
-      epub.setCurrentWordIndex(pacer.currentWordIndex);
-    }
-  }, [isPacerMode, pacer.currentWordIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deterministic seed from chapter index (changes per chapter)
   const maskSeed = epub.currentChapterIndex * 31337 + 42;
@@ -72,36 +92,6 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   useEffect(() => {
     setRevealed(false);
   }, [epub.currentChapterIndex, generationDifficulty]);
-
-  // Apply/remove highlight class on the current word span (pacer mode)
-  useEffect(() => {
-    if (!isPacerMode || !contentRef.current) {
-      // Clean up any lingering highlight when leaving pacer mode
-      if (prevHighlightRef.current) {
-        prevHighlightRef.current.classList.remove('epub-word-highlight');
-        prevHighlightRef.current = null;
-      }
-      return;
-    }
-
-    // Remove previous highlight
-    if (prevHighlightRef.current) {
-      prevHighlightRef.current.classList.remove('epub-word-highlight');
-      prevHighlightRef.current = null;
-    }
-
-    // Apply new highlight
-    const span = contentRef.current.querySelector(
-      `[data-word-idx="${pacer.currentWordIndex}"]`
-    );
-    if (span) {
-      span.classList.add('epub-word-highlight');
-      prevHighlightRef.current = span;
-
-      // Auto-scroll to keep highlighted word visible
-      span.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    }
-  }, [isPacerMode, pacer.currentWordIndex]);
 
   // Apply/remove masked class on masked word spans (generation mode)
   useEffect(() => {
@@ -368,10 +358,10 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
           </button>
           <button
             className="control-btn epub-pacer-play"
-            onClick={pacer.toggle}
-            aria-label={pacer.isPlaying ? 'Pause' : 'Play'}
+            onClick={sweep.toggle}
+            aria-label={sweep.isPlaying ? 'Pause' : 'Play'}
           >
-            {pacer.isPlaying ? 'Pause' : 'Play'}
+            {sweep.isPlaying ? 'Pause' : 'Play'}
           </button>
         </div>
       )}
