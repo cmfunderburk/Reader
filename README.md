@@ -4,11 +4,11 @@ An eBook reader with built-in pacing, recall training, and comprehension tools.
 
 ## What This Is
 
-This project started as a quick RSVP speed-reading demo — the kind of thing you build in an afternoon with a coding agent. Then it kept growing: saccade pacers, recall exercises, prediction drills, generation-effect masking, comprehension checks. Somewhere along the way it became an actual reader.
+This project started as a quick RSVP speed-reading demo — the kind of thing you build in an afternoon with a coding agent. Then I kept following other miscellaneous ideas: saccade pacers, recall exercises, prediction drills, generation-effect masking, comprehension checks. Somewhere along the way it became an actual reader.
 
 Today it handles EPUBs, PDFs, web articles, RSS feeds, and pasted text. You can read normally with a sweep pacer guiding your eyes, or switch into modes designed around specific research ideas — RSVP for forced pacing, generation masking for re-reading benefit (some evidence suggests that requiring partial recall during re-reads produces better retention than pure recognition), prediction and recall for verbatim memorization. After reading, you can run LLM-generated comprehension checks, and missed questions feed into a lightweight Leitner SRS for spaced review.
 
-The design goal is simple: reduce friction between reading and practicing. Pacing, controls, and context stay consistent whether you're reading a chapter, drilling a sentence, or reviewing flashcards.
+The goal is simple: reduce friction between reading and practicing. Pacing, controls, and context stay consistent whether you're reading a chapter, drilling a sentence, or reviewing flashcards.
 
 ## Desktop & Mobile
 
