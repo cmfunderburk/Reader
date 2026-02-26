@@ -50,7 +50,6 @@ export function useEpubReader(): UseEpubReaderResult {
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [mode, setMode] = useState<EpubReadingMode>('browse');
   const bookIdRef = useRef<string | null>(null);
-  const saveCounterRef = useRef(0);
 
   const currentChapter = book ? (book.chapters[currentChapterIndex] ?? null) : null;
 
@@ -80,7 +79,6 @@ export function useEpubReader(): UseEpubReaderResult {
     const id = bookIdRef.current;
     if (!id || !book || currentWordIndex === 0) return;
     if (currentWordIndex % 10 !== 0) return;
-    saveCounterRef.current++;
     saveBookState(id, {
       title: book.title,
       lastChapterIndex: currentChapterIndex,
