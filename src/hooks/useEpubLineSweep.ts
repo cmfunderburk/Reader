@@ -15,6 +15,8 @@ export interface UseEpubLineSweepOptions {
   chapterKey: number;
   wpm: number;
   enabled: boolean;
+  /** View mode — recompute lines when layout changes between paged/scroll */
+  viewMode?: string;
   /** Callback to navigate paged view to show a given pixel offset */
   scrollToOffset?: (offsetTop: number) => void;
 }
@@ -131,6 +133,7 @@ export function useEpubLineSweep({
   chapterKey,
   wpm,
   enabled,
+  viewMode,
   scrollToOffset,
 }: UseEpubLineSweepOptions): UseEpubLineSweepResult {
   const [currentLineIndex, setCurrentLineIndex] = useState(0);
@@ -179,16 +182,16 @@ export function useEpubLineSweep({
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [enabled, contentRef, chapterKey]);
+  }, [enabled, contentRef, chapterKey, viewMode]);
 
-  // Reset when chapter changes
+  // Reset when chapter or layout changes
   useEffect(() => {
     cleanup();
     setCurrentLineIndex(0);
     setIsPlaying(false);
     currentLineRef.current = 0;
     isPlayingRef.current = false;
-  }, [chapterKey, cleanup]);
+  }, [chapterKey, viewMode, cleanup]);
 
   // Render the sweep bar for the current line
   const renderSweep = useCallback((lineIdx: number) => {

@@ -50,6 +50,7 @@ export function useEpubReader(): UseEpubReaderResult {
     return saved === 'scroll' ? 'scroll' : 'paged';
   });
   const bookIdRef = useRef<string | null>(null);
+  const prevResourcesRef = useRef<Map<string, string> | null>(null);
 
   const currentChapter = book ? (book.chapters[currentChapterIndex] ?? null) : null;
 
@@ -77,13 +78,34 @@ export function useEpubReader(): UseEpubReaderResult {
     localStorage.setItem('reader:epub-view-mode', viewMode);
   }, [viewMode]);
 
+  // Revoke blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (prevResourcesRef.current) {
+        for (const url of prevResourcesRef.current.values()) {
+          URL.revokeObjectURL(url);
+        }
+        prevResourcesRef.current = null;
+      }
+    };
+  }, []);
+
   const loadBook = useCallback(async (buffer: ArrayBuffer) => {
     setIsLoading(true);
     setError(null);
     try {
+      // Revoke previous book's blob URLs before replacing
+      if (prevResourcesRef.current) {
+        for (const url of prevResourcesRef.current.values()) {
+          URL.revokeObjectURL(url);
+        }
+        prevResourcesRef.current = null;
+      }
+
       const bookData = await loadEpubFromBuffer(buffer);
       const id = generateBookId(bookData.title, bookData.chapters.length, bookData.chapters[0]?.title);
       bookIdRef.current = id;
+      prevResourcesRef.current = bookData.resources;
 
       // Check for saved position
       const saved = loadBookState(id);
@@ -128,17 +150,18 @@ export function useEpubReader(): UseEpubReaderResult {
 
   const unloadBook = useCallback(() => {
     // Revoke blob URLs to free memory
-    if (book?.resources) {
-      for (const url of book.resources.values()) {
+    if (prevResourcesRef.current) {
+      for (const url of prevResourcesRef.current.values()) {
         URL.revokeObjectURL(url);
       }
+      prevResourcesRef.current = null;
     }
     bookIdRef.current = null;
     setBook(null);
     setCurrentChapterIndex(0);
     setMode('browse');
     setError(null);
-  }, [book]);
+  }, []);
 
   return {
     book,

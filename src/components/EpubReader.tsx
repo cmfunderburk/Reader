@@ -82,6 +82,7 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     chapterKey: epub.currentChapterIndex,
     wpm: pacerWpm,
     enabled: isPacerMode,
+    viewMode: epub.viewMode,
     scrollToOffset: isPaged ? scrollToOffset : undefined,
   });
 
@@ -159,9 +160,12 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     return () => { observer.disconnect(); clearTimeout(timer); };
   }, [isPaged, measurePages]);
 
-  // Reset page on chapter change
+  // Reset page and scroll position on chapter change
   useEffect(() => {
     setCurrentPage(0);
+    if (contentRef.current) {
+      contentRef.current.scrollLeft = 0;
+    }
   }, [epub.currentChapterIndex]);
 
   // Reset page when switching to paged mode
