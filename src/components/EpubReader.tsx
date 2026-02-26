@@ -32,7 +32,15 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   const [generationDifficulty, setGenerationDifficulty] = useState<GenerationDifficulty>('normal');
   const [revealed, setRevealed] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const prevHighlightRef = useRef<Element | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const isPaged = epub.viewMode === 'paged';
 
   const isPacerMode = epub.mode === 'pacer';
   const isGenerationMode = epub.mode === 'generation';
@@ -128,6 +136,128 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     });
   }, [isGenerationMode, maskedIndices, revealed]);
 
+  // Measure pages after content renders or on resize (paged mode only)
+  const measurePages = useCallback(() => {
+    const el = contentRef.current;
+    const container = containerRef.current;
+    if (!el || !container || !isPaged) return;
+
+    // Compute available height: container height minus non-content elements
+    // The container is a flex column; the content div has flex:1
+    // We measure the actual available space by looking at the content element's client area
+    const containerRect = container.getBoundingClientRect();
+
+    // Sum up heights of all non-content children (toolbar, toc, controls, etc.)
+    let nonContentHeight = 0;
+    for (const child of Array.from(container.children)) {
+      if (child !== el) {
+        nonContentHeight += (child as HTMLElement).getBoundingClientRect().height;
+      }
+    }
+
+    const availableHeight = Math.floor(containerRect.height - nonContentHeight);
+    const availableWidth = el.clientWidth;
+
+    if (availableHeight <= 0 || availableWidth <= 0) return;
+
+    setContentHeight(availableHeight);
+    setContentWidth(availableWidth);
+
+    // After setting dimensions, we need to measure in the next frame
+    // when the CSS columns have been applied with the new dimensions
+    requestAnimationFrame(() => {
+      if (!el) return;
+      const pages = Math.max(1, Math.round(el.scrollWidth / el.clientWidth));
+      setTotalPages(pages);
+    });
+  }, [isPaged]);
+
+  // Run measurement when content changes or view mode switches
+  useEffect(() => {
+    if (!isPaged) return;
+    // Use rAF to ensure DOM has rendered the HTML
+    const frame = requestAnimationFrame(() => {
+      measurePages();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isPaged, epub.annotatedHtml, measurePages]);
+
+  // ResizeObserver on the container to recompute on window resize
+  useEffect(() => {
+    if (!isPaged || !containerRef.current) return;
+    const observer = new ResizeObserver(() => {
+      measurePages();
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [isPaged, measurePages]);
+
+  // Reset page on chapter change
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [epub.currentChapterIndex]);
+
+  // Reset page when switching to paged mode
+  useEffect(() => {
+    if (isPaged) {
+      setCurrentPage(0);
+    }
+  }, [isPaged]);
+
+  // Page navigation
+  const goToPage = useCallback((page: number) => {
+    const clamped = Math.max(0, Math.min(page, totalPages - 1));
+    setCurrentPage(clamped);
+    if (contentRef.current) {
+      contentRef.current.scrollTo({ left: clamped * contentRef.current.clientWidth, behavior: 'instant' as ScrollBehavior });
+    }
+  }, [totalPages]);
+
+  const nextPage = useCallback(() => {
+    goToPage(currentPage + 1);
+  }, [goToPage, currentPage]);
+
+  const prevPage = useCallback(() => {
+    goToPage(currentPage - 1);
+  }, [goToPage, currentPage]);
+
+  // Keyboard handler for page turns (paged mode, browse only)
+  useEffect(() => {
+    if (!isPaged) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight') { nextPage(); e.preventDefault(); }
+      if (e.key === 'ArrowLeft') { prevPage(); e.preventDefault(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [isPaged, nextPage, prevPage]);
+
+  // Click zones for page turns (left third = prev, right third = next)
+  const handleContentClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPaged) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const third = rect.width / 3;
+    if (x < third) prevPage();
+    else if (x > third * 2) nextPage();
+  }, [isPaged, prevPage, nextPage]);
+
+  // Touch swipe for page turns
+  const touchStartRef = useRef<number | null>(null);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartRef.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartRef.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartRef.current;
+    touchStartRef.current = null;
+    if (Math.abs(delta) < 50) return;
+    if (delta < 0) nextPage();
+    else prevPage();
+  }, [nextPage, prevPage]);
+
   const handleWpmChange = useCallback((delta: number) => {
     setPacerWpm(prev => Math.max(MIN_PACER_WPM, Math.min(MAX_PACER_WPM, prev + delta)));
   }, []);
@@ -165,7 +295,7 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   const { book, currentChapterIndex, annotatedHtml } = epub;
 
   return (
-    <div className="epub-reader">
+    <div className="epub-reader" ref={containerRef}>
       <div className="epub-toolbar">
         <button className="epub-toolbar-btn" onClick={onBack} aria-label="Back">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -209,7 +339,11 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
 
       <div
         ref={contentRef}
-        className="epub-content"
+        className={`epub-content${isPaged ? ' paged' : ''}`}
+        style={isPaged && contentHeight > 0 ? { height: `${contentHeight}px`, columnWidth: `${contentWidth}px` } : undefined}
+        onClick={handleContentClick}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         dangerouslySetInnerHTML={{ __html: annotatedHtml }}
       />
 
@@ -271,7 +405,9 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
           Prev
         </button>
         <span className="epub-controls-position">
-          {currentChapterIndex + 1} / {book.chapters.length}
+          {isPaged
+            ? `${currentPage + 1} / ${totalPages}`
+            : `${currentChapterIndex + 1} / ${book.chapters.length}`}
         </span>
         <button
           className="control-btn"
@@ -292,6 +428,12 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
             {MODE_LABELS[m]}
           </button>
         ))}
+        <button
+          className="control-btn"
+          onClick={() => epub.setViewMode(epub.viewMode === 'paged' ? 'scroll' : 'paged')}
+        >
+          {epub.viewMode === 'paged' ? 'Scroll' : 'Paged'}
+        </button>
       </div>
     </div>
   );

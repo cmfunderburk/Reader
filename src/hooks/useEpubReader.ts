@@ -4,6 +4,7 @@ import { annotateHtmlWords, type AnnotationResult } from '../lib/htmlAnnotator';
 import { generateBookId, loadBookState, saveBookState } from '../lib/bookStorage';
 
 export type EpubReadingMode = 'browse' | 'pacer' | 'generation';
+export type EpubViewMode = 'paged' | 'scroll';
 
 export interface UseEpubReaderResult {
   /** The loaded book data, or null if no book is loaded */
@@ -40,6 +41,10 @@ export interface UseEpubReaderResult {
   prevChapter: () => void;
   /** Unload the current book */
   unloadBook: () => void;
+  /** Current view mode (paged or scroll) */
+  viewMode: EpubViewMode;
+  /** Set the view mode */
+  setViewMode: (mode: EpubViewMode) => void;
 }
 
 export function useEpubReader(): UseEpubReaderResult {
@@ -49,6 +54,10 @@ export function useEpubReader(): UseEpubReaderResult {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [mode, setMode] = useState<EpubReadingMode>('browse');
+  const [viewMode, setViewMode] = useState<EpubViewMode>(() => {
+    const saved = localStorage.getItem('reader:epub-view-mode');
+    return saved === 'scroll' ? 'scroll' : 'paged';
+  });
   const bookIdRef = useRef<string | null>(null);
 
   const currentChapter = book ? (book.chapters[currentChapterIndex] ?? null) : null;
@@ -86,6 +95,11 @@ export function useEpubReader(): UseEpubReaderResult {
       lastOpenedAt: Date.now(),
     });
   }, [currentWordIndex, currentChapterIndex, book]);
+
+  // Persist view mode preference
+  useEffect(() => {
+    localStorage.setItem('reader:epub-view-mode', viewMode);
+  }, [viewMode]);
 
   const loadBook = useCallback(async (buffer: ArrayBuffer) => {
     setIsLoading(true);
@@ -174,5 +188,7 @@ export function useEpubReader(): UseEpubReaderResult {
     nextChapter,
     prevChapter,
     unloadBook,
+    viewMode,
+    setViewMode,
   };
 }

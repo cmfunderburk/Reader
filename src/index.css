@@ -3414,6 +3414,12 @@ button {
   width: 100%;
 }
 
+.epub-content.paged {
+  overflow: hidden;
+  column-fill: auto;
+  column-gap: 0;
+}
+
 .epub-content img {
   max-width: 100%;
   max-height: 80vh;
