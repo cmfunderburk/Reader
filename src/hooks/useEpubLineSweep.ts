@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface LineInfo {
-  firstWordIdx: number;
-  lastWordIdx: number;
   charCount: number;
   offsetTop: number;
   offsetLeft: number;
@@ -13,7 +11,8 @@ export interface LineInfo {
 export interface UseEpubLineSweepOptions {
   /** Ref to the .epub-content container */
   contentRef: React.RefObject<HTMLDivElement | null>;
-  wordCount: number;
+  /** Change-detection signal (e.g. chapter index) — recompute lines when this changes */
+  chapterKey: number;
   wpm: number;
   enabled: boolean;
   /** Callback to navigate paged view to show a given pixel offset */
@@ -30,77 +29,92 @@ export interface UseEpubLineSweepResult {
 }
 
 /**
- * Group word spans by their vertical position (offsetTop) into lines.
- * Uses a 2px tolerance for sub-pixel rendering differences.
+ * Group text into visual lines using Range.getClientRects() on text nodes.
+ * No word spans needed — walks text nodes via TreeWalker.
  */
-function computeLines(container: HTMLElement): LineInfo[] {
-  const spans = container.querySelectorAll<HTMLElement>('[data-word-idx]');
-  if (spans.length === 0) return [];
+function computeLinesFromTextNodes(container: HTMLElement): LineInfo[] {
+  const containerRect = container.getBoundingClientRect();
+  const TOLERANCE = 3;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
 
-  const TOLERANCE = 2;
+  const rawRects: { top: number; left: number; width: number; height: number; charCount: number }[] = [];
+
+  let node: Text | null;
+  while ((node = walker.nextNode() as Text | null)) {
+    const text = node.textContent || '';
+    if (!text.trim()) continue;
+
+    range.selectNodeContents(node);
+    const rects = range.getClientRects();
+    if (rects.length === 0) continue;
+
+    // Distribute text length across rects proportional to width
+    let totalWidth = 0;
+    for (const rect of rects) totalWidth += rect.width;
+
+    for (const rect of rects) {
+      if (rect.width === 0 && rect.height === 0) continue;
+      const charCount = totalWidth > 0
+        ? Math.round((rect.width / totalWidth) * text.length)
+        : text.length;
+      rawRects.push({
+        top: rect.top - containerRect.top + container.scrollTop,
+        left: rect.left - containerRect.left + container.scrollLeft,
+        width: rect.width,
+        height: rect.height,
+        charCount,
+      });
+    }
+  }
+
+  if (rawRects.length === 0) return [];
+
+  // Group rects by offsetTop with tolerance, merge into LineInfo entries
   const lines: LineInfo[] = [];
-  let currentLine: {
-    firstWordIdx: number;
-    lastWordIdx: number;
-    chars: number;
-    offsetTop: number;
-    minLeft: number;
-    maxRight: number;
-    height: number;
-  } | null = null;
+  let current = {
+    charCount: rawRects[0].charCount,
+    offsetTop: rawRects[0].top,
+    minLeft: rawRects[0].left,
+    maxRight: rawRects[0].left + rawRects[0].width,
+    height: rawRects[0].height,
+  };
 
-  for (const span of spans) {
-    const idx = parseInt(span.getAttribute('data-word-idx') || '0', 10);
-    const top = span.offsetTop;
-    const left = span.offsetLeft;
-    const right = left + span.offsetWidth;
-    const height = span.offsetHeight;
-    const text = span.textContent || '';
-
-    if (currentLine === null || Math.abs(top - currentLine.offsetTop) > TOLERANCE) {
-      // New line
-      if (currentLine !== null) {
-        lines.push({
-          firstWordIdx: currentLine.firstWordIdx,
-          lastWordIdx: currentLine.lastWordIdx,
-          charCount: currentLine.chars,
-          offsetTop: currentLine.offsetTop,
-          offsetLeft: currentLine.minLeft,
-          widthPx: currentLine.maxRight - currentLine.minLeft,
-          heightPx: currentLine.height,
-        });
-      }
-      currentLine = {
-        firstWordIdx: idx,
-        lastWordIdx: idx,
-        chars: text.length,
-        offsetTop: top,
-        minLeft: left,
-        maxRight: right,
-        height: height,
-      };
+  for (let i = 1; i < rawRects.length; i++) {
+    const r = rawRects[i];
+    if (Math.abs(r.top - current.offsetTop) <= TOLERANCE) {
+      // Same line
+      current.charCount += r.charCount;
+      current.minLeft = Math.min(current.minLeft, r.left);
+      current.maxRight = Math.max(current.maxRight, r.left + r.width);
+      current.height = Math.max(current.height, r.height);
     } else {
-      // Same line — add inter-word space + word chars
-      currentLine.lastWordIdx = idx;
-      currentLine.chars += 1 + text.length; // +1 for the space between words
-      currentLine.minLeft = Math.min(currentLine.minLeft, left);
-      currentLine.maxRight = Math.max(currentLine.maxRight, right);
-      currentLine.height = Math.max(currentLine.height, height);
+      // New line
+      lines.push({
+        charCount: current.charCount,
+        offsetTop: current.offsetTop,
+        offsetLeft: current.minLeft,
+        widthPx: current.maxRight - current.minLeft,
+        heightPx: current.height,
+      });
+      current = {
+        charCount: r.charCount,
+        offsetTop: r.top,
+        minLeft: r.left,
+        maxRight: r.left + r.width,
+        height: r.height,
+      };
     }
   }
 
   // Push final line
-  if (currentLine !== null) {
-    lines.push({
-      firstWordIdx: currentLine.firstWordIdx,
-      lastWordIdx: currentLine.lastWordIdx,
-      charCount: currentLine.chars,
-      offsetTop: currentLine.offsetTop,
-      offsetLeft: currentLine.minLeft,
-      widthPx: currentLine.maxRight - currentLine.minLeft,
-      heightPx: currentLine.height,
-    });
-  }
+  lines.push({
+    charCount: current.charCount,
+    offsetTop: current.offsetTop,
+    offsetLeft: current.minLeft,
+    widthPx: current.maxRight - current.minLeft,
+    heightPx: current.height,
+  });
 
   return lines;
 }
@@ -114,7 +128,7 @@ function computeLines(container: HTMLElement): LineInfo[] {
  */
 export function useEpubLineSweep({
   contentRef,
-  wordCount,
+  chapterKey,
   wpm,
   enabled,
   scrollToOffset,
@@ -150,7 +164,7 @@ export function useEpubLineSweep({
 
   // Compute lines when content changes
   useEffect(() => {
-    if (!enabled || !contentRef.current || wordCount === 0) {
+    if (!enabled || !contentRef.current || !contentRef.current.textContent?.trim()) {
       linesRef.current = [];
       setTotalLines(0);
       return;
@@ -159,22 +173,22 @@ export function useEpubLineSweep({
     // Wait a frame for DOM to settle after dangerouslySetInnerHTML
     const frame = requestAnimationFrame(() => {
       if (!contentRef.current) return;
-      const lines = computeLines(contentRef.current);
+      const lines = computeLinesFromTextNodes(contentRef.current);
       linesRef.current = lines;
       setTotalLines(lines.length);
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [enabled, contentRef, wordCount]);
+  }, [enabled, contentRef, chapterKey]);
 
-  // Reset when chapter changes (wordCount changes)
+  // Reset when chapter changes
   useEffect(() => {
     cleanup();
     setCurrentLineIndex(0);
     setIsPlaying(false);
     currentLineRef.current = 0;
     isPlayingRef.current = false;
-  }, [wordCount, cleanup]);
+  }, [chapterKey, cleanup]);
 
   // Render the sweep bar for the current line
   const renderSweep = useCallback((lineIdx: number) => {
@@ -230,11 +244,8 @@ export function useEpubLineSweep({
       if (nextLineInfo && scrollToOffset) {
         scrollToOffset(nextLineInfo.offsetTop);
       } else if (nextLineInfo && container) {
-        // Scroll mode: scroll the container to keep the line visible
-        const firstSpan = container.querySelector(`[data-word-idx="${nextLineInfo.firstWordIdx}"]`);
-        if (firstSpan) {
-          firstSpan.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        }
+        // Scroll mode: scroll the container to center the line
+        container.scrollTop = nextLineInfo.offsetTop - container.clientHeight / 2;
       }
 
       // Render sweep for next line
@@ -247,11 +258,8 @@ export function useEpubLineSweep({
     // Scroll to current line
     if (scrollToOffset) {
       scrollToOffset(line.offsetTop);
-    } else {
-      const firstSpan = container.querySelector(`[data-word-idx="${line.firstWordIdx}"]`);
-      if (firstSpan) {
-        firstSpan.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }
+    } else if (container) {
+      container.scrollTop = line.offsetTop - container.clientHeight / 2;
     }
   }, [contentRef, cleanup, scrollToOffset]);
 

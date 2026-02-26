@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { UseEpubReaderResult, EpubReadingMode } from '../hooks/useEpubReader';
 import type { GenerationDifficulty } from '../types';
 import { useEpubLineSweep } from '../hooks/useEpubLineSweep';
-import { maskEpubWords } from '../lib/epubGenerationMask';
+import { maskHtmlTextNodes } from '../lib/htmlAnnotator';
 
 interface EpubReaderProps {
   epub: UseEpubReaderResult;
@@ -47,33 +47,39 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   // In paged mode, scroll to a given pixel offset by navigating to the right page
   const scrollToOffset = useCallback((offsetTop: number) => {
     if (!isPaged || !contentRef.current) return;
-    // In paged (CSS columns) mode, content flows horizontally.
-    // Find which page contains this vertical offset by checking the
-    // element at that position. For simplicity, we locate the word span
-    // nearest the offset and read its offsetLeft to determine the page.
     const el = contentRef.current;
     const pageWidth = el.clientWidth;
     if (pageWidth <= 0) return;
 
-    // In CSS columns, offsetLeft of children tells us which column they're in
-    // We need to find a word span near this offsetTop
-    const spans = el.querySelectorAll<HTMLElement>('[data-word-idx]');
+    // In CSS columns, we need to find an element near this offsetTop.
+    // Walk text nodes to find one at the target offset via Range.getClientRects().
+    const containerRect = el.getBoundingClientRect();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     let targetLeft = 0;
-    for (const span of spans) {
-      if (Math.abs(span.offsetTop - offsetTop) < 4) {
-        targetLeft = span.offsetLeft;
-        break;
+    let node: Text | null;
+    const range = document.createRange();
+    while ((node = walker.nextNode() as Text | null)) {
+      if (!node.textContent?.trim()) continue;
+      range.selectNodeContents(node);
+      const rects = range.getClientRects();
+      for (const rect of rects) {
+        const relativeTop = rect.top - containerRect.top + el.scrollTop;
+        if (Math.abs(relativeTop - offsetTop) < 4) {
+          targetLeft = rect.left - containerRect.left + el.scrollLeft;
+          break;
+        }
       }
+      if (targetLeft > 0) break;
     }
     const page = Math.floor(targetLeft / pageWidth);
     const clamped = Math.max(0, Math.min(page, totalPages - 1));
     setCurrentPage(clamped);
-    el.scrollTo({ left: clamped * pageWidth, behavior: 'instant' as ScrollBehavior });
+    el.scrollLeft = clamped * pageWidth;
   }, [isPaged, totalPages]);
 
   const sweep = useEpubLineSweep({
     contentRef,
-    wordCount: epub.wordCount,
+    chapterKey: epub.currentChapterIndex,
     wpm: pacerWpm,
     enabled: isPacerMode,
     scrollToOffset: isPaged ? scrollToOffset : undefined,
@@ -82,58 +88,21 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   // Deterministic seed from chapter index (changes per chapter)
   const maskSeed = epub.currentChapterIndex * 31337 + 42;
 
-  // Compute per-character masked words
-  const maskedWords = useMemo(() => {
-    if (!isGenerationMode || epub.words.length === 0) return [];
-    return maskEpubWords(epub.words, generationDifficulty, maskSeed);
-  }, [isGenerationMode, epub.words, generationDifficulty, maskSeed]);
+  // Compute masked HTML for generation mode
+  const maskedHtml = useMemo(() => {
+    if (!isGenerationMode) return '';
+    return maskHtmlTextNodes(epub.html, generationDifficulty, maskSeed);
+  }, [isGenerationMode, epub.html, generationDifficulty, maskSeed]);
+
+  // Determine which HTML to render
+  const displayHtml = isGenerationMode
+    ? (revealed ? epub.html : maskedHtml)
+    : epub.html;
 
   // Reset revealed state when chapter or difficulty changes
   useEffect(() => {
     setRevealed(false);
   }, [epub.currentChapterIndex, generationDifficulty]);
-
-  // Apply/remove character-level generation masking on word spans
-  useEffect(() => {
-    if (!contentRef.current) return;
-    const container = contentRef.current;
-
-    if (!isGenerationMode || maskedWords.length === 0) {
-      // Restore original word text when leaving generation mode
-      epub.words.forEach((word, idx) => {
-        const span = container.querySelector(`[data-word-idx="${idx}"]`);
-        if (span && span.querySelector('.generation-grid-cell')) {
-          span.textContent = word;
-        }
-      });
-      return;
-    }
-
-    maskedWords.forEach((masked, idx) => {
-      const span = container.querySelector(`[data-word-idx="${idx}"]`);
-      if (!span) return;
-
-      const original = epub.words[idx];
-
-      // Build character-level spans
-      span.textContent = '';
-      for (let c = 0; c < masked.length; c++) {
-        const charSpan = document.createElement('span');
-        if (masked[c] === '_') {
-          charSpan.className = revealed
-            ? 'generation-grid-cell generation-mask-slot revealed'
-            : 'generation-grid-cell generation-mask-slot';
-          if (revealed) {
-            charSpan.textContent = original[c];
-          }
-        } else {
-          charSpan.className = 'generation-grid-cell';
-          charSpan.textContent = masked[c];
-        }
-        span.appendChild(charSpan);
-      }
-    });
-  }, [isGenerationMode, maskedWords, revealed, epub.words]);
 
   // Measure pages after content renders or on resize (paged mode only)
   const measurePages = useCallback(() => {
@@ -141,9 +110,6 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     const container = containerRef.current;
     if (!el || !container || !isPaged) return;
 
-    // Compute available height: container height minus non-content elements
-    // The container is a flex column; the content div has flex:1
-    // We measure the actual available space by looking at the content element's client area
     const containerRect = container.getBoundingClientRect();
 
     // Sum up heights of all non-content children (toolbar, toc, controls, etc.)
@@ -155,15 +121,16 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     }
 
     const availableHeight = Math.floor(containerRect.height - nonContentHeight);
-    const availableWidth = el.clientWidth;
+    const computed = getComputedStyle(el);
+    const padLeft = parseFloat(computed.paddingLeft);
+    const padRight = parseFloat(computed.paddingRight);
+    const availableWidth = el.clientWidth - padLeft - padRight;
 
     if (availableHeight <= 0 || availableWidth <= 0) return;
 
     setContentHeight(availableHeight);
     setContentWidth(availableWidth);
 
-    // After setting dimensions, we need to measure in the next frame
-    // when the CSS columns have been applied with the new dimensions
     requestAnimationFrame(() => {
       if (!el) return;
       const pages = Math.max(1, Math.round(el.scrollWidth / el.clientWidth));
@@ -174,21 +141,22 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   // Run measurement when content changes or view mode switches
   useEffect(() => {
     if (!isPaged) return;
-    // Use rAF to ensure DOM has rendered the HTML
     const frame = requestAnimationFrame(() => {
       measurePages();
     });
     return () => cancelAnimationFrame(frame);
-  }, [isPaged, epub.annotatedHtml, measurePages]);
+  }, [isPaged, displayHtml, measurePages]);
 
-  // ResizeObserver on the container to recompute on window resize
+  // ResizeObserver on the container to recompute on window resize (debounced)
   useEffect(() => {
     if (!isPaged || !containerRef.current) return;
+    let timer: ReturnType<typeof setTimeout>;
     const observer = new ResizeObserver(() => {
-      measurePages();
+      clearTimeout(timer);
+      timer = setTimeout(measurePages, 150);
     });
     observer.observe(containerRef.current);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); clearTimeout(timer); };
   }, [isPaged, measurePages]);
 
   // Reset page on chapter change
@@ -208,17 +176,27 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     const clamped = Math.max(0, Math.min(page, totalPages - 1));
     setCurrentPage(clamped);
     if (contentRef.current) {
-      contentRef.current.scrollTo({ left: clamped * contentRef.current.clientWidth, behavior: 'instant' as ScrollBehavior });
+      contentRef.current.scrollLeft = clamped * contentRef.current.clientWidth;
     }
   }, [totalPages]);
 
   const nextPage = useCallback(() => {
-    goToPage(currentPage + 1);
-  }, [goToPage, currentPage]);
+    if (currentPage >= totalPages - 1) {
+      // At last page — advance to next chapter
+      epub.nextChapter();
+    } else {
+      goToPage(currentPage + 1);
+    }
+  }, [goToPage, currentPage, totalPages, epub]);
 
   const prevPage = useCallback(() => {
-    goToPage(currentPage - 1);
-  }, [goToPage, currentPage]);
+    if (currentPage <= 0) {
+      // At first page — go to previous chapter
+      epub.prevChapter();
+    } else {
+      goToPage(currentPage - 1);
+    }
+  }, [goToPage, currentPage, epub]);
 
   // Keyboard handler for page turns (paged mode, browse only)
   useEffect(() => {
@@ -291,7 +269,7 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     );
   }
 
-  const { book, currentChapterIndex, annotatedHtml } = epub;
+  const { book, currentChapterIndex } = epub;
 
   return (
     <div className="epub-reader" ref={containerRef}>
@@ -343,7 +321,7 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
         onClick={handleContentClick}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        dangerouslySetInnerHTML={{ __html: annotatedHtml }}
+        dangerouslySetInnerHTML={{ __html: displayHtml }}
       />
 
       {isPacerMode && (
@@ -396,10 +374,23 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
       )}
 
       <div className="epub-controls">
+        {isPaged && book.chapters.length > 1 && (
+          <button
+            className="control-btn epub-chapter-skip"
+            onClick={epub.prevChapter}
+            disabled={currentChapterIndex === 0}
+            aria-label="Previous chapter"
+            title="Previous chapter"
+          >
+            &laquo;
+          </button>
+        )}
         <button
           className="control-btn"
-          onClick={epub.prevChapter}
-          disabled={currentChapterIndex === 0}
+          onClick={isPaged ? prevPage : epub.prevChapter}
+          disabled={isPaged
+            ? (currentPage === 0 && currentChapterIndex === 0)
+            : currentChapterIndex === 0}
         >
           Prev
         </button>
@@ -410,11 +401,24 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
         </span>
         <button
           className="control-btn"
-          onClick={epub.nextChapter}
-          disabled={currentChapterIndex === book.chapters.length - 1}
+          onClick={isPaged ? nextPage : epub.nextChapter}
+          disabled={isPaged
+            ? (currentPage >= totalPages - 1 && currentChapterIndex === book.chapters.length - 1)
+            : currentChapterIndex === book.chapters.length - 1}
         >
           Next
         </button>
+        {isPaged && book.chapters.length > 1 && (
+          <button
+            className="control-btn epub-chapter-skip"
+            onClick={epub.nextChapter}
+            disabled={currentChapterIndex === book.chapters.length - 1}
+            aria-label="Next chapter"
+            title="Next chapter"
+          >
+            &raquo;
+          </button>
+        )}
       </div>
 
       <div className="epub-mode-controls">

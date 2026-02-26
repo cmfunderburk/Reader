@@ -3418,7 +3418,7 @@ button {
 .epub-content.paged {
   overflow: hidden;
   column-fill: auto;
-  column-gap: 0;
+  column-gap: 2rem;
 }
 
 .epub-content img {
@@ -3502,10 +3502,6 @@ button {
   width: 0;
   background: var(--guided-sweep-color);
   pointer-events: none;
-}
-
-.epub-content .generation-mask-slot.revealed::after {
-  display: none;
 }
 
 .epub-pacer-controls {
