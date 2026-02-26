@@ -243,7 +243,7 @@ describe('figure handling', () => {
     });
   });
 
-  it('uses figure caption text for saccade chunks', () => {
+  it('uses figure caption text for guided chunks', () => {
     const text = '[FIGURE:fig2_3]\n\n[FIGURE 2.3. Posterior predictive check.]';
     const { pages, chunks } = tokenizeGuided(text, 15, 'file:///tmp/statistical/');
 
@@ -352,7 +352,7 @@ describe('figure handling', () => {
     });
   });
 
-  it('uses equation placeholders as saccade chunks instead of raw marker text', () => {
+  it('uses equation placeholders as guided chunks instead of raw marker text', () => {
     const text = '[EQN_IMAGE:12]';
     const { pages, chunks } = tokenizeGuided(
       text,
