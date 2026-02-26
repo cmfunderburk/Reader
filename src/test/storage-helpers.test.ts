@@ -765,6 +765,38 @@ describe('comprehension attempt storage', () => {
     expect(persisted[0].questions[0].keyPointResults).toEqual([{ keyPoint: 'Valid point', hit: true }]);
   });
 
+  it('V4 migration renames saccade* settings keys to guided*', () => {
+    // Seed V3 state with saccade-era keys
+    localStorage.setItem('speedread_schema_version', '3');
+    localStorage.setItem('speedread_settings', JSON.stringify({
+      saccadeFontSize: 22,
+      saccadeLength: 8,
+      saccadeShowOVP: true,
+      saccadePacerStyle: 'sweep',
+      lastSession: {
+        articleId: 'a1',
+        activity: 'paced-reading',
+        displayMode: 'saccade',
+      },
+    }));
+
+    const settings = loadSettings();
+    expect(localStorage.getItem('speedread_schema_version')).toBe('4');
+
+    // Verify keys were renamed
+    const raw = JSON.parse(localStorage.getItem('speedread_settings')!);
+    expect(raw.guidedFontSize).toBe(22);
+    expect(raw.guidedLength).toBe(8);
+    expect(raw.guidedShowOVP).toBe(true);
+    expect(raw.guidedPacerStyle).toBe('sweep');
+    expect(raw.saccadeFontSize).toBeUndefined();
+    expect(raw.saccadeLength).toBeUndefined();
+
+    // Verify displayMode migrated
+    expect(raw.lastSession.displayMode).toBe('guided');
+    expect(settings.lastSession?.displayMode).toBe('guided');
+  });
+
   it('returns empty array for non-array JSON', () => {
     localStorage.setItem('speedread_comprehension_attempts', '"not-an-array"');
     expect(loadComprehensionAttempts()).toEqual([]);

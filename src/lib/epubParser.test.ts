@@ -33,14 +33,13 @@ describe('epubParser', () => {
     expect(extractPlainText('<div><p>A <em>bold</em> claim</p></div>')).toBe('A bold claim');
   });
 
-  it('includes all textContent from HTML including script/style nodes', () => {
-    // DOMParser's textContent includes script/style text. This is acceptable because
-    // real EPUB content rarely has scripts, and the primary consumer is feeding text
-    // to reading modes where extra noise is harmless.
-    const html = '<p>Visible</p><script>alert("x")</script><p>Also visible</p>';
+  it('strips script and style content from extracted text', () => {
+    const html = '<p>Visible</p><script>alert("x")</script><style>body{color:red}</style><p>Also visible</p>';
     const result = extractPlainText(html);
     expect(result).toContain('Visible');
     expect(result).toContain('Also visible');
+    expect(result).not.toContain('alert');
+    expect(result).not.toContain('color:red');
   });
 
   it('returns empty string for empty input', () => {

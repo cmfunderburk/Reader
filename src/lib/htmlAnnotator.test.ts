@@ -158,6 +158,25 @@ describe('sanitizeEpubHtml', () => {
       expect(result).not.toContain('javascript:');
     });
 
+    it('removes iframe elements', () => {
+      const result = sanitizeEpubHtml('<p>Hello</p><iframe src="https://evil.com"></iframe><p>world</p>');
+      expect(result).not.toContain('<iframe');
+      expect(result).not.toContain('evil.com');
+    });
+
+    it('removes embed and object elements', () => {
+      const result = sanitizeEpubHtml('<p>Hi</p><embed src="x.swf"><object data="y.swf"></object>');
+      expect(result).not.toContain('<embed');
+      expect(result).not.toContain('<object');
+    });
+
+    it('removes base and link elements', () => {
+      const result = sanitizeEpubHtml('<base href="https://evil.com"><link rel="stylesheet" href="x.css"><p>Safe</p>');
+      expect(result).not.toContain('<base');
+      expect(result).not.toContain('<link');
+      expect(result).toContain('Safe');
+    });
+
     it('preserves normal attributes', () => {
       const result = sanitizeEpubHtml('<p class="intro" id="p1">Hello</p>');
       expect(result).toContain('class="intro"');

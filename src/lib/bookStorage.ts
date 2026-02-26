@@ -37,6 +37,7 @@ export function saveBookState(bookId: string, state: BookState): void {
   saveAll(all);
 }
 
+/** @internal Exposed for tests only */
 export function deleteBookState(bookId: string): void {
   const all = loadAll();
   delete all[bookId];

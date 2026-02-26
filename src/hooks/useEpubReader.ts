@@ -127,12 +127,18 @@ export function useEpubReader(): UseEpubReaderResult {
   }, [book]);
 
   const unloadBook = useCallback(() => {
+    // Revoke blob URLs to free memory
+    if (book?.resources) {
+      for (const url of book.resources.values()) {
+        URL.revokeObjectURL(url);
+      }
+    }
     bookIdRef.current = null;
     setBook(null);
     setCurrentChapterIndex(0);
     setMode('browse');
     setError(null);
-  }, []);
+  }, [book]);
 
   return {
     book,

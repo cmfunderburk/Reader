@@ -250,13 +250,6 @@ export interface ComprehensionQuestionScore {
 }
 
 // EPUB types
-export interface BookChapter {
-  id: string;
-  title: string;
-  html: string;
-  href: string;
-}
-
 export interface BookState {
   title: string;
   lastChapterIndex: number;

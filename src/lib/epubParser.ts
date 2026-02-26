@@ -115,5 +115,9 @@ export async function loadEpubFromBuffer(buffer: ArrayBuffer): Promise<EpubBookD
 export function extractPlainText(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+  for (const tag of ['script', 'style'] as const) {
+    const els = doc.body?.querySelectorAll(tag);
+    if (els) for (const el of els) el.remove();
+  }
   return doc.body?.textContent?.trim() || '';
 }

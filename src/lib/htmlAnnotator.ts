@@ -51,7 +51,7 @@ export function sanitizeEpubHtml(html: string, options?: AnnotationOptions): str
     }
   }
 
-  for (const tag of ['script', 'style'] as const) {
+  for (const tag of ['script', 'style', 'iframe', 'embed', 'object', 'base', 'link'] as const) {
     const els = doc.body.querySelectorAll(tag);
     for (const el of els) el.remove();
   }
