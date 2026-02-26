@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { UseEpubReaderResult, EpubReadingMode } from '../hooks/useEpubReader';
 import type { GenerationDifficulty } from '../types';
 import { useEpubLineSweep } from '../hooks/useEpubLineSweep';
-import { selectMaskedWords } from '../lib/epubGenerationMask';
+import { maskEpubWords } from '../lib/epubGenerationMask';
 
 interface EpubReaderProps {
   epub: UseEpubReaderResult;
@@ -82,10 +82,10 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
   // Deterministic seed from chapter index (changes per chapter)
   const maskSeed = epub.currentChapterIndex * 31337 + 42;
 
-  // Compute masked word indices
-  const maskedIndices = useMemo(() => {
-    if (!isGenerationMode || epub.words.length === 0) return new Set<number>();
-    return selectMaskedWords(epub.words, generationDifficulty, maskSeed);
+  // Compute per-character masked words
+  const maskedWords = useMemo(() => {
+    if (!isGenerationMode || epub.words.length === 0) return [];
+    return maskEpubWords(epub.words, generationDifficulty, maskSeed);
   }, [isGenerationMode, epub.words, generationDifficulty, maskSeed]);
 
   // Reset revealed state when chapter or difficulty changes
@@ -93,38 +93,47 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     setRevealed(false);
   }, [epub.currentChapterIndex, generationDifficulty]);
 
-  // Apply/remove masked class on masked word spans (generation mode)
+  // Apply/remove character-level generation masking on word spans
   useEffect(() => {
     if (!contentRef.current) return;
-
     const container = contentRef.current;
 
-    if (!isGenerationMode) {
-      // Clean up all masked classes when leaving generation mode
-      const maskedSpans = container.querySelectorAll('.epub-word-masked');
-      maskedSpans.forEach(span => {
-        span.classList.remove('epub-word-masked', 'revealed');
+    if (!isGenerationMode || maskedWords.length === 0) {
+      // Restore original word text when leaving generation mode
+      epub.words.forEach((word, idx) => {
+        const span = container.querySelector(`[data-word-idx="${idx}"]`);
+        if (span && span.querySelector('.generation-grid-cell')) {
+          span.textContent = word;
+        }
       });
       return;
     }
 
-    // First, clear any existing masked/revealed classes
-    const allMasked = container.querySelectorAll('.epub-word-masked');
-    allMasked.forEach(span => {
-      span.classList.remove('epub-word-masked', 'revealed');
-    });
-
-    // Apply masked class to selected word indices
-    maskedIndices.forEach(idx => {
+    maskedWords.forEach((masked, idx) => {
       const span = container.querySelector(`[data-word-idx="${idx}"]`);
-      if (span) {
-        span.classList.add('epub-word-masked');
-        if (revealed) {
-          span.classList.add('revealed');
+      if (!span) return;
+
+      const original = epub.words[idx];
+
+      // Build character-level spans
+      span.textContent = '';
+      for (let c = 0; c < masked.length; c++) {
+        const charSpan = document.createElement('span');
+        if (masked[c] === '_') {
+          charSpan.className = revealed
+            ? 'generation-grid-cell generation-mask-slot revealed'
+            : 'generation-grid-cell generation-mask-slot';
+          if (revealed) {
+            charSpan.textContent = original[c];
+          }
+        } else {
+          charSpan.className = 'generation-grid-cell';
+          charSpan.textContent = masked[c];
         }
+        span.appendChild(charSpan);
       }
     });
-  }, [isGenerationMode, maskedIndices, revealed]);
+  }, [isGenerationMode, maskedWords, revealed, epub.words]);
 
   // Measure pages after content renders or on resize (paged mode only)
   const measurePages = useCallback(() => {

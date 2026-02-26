@@ -3509,16 +3509,8 @@ button {
   pointer-events: none;
 }
 
-.epub-word-masked {
-  color: transparent;
-  background: var(--bg-tertiary);
-  border-radius: 2px;
-  user-select: none;
-}
-
-.epub-word-masked.revealed {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+.epub-content .generation-mask-slot.revealed::after {
+  display: none;
 }
 
 .epub-pacer-controls {
