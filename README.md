@@ -1,164 +1,82 @@
 # Reader
 
-Paced reading and recall training app, with a saccade-first workflow and integrated practice loops.
+An eBook reader with built-in pacing, recall training, and comprehension tools.
 
-Last updated: February 2026.
+## What This Is
 
-## Product Scope
-Reader currently supports four connected workflows:
-1. **Paced Reading** (`Saccade`, `RSVP`, and `Generation`) for throughput and focus.
-2. **Active Exercise** (`Prediction` and `Recall`) on saved passages.
-3. **Training** (`Article` and `Random Drill`) for repeated read-recall-feedback practice.
-4. **Comprehension Check** (LLM-generated question sets) for passage-grounded understanding feedback.
+This project started as a quick RSVP speed-reading demo — the kind of thing you build in an afternoon with a coding agent. Then I kept following other miscellaneous ideas: saccade pacers, recall exercises, prediction drills, generation-effect masking, comprehension checks. Somewhere along the way it became an actual reader.
 
-The design goal is to reduce friction between reading and retention practice by keeping context, pacing, and controls consistent across workflows.
+Today it handles EPUBs, PDFs, web articles, RSS feeds, and pasted text. You can read normally with a sweep pacer guiding your eyes, or switch into modes designed around specific research ideas — RSVP for forced pacing, generation masking for re-reading benefit (some evidence suggests that requiring partial recall during re-reads produces better retention than pure recognition), prediction and recall for verbatim memorization. After reading, you can run LLM-generated comprehension checks, and missed questions feed into a lightweight Leitner SRS for spaced review.
 
-## Core Modes
+The goal is simple: reduce friction between reading and practicing. Pacing, controls, and context stay consistent whether you're reading a chapter, drilling a sentence, or reviewing flashcards.
 
-### Saccade
-- Full-page reading with sweep/focus pacer styles.
-- OVP/fixation guidance and configurable saccade length.
-- Figure/image support, including paused click-to-zoom.
-- Passage capture actions from the same reading surface.
+## Desktop & Mobile
 
-### RSVP
-- Word/custom chunk presentation with ORP highlighting.
-- Optional WPM ramp and alternate color phase.
-- Shared pacing controls with other modes.
+The **Electron build** is the primary desktop experience — it provides a local EPUB/PDF library with file management. The **web build** works in any browser and covers everything except local file handling.
 
-### Generation
-- Line-paced reading with selective letter masking cues inspired by generation-effect tasks.
-- Masking excludes function words, proper nouns, acronyms, and numbers in Normal/Hard; for German lines, capitalization alone is not treated as a proper noun signal (to avoid exempting common nouns). Recall masks every word down to first/last letters.
-- Difficulty presets (`Normal`, `Hard`, `Recall`) adjust per-word masking (`<=25%`, `<=40%`, or first/last letters only).
-- Optional `Sweep reveal` progressively unmasks letters as the pacer passes.
-- Hold `R` to temporarily reveal full text; pacing pauses while held.
-- Uses the same page navigation and passage-capture workflow as saccade mode.
+For mobile, serve the web build over Tailscale to access it from a phone or tablet without exposing a public port:
 
-### Prediction
-- Next-word prediction with typo-tolerant scoring.
-- `Tab` preview supports either next `N` sentences or continuous preview (configurable in Settings).
+```bash
+bun run build
+npx serve dist --listen 3000
+tailscale serve 3000
+# open https://<host>.<tailnet>.ts.net/ on the mobile device
+# tailscale serve reset   to stop sharing
+```
 
-### Recall
-- Word reconstruction anchored to the same saccade layout.
-- Optional first-letter scaffold.
-- Inline correctness marking.
+## Reading Modes
 
-### Training
-- Read -> Recall -> Feedback loop for:
-  - selected article paragraphs, or
-  - random drill corpora.
-- Random Drill supports two corpus families (`Wikipedia`, `Prose`) with readability tiers (`Easy`, `Medium`, `Hard`).
-- Drill rounds are one sentence.
-- Optional auto-adjust difficulty uses a user-selected WPM range and fixed `+/-10` WPM steps.
-- In Random Drill with scaffold off, `Tab` previews remaining words at current WPM; those previewed words become practice-only (score `0`) even if typed correctly afterward.
+**Saccade** — full-page reading with a sweep or focus pacer, OVP/fixation guidance, and configurable saccade length. The default way to read.
 
-### Comprehension Check
-- Launcher entry: select `Comprehension Check` from Home, then choose an article.
-- Post-reading entry: when paced reading reaches the end of a text, launch a check directly from the reader surface.
-- Closed-book -> open-book sequencing:
-  - factual questions first (passage hidden),
-  - inferential/structural/evaluative questions next (passage available).
-- Mixed formats supported in one check: multiple choice, true/false, short answer, essay.
-- Generated questions now include key-point checklists, and free-response scoring prioritizes key-point coverage.
-- True/false items require both a True/False selection and a brief explanation (`<= 2` sentences), and grading reflects both parts.
-- Results emphasize per-question explanatory feedback and persist attempt history locally.
-- `Standard`/`Deep` results include key-point hit/miss breakdown when available.
-- Results support `Quick`/`Standard`/`Deep` review depth plus `All questions` / `Needs review` filtering.
-- Review prior attempts from Home via `Comprehension Check -> Review History`.
-- Configure API key in `Settings -> Comprehension Check API Key` (this key is only required for comprehension checks).
-- Configure model in `Settings -> Comprehension Check API Key` (currently `gemini-3-pro-preview` or `gemini-3-flash-preview`).
-- In Electron builds, API keys are stored in OS-backed secure encrypted storage when available (with local app-storage fallback if the OS keyring is unavailable); in web builds they use browser local storage.
-- Current Gemini REST integration sends the API key via `x-goog-api-key` request header.
+**RSVP** — rapid serial visual presentation, one word or chunk at a time with ORP highlighting. Good for forced-pace training at a target WPM.
 
-## Workflow Features
-- Passage workspace in paced reading:
-  - `Save Sentence`
-  - `Save Paragraph`
-  - `Save Last 3`
-  - review queue actions (`Recall`, `Predict`, `Hard`, `Easy`, `Done`)
-- Explicit `Return to Reading` from active exercise.
-- Session snapshot restore for reading/exercise continuity.
-- Per-activity WPM persistence (`paced-reading`, `active-recall`, `training`, `comprehension-check`).
+**Generation** — line-paced reading with selective letter masking. Inspired by generation-effect research: during re-reads, having to reconstruct partially masked words may improve retention over passive recognition. Three difficulty presets control how aggressively letters are hidden.
+
+## Practice & Training
+
+**Prediction** — next-word prediction with typo-tolerant scoring. Tests whether you can anticipate a text's language.
+
+**Recall** — word-by-word reconstruction of saved passages, with optional first-letter scaffolding.
+
+**Training** — a read → recall → feedback loop over article paragraphs or random drill sentences. Random Drill pulls from Wikipedia and prose corpora across readability tiers, with optional auto-adjusting WPM difficulty.
+
+## Comprehension Checks & Review
+
+LLM-generated question sets (via Gemini API) test passage understanding in closed-book then open-book sequence. Mixed formats: multiple choice, true/false, short answer, essay. Results include per-question explanatory feedback.
+
+Scored questions are automatically ingested into a Leitner-box SRS system (5 boxes, 1–30 day intervals) for spaced review from the home screen.
 
 ## Content Sources
-- URL import (Readability extraction).
-- Paste text.
-- RSS/Atom feeds.
-- Local library content in Electron (PDF/EPUB workflows).
-- Library sharing via `Export Manifest` / `Import Manifest`.
-- Wikipedia daily/random featured ingestion with reader-specific normalization.
 
-## Keyboard (High-Level)
-- `Space`: play/pause in playback modes.
-- `[` / `]`: adjust WPM for current activity.
-- `Esc`: back/exit/skip depending on surface.
-- Generation mode: hold `R` to reveal current page text (pacing pauses while held).
-- Prediction: `Tab` preview toggle.
-- Recall/training recall: `Enter`/`Space` submit or continue depending on state.
-- Training Random Drill (no scaffold): `Tab` timed preview of remaining words (previewed words are unscored).
-
-## Mobile Access via Tailscale
-Use this when you want to run Reader on a desktop/laptop and open it from a phone or tablet without exposing a public port.
-
-1. Install and sign in to Tailscale on both the host machine and the mobile device (same tailnet).
-2. Build the web app:
-   ```bash
-   bun run build
-   ```
-3. Serve the built app locally:
-   ```bash
-   npx serve dist --listen 3000
-   ```
-4. Publish that local port through Tailscale:
-   ```bash
-   tailscale serve 3000
-   ```
-5. Open the generated `https://<host>.<tailnet>.ts.net/` URL on the mobile device.
-
-To stop sharing, run:
-```bash
-tailscale serve reset
-```
+- URL import (Readability extraction)
+- Pasted text
+- RSS/Atom feeds
+- EPUB and PDF files (Electron)
+- Wikipedia daily/random featured articles
 
 ## Development
 
 ```bash
 bun install
-bun run dev
-bun run electron:dev
-bun run typecheck
-bun run lint
-bun run test:run
-bun run verify
-bun run verify:ci
-bun run build
+bun run dev              # web dev server (127.0.0.1:5417)
+bun run electron:dev     # Electron dev
+bun run build            # production web build
+bun run electron:build   # Electron package
 ```
 
-Dev server defaults to `http://127.0.0.1:5417` and uses strict port binding (it will fail fast if occupied, rather than shifting or taking over other ports). Override with `READER_DEV_PORT`, for example:
-
-```bash
-READER_DEV_PORT=5517 bun run dev
-```
-
-## Electron Build
-
-```bash
-bun run electron:build
-```
+Override the dev port with `READER_DEV_PORT=5517 bun run dev`.
 
 ## Quality Gates
-Run these before commit/PR:
-- `bun run verify`
-- `bun run verify:ci` (matches CI lint + coverage + build gate)
-- `bun run typecheck`
-- `bun run lint`
-- `bun run test:run`
-- `bun run build`
 
-If `electron/**` or Electron-relevant shared/type/config surfaces changed, also run:
-- `bun run electron:build`
+```bash
+bun run verify           # typecheck + lint + test
+bun run verify:ci        # CI gate (lint + coverage + build)
+```
+
+Also run `bun run electron:build` when `electron/**` or shared Electron types change.
 
 ## Project Docs
+
 - Agent/repo workflow: `AGENTS.md`
 - AI implementation context: `CLAUDE.md`
 - Comprehension research synthesis: `docs/Comprehension-Check-Research.md`

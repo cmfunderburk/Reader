@@ -45,7 +45,7 @@ describe('useRSVP — load and reset', () => {
 
   it('defaults line-paced modes to 25 lines per page', () => {
     const { result } = renderHook(() =>
-      useRSVP({ initialMode: 'word', initialDisplayMode: 'saccade' })
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'guided' })
     );
 
     expect(result.current.linesPerPage).toBe(25);
@@ -315,65 +315,65 @@ describe('useRSVP — goToIndex', () => {
   });
 });
 
-describe('useRSVP — saccade paging', () => {
+describe('useRSVP — guided paging', () => {
   it('nextPage/prevPage move by page with bounds', () => {
     const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
     const article = makeArticle({ content: longContent });
     const { result } = renderHook(() =>
-      useRSVP({ initialMode: 'word', initialDisplayMode: 'saccade' })
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'guided' })
     );
 
-    act(() => result.current.loadArticle(article, { displayMode: 'saccade' }));
+    act(() => result.current.loadArticle(article, { displayMode: 'guided' }));
     act(() => result.current.setLinesPerPage(5));
 
-    expect(result.current.saccadePages.length).toBeGreaterThan(1);
-    expect(result.current.currentSaccadePageIndex).toBe(0);
+    expect(result.current.guidedPages.length).toBeGreaterThan(1);
+    expect(result.current.currentGuidedPageIndex).toBe(0);
 
     act(() => result.current.prevPage());
-    expect(result.current.currentSaccadePageIndex).toBe(0);
+    expect(result.current.currentGuidedPageIndex).toBe(0);
 
     act(() => result.current.nextPage());
-    expect(result.current.currentSaccadePageIndex).toBe(1);
+    expect(result.current.currentGuidedPageIndex).toBe(1);
 
-    const lastPageIndex = result.current.saccadePages.length - 1;
-    for (let i = 0; i < result.current.saccadePages.length + 3; i++) {
+    const lastPageIndex = result.current.guidedPages.length - 1;
+    for (let i = 0; i < result.current.guidedPages.length + 3; i++) {
       act(() => result.current.nextPage());
     }
-    expect(result.current.currentSaccadePageIndex).toBe(lastPageIndex);
+    expect(result.current.currentGuidedPageIndex).toBe(lastPageIndex);
 
     act(() => result.current.nextPage());
-    expect(result.current.currentSaccadePageIndex).toBe(lastPageIndex);
+    expect(result.current.currentGuidedPageIndex).toBe(lastPageIndex);
   });
 
   it('re-paginates when linesPerPage changes and page jumps follow the new layout', () => {
     const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
     const article = makeArticle({ content: longContent });
     const { result } = renderHook(() =>
-      useRSVP({ initialMode: 'word', initialDisplayMode: 'saccade' })
+      useRSVP({ initialMode: 'word', initialDisplayMode: 'guided' })
     );
 
-    act(() => result.current.loadArticle(article, { displayMode: 'saccade' }));
+    act(() => result.current.loadArticle(article, { displayMode: 'guided' }));
     act(() => result.current.setLinesPerPage(5));
 
-    const pagesAt5 = result.current.saccadePages.length;
+    const pagesAt5 = result.current.guidedPages.length;
     expect(pagesAt5).toBeGreaterThan(1);
-    expect(result.current.saccadePages.every(page => page.lines.length <= 5)).toBe(true);
+    expect(result.current.guidedPages.every(page => page.lines.length <= 5)).toBe(true);
 
     act(() => result.current.setLinesPerPage(25));
 
-    expect(result.current.saccadePages.length).toBeLessThan(pagesAt5);
-    expect(result.current.saccadePages.every(page => page.lines.length <= 25)).toBe(true);
+    expect(result.current.guidedPages.length).toBeLessThan(pagesAt5);
+    expect(result.current.guidedPages.every(page => page.lines.length <= 25)).toBe(true);
 
-    if (result.current.saccadePages.length > 1) {
-      const pageBefore = result.current.currentSaccadePageIndex;
+    if (result.current.guidedPages.length > 1) {
+      const pageBefore = result.current.currentGuidedPageIndex;
       act(() => result.current.nextPage());
-      expect(result.current.currentSaccadePageIndex).toBe(
-        Math.min(pageBefore + 1, result.current.saccadePages.length - 1)
+      expect(result.current.currentGuidedPageIndex).toBe(
+        Math.min(pageBefore + 1, result.current.guidedPages.length - 1)
       );
     }
   });
 
-  it('generation mode uses line pages and page navigation like saccade', () => {
+  it('generation mode uses line pages and page navigation like guided', () => {
     const longContent = Array.from({ length: 700 }, (_, i) => `word${i}`).join(' ');
     const article = makeArticle({ content: longContent });
     const { result } = renderHook(() =>
@@ -384,12 +384,12 @@ describe('useRSVP — saccade paging', () => {
     act(() => result.current.setLinesPerPage(6));
 
     expect(result.current.displayMode).toBe('generation');
-    expect(result.current.saccadePages.length).toBeGreaterThan(1);
-    expect(result.current.currentSaccadePage).not.toBeNull();
+    expect(result.current.guidedPages.length).toBeGreaterThan(1);
+    expect(result.current.currentGuidedPage).not.toBeNull();
 
-    const firstPage = result.current.currentSaccadePageIndex;
+    const firstPage = result.current.currentGuidedPageIndex;
     act(() => result.current.nextPage());
-    expect(result.current.currentSaccadePageIndex).toBe(Math.min(firstPage + 1, result.current.saccadePages.length - 1));
+    expect(result.current.currentGuidedPageIndex).toBe(Math.min(firstPage + 1, result.current.guidedPages.length - 1));
   });
 });
 
@@ -556,11 +556,11 @@ describe('useRSVP — mode switch retokenization', () => {
     act(() => vi.advanceTimersByTime(150));
 
     act(() => {
-      result.current.setDisplayMode('saccade');
+      result.current.setDisplayMode('guided');
       result.current.setDisplayMode('prediction');
       result.current.setDisplayMode('rsvp');
       result.current.setDisplayMode('prediction');
-      result.current.setDisplayMode('saccade');
+      result.current.setDisplayMode('guided');
     });
 
     expect(result.current.currentChunkIndex).toBeGreaterThanOrEqual(0);

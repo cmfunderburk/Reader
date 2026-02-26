@@ -19,6 +19,7 @@ const baseProps = {
   comprehensionAttempts: [] as ComprehensionAttempt[],
   srsDueCount: 0,
   onStartSRSReview: vi.fn(),
+  onOpenEpub: vi.fn(),
 };
 
 function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {
@@ -60,7 +61,7 @@ describe('HomeScreen', () => {
 
     const pacedReading = within(pacedReadingCard as HTMLElement);
     expect(pacedReading.getByText('RSVP')).toBeTruthy();
-    expect(pacedReading.getByText('Saccade')).toBeTruthy();
+    expect(pacedReading.getByText('Guided')).toBeTruthy();
     expect(pacedReading.getByText('Generation')).toBeTruthy();
   });
 

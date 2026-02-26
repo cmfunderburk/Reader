@@ -8,7 +8,7 @@ export interface RecallStatsDelta {
 
 export interface RecallChunkLike {
   text: string;
-  saccade?: {
+  guided?: {
     lineIndex: number;
     startChar: number;
   };
@@ -140,9 +140,9 @@ export function makeRecallWordKey(lineIndex: number, startChar: number): string 
 export function collectRemainingPreviewWordKeys(chunks: RecallChunkLike[], startIndex: number): string[] {
   const keys: string[] = [];
   for (let i = startIndex; i < chunks.length; i++) {
-    const saccade = chunks[i]?.saccade;
-    if (!saccade) continue;
-    keys.push(makeRecallWordKey(saccade.lineIndex, saccade.startChar));
+    const pos = chunks[i]?.guided;
+    if (!pos) continue;
+    keys.push(makeRecallWordKey(pos.lineIndex, pos.startChar));
   }
   return keys;
 }
@@ -169,8 +169,8 @@ export function consumeRecallTokens({
     const known = isWordKnown(token, actual);
     const exact = isExactMatch(token, actual);
     const detail = isDetailChunk(nextIndex);
-    const key = chunk.saccade
-      ? makeRecallWordKey(chunk.saccade.lineIndex, chunk.saccade.startChar)
+    const key = chunk.guided
+      ? makeRecallWordKey(chunk.guided.lineIndex, chunk.guided.startChar)
       : `fallback:${nextIndex}`;
     const forfeited = forfeitedWordKeys.has(key);
     const creditedKnown = forfeited ? false : known;
@@ -280,8 +280,8 @@ export function planScaffoldRecallSubmission({
   const actual = chunk.text;
   const known = isWordKnown(predicted, actual);
   const exact = isExactMatch(predicted, actual);
-  const key = chunk.saccade
-    ? makeRecallWordKey(chunk.saccade.lineIndex, chunk.saccade.startChar)
+  const key = chunk.guided
+    ? makeRecallWordKey(chunk.guided.lineIndex, chunk.guided.startChar)
     : `fallback:${currentIndex}`;
 
   const transitionPlan = planScaffoldRecallTransition({

@@ -1,18 +1,18 @@
-import type { Chunk, SaccadePage, SaccadeLine } from '../types';
+import type { Chunk, GuidedPage, GuidedLine } from '../types';
 import { normalizeText, calculateORP, wordPenalty, FUNCTION_WORDS } from './tokenizer';
 
-export const SACCADE_LINE_WIDTH = 80;
-export const SACCADE_LINES_PER_PAGE = 15;
-export const SACCADE_FIGURE_MIN_LINE_SPAN_RATIO = 0.28;
-export const SACCADE_FIGURE_MIN_LINE_SPAN_FLOOR = 5;
-export const SACCADE_FIGURE_CAPTION_EXTRA_SPAN_MAX = 3;
-export const SACCADE_EQUATION_LINE_SPAN = 2;
+export const GUIDED_LINE_WIDTH = 80;
+export const GUIDED_LINES_PER_PAGE = 15;
+export const GUIDED_FIGURE_MIN_LINE_SPAN_RATIO = 0.28;
+export const GUIDED_FIGURE_MIN_LINE_SPAN_FLOOR = 5;
+export const GUIDED_FIGURE_CAPTION_EXTRA_SPAN_MAX = 3;
+export const GUIDED_EQUATION_LINE_SPAN = 2;
 
 /**
- * Calculate how long a saccade line should be displayed, in milliseconds.
+ * Calculate how long a guided line should be displayed, in milliseconds.
  * Uses character count as the basis: 5 characters = 1 word at the given WPM.
  */
-export function calculateSaccadeLineDuration(textLength: number, wpm: number): number {
+export function calculateGuidedLineDuration(textLength: number, wpm: number): number {
   if (textLength <= 0 || wpm <= 0) return 0;
   return (textLength / 5) * (60000 / wpm);
 }
@@ -24,7 +24,7 @@ export function calculateSaccadeLineDuration(textLength: number, wpm: number): n
  * Uses a scoring model that penalizes short and function words, preferring
  * fixations on longer content words. See docs/saccade/01-scoring-function-v1.md.
  */
-export function computeLineFixations(lineText: string, saccadeLength: number): number[] {
+export function computeLineFixations(lineText: string, guidedLength: number): number[] {
   const words: { word: string; start: number; orpPos: number }[] = [];
   const regex = /\S+/g;
   let m;
@@ -39,9 +39,9 @@ export function computeLineFixations(lineText: string, saccadeLength: number): n
 
   if (words.length === 0) return [];
 
-  const aggression = Math.max(0, Math.min(1, (saccadeLength - 7) / 8));
+  const aggression = Math.max(0, Math.min(1, (guidedLength - 7) / 8));
   const skipScale = 0.8 + 0.4 * aggression;
-  const maxJump = saccadeLength + 6;
+  const maxJump = guidedLength + 6;
 
   // First fixation: skip short first word if a second word exists
   const firstIdx = (words[0].word.length <= 3 && words.length > 1) ? 1 : 0;
@@ -50,7 +50,7 @@ export function computeLineFixations(lineText: string, saccadeLength: number): n
 
   while (true) {
     const lastPos = fixations[fixations.length - 1];
-    const target = lastPos + saccadeLength;
+    const target = lastPos + guidedLength;
 
     // Score candidates within max jump window
     let bestIdx = -1;
@@ -331,9 +331,9 @@ function detectHeading(line: string): { isHeading: boolean; level: number; text:
 /**
  * Word-wrap a paragraph into lines of specified width.
  */
-function wrapParagraph(text: string, lineWidth: number): SaccadeLine[] {
+function wrapParagraph(text: string, lineWidth: number): GuidedLine[] {
   const words = text.split(/\s+/).filter(w => w.length > 0);
-  const lines: SaccadeLine[] = [];
+  const lines: GuidedLine[] = [];
   let currentLine = '';
 
   for (const word of words) {
@@ -371,7 +371,7 @@ export function flowTextIntoLines(
   lineWidth: number,
   figureAssetBaseUrl?: string,
   sourcePath?: string
-): SaccadeLine[] {
+): GuidedLine[] {
   const normalized = normalizeText(text);
 
   // Split into blocks (paragraphs/headings separated by blank lines)
@@ -380,7 +380,7 @@ export function flowTextIntoLines(
     .map(b => b.trim())
     .filter(b => b.length > 0);
 
-  const lines: SaccadeLine[] = [];
+  const lines: GuidedLine[] = [];
 
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
@@ -526,20 +526,20 @@ function buildEquationSrc(
  * Group lines into raw pages.
  */
 function estimateFigureLineSpan(
-  line: SaccadeLine,
+  line: GuidedLine,
   figureBaseLineSpan: number
 ): number {
   if (line.type !== 'figure') return 1;
-  if (line.isEquation) return SACCADE_EQUATION_LINE_SPAN;
+  if (line.isEquation) return GUIDED_EQUATION_LINE_SPAN;
 
   // Reserve extra page budget for long captions so trailing text
   // is pushed to the next page instead of being clipped at viewport bottom.
   const captionText = (line.figureCaption || line.text || '').trim();
   const estimatedCaptionLines = captionText.length > 0
-    ? Math.ceil(captionText.length / SACCADE_LINE_WIDTH)
+    ? Math.ceil(captionText.length / GUIDED_LINE_WIDTH)
     : 1;
   const captionExtraSpan = Math.min(
-    SACCADE_FIGURE_CAPTION_EXTRA_SPAN_MAX,
+    GUIDED_FIGURE_CAPTION_EXTRA_SPAN_MAX,
     Math.max(0, estimatedCaptionLines - 1)
   );
 
@@ -547,14 +547,14 @@ function estimateFigureLineSpan(
 }
 
 function groupIntoPages(
-  lines: SaccadeLine[],
+  lines: GuidedLine[],
   linesPerPage: number,
   figureBaseLineSpan: number = 1
-): { lines: SaccadeLine[] }[] {
-  const pages: { lines: SaccadeLine[] }[] = [];
+): { lines: GuidedLine[] }[] {
+  const pages: { lines: GuidedLine[] }[] = [];
   if (linesPerPage <= 0 || lines.length === 0) return pages;
 
-  let currentPage: SaccadeLine[] = [];
+  let currentPage: GuidedLine[] = [];
   let usedSpan = 0;
 
   for (const line of lines) {
@@ -585,27 +585,27 @@ export function countWords(text: string): number {
 }
 
 /**
- * Tokenize text for saccade mode.
+ * Tokenize text for guided mode.
  * Returns pages (for display) and a flat array of chunks (for playback timer).
  *
  * Each non-blank line produces exactly one chunk. The timer advances line-by-line,
  * and the sweep animation duration is derived from each chunk's display time.
  */
-export function tokenizeSaccade(
+export function tokenizeGuided(
   text: string,
-  linesPerPage: number = SACCADE_LINES_PER_PAGE,
+  linesPerPage: number = GUIDED_LINES_PER_PAGE,
   figureAssetBaseUrl?: string,
   sourcePath?: string
-): { pages: SaccadePage[]; chunks: Chunk[] } {
-  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH, figureAssetBaseUrl, sourcePath);
+): { pages: GuidedPage[]; chunks: Chunk[] } {
+  const lines = flowTextIntoLines(text, GUIDED_LINE_WIDTH, figureAssetBaseUrl, sourcePath);
   const figureMinLineSpan = Math.max(
-    SACCADE_FIGURE_MIN_LINE_SPAN_FLOOR,
-    Math.round(linesPerPage * SACCADE_FIGURE_MIN_LINE_SPAN_RATIO)
+    GUIDED_FIGURE_MIN_LINE_SPAN_FLOOR,
+    Math.round(linesPerPage * GUIDED_FIGURE_MIN_LINE_SPAN_RATIO)
   );
   const rawPages = groupIntoPages(lines, linesPerPage, figureMinLineSpan);
 
   const allChunks: Chunk[] = [];
-  const pages: SaccadePage[] = [];
+  const pages: GuidedPage[] = [];
 
   for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
     const rawPage = rawPages[pageIndex];
@@ -628,7 +628,7 @@ export function tokenizeSaccade(
         text: chunkText.length > 0 ? chunkText : 'Figure',
         wordCount: countWords(chunkText),
         orpIndex: 0,
-        saccade: {
+        guided: {
           pageIndex,
           lineIndex,
           startChar: 0,
@@ -651,23 +651,23 @@ export function tokenizeSaccade(
 
 /**
  * Tokenize text for recall mode.
- * Same page layout as saccade, but produces one chunk per word (not per line)
+ * Same page layout as guided, but produces one chunk per word (not per line)
  * so the user can type each word individually.
  */
 export function tokenizeRecall(
   text: string,
-  linesPerPage: number = SACCADE_LINES_PER_PAGE
-): { pages: SaccadePage[]; chunks: Chunk[] } {
-  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
+  linesPerPage: number = GUIDED_LINES_PER_PAGE
+): { pages: GuidedPage[]; chunks: Chunk[] } {
+  const lines = flowTextIntoLines(text, GUIDED_LINE_WIDTH);
   const rawPages = groupIntoPages(lines, linesPerPage);
 
   const allChunks: Chunk[] = [];
-  const pages: SaccadePage[] = [];
+  const pages: GuidedPage[] = [];
 
   for (let pageIndex = 0; pageIndex < rawPages.length; pageIndex++) {
     const rawPage = rawPages[pageIndex];
     const pageLineChunks: Chunk[][] = [];
-    const pageLines: SaccadeLine[] = rawPage.lines.map(line =>
+    const pageLines: GuidedLine[] = rawPage.lines.map(line =>
       line.type === 'figure'
         ? { text: '', type: 'blank' }
         : line
@@ -691,7 +691,7 @@ export function tokenizeRecall(
           text: word,
           wordCount: 1,
           orpIndex: 0,
-          saccade: {
+          guided: {
             pageIndex,
             lineIndex,
             startChar: match.index,
@@ -833,13 +833,13 @@ export function segmentIntoSentences(
 }
 
 /**
- * Tokenize a single paragraph for saccade-style reading display.
+ * Tokenize a single paragraph for guided-style reading display.
  * Returns a single page and one chunk per non-blank line.
  */
-export function tokenizeParagraphSaccade(
+export function tokenizeParagraphGuided(
   text: string
-): { page: SaccadePage; chunks: Chunk[] } {
-  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
+): { page: GuidedPage; chunks: Chunk[] } {
+  const lines = flowTextIntoLines(text, GUIDED_LINE_WIDTH);
   const chunks: Chunk[] = [];
   const lineChunks: Chunk[][] = [];
 
@@ -855,7 +855,7 @@ export function tokenizeParagraphSaccade(
       text: line.text,
       wordCount: countWords(line.text),
       orpIndex: 0,
-      saccade: {
+      guided: {
         pageIndex: 0,
         lineIndex,
         startChar: 0,
@@ -867,18 +867,18 @@ export function tokenizeParagraphSaccade(
     chunks.push(chunk);
   }
 
-  const page: SaccadePage = { lines, lineChunks };
+  const page: GuidedPage = { lines, lineChunks };
   return { page, chunks };
 }
 
 /**
  * Tokenize a single paragraph for recall display.
- * Same line layout as saccade, but one chunk per word.
+ * Same line layout as guided, but one chunk per word.
  */
 export function tokenizeParagraphRecall(
   text: string
-): { page: SaccadePage; chunks: Chunk[] } {
-  const lines = flowTextIntoLines(text, SACCADE_LINE_WIDTH);
+): { page: GuidedPage; chunks: Chunk[] } {
+  const lines = flowTextIntoLines(text, GUIDED_LINE_WIDTH);
   const chunks: Chunk[] = [];
   const pageLineChunks: Chunk[][] = [];
 
@@ -900,7 +900,7 @@ export function tokenizeParagraphRecall(
         text: word,
         wordCount: 1,
         orpIndex: 0,
-        saccade: {
+        guided: {
           pageIndex: 0,
           lineIndex,
           startChar: match.index,
@@ -914,6 +914,6 @@ export function tokenizeParagraphRecall(
     pageLineChunks.push(lineChunks);
   }
 
-  const page: SaccadePage = { lines, lineChunks: pageLineChunks };
+  const page: GuidedPage = { lines, lineChunks: pageLineChunks };
   return { page, chunks };
 }

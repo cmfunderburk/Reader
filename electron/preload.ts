@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('library', {
   openBook: (filePath) =>
     ipcRenderer.invoke('library:openBook', filePath),
 
+  readFileBuffer: (filePath) =>
+    ipcRenderer.invoke('library:readFileBuffer', filePath),
+
   addSource: (source) =>
     ipcRenderer.invoke('library:addSource', source),
 

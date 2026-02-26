@@ -23,6 +23,7 @@ interface HomeScreenProps {
   comprehensionAttempts: ComprehensionAttempt[];
   srsDueCount: number;
   onStartSRSReview: () => void;
+  onOpenEpub: () => void;
 }
 
 const MAX_HISTORY_ATTEMPTS = 30;
@@ -50,8 +51,8 @@ function formatDisplayMode(mode: DisplayMode): string {
   switch (mode) {
     case 'rsvp':
       return 'RSVP';
-    case 'saccade':
-      return 'Saccade';
+    case 'guided':
+      return 'Guided';
     case 'generation':
       return 'Generation';
     case 'prediction':
@@ -96,6 +97,7 @@ export function HomeScreen({
   comprehensionAttempts,
   srsDueCount,
   onStartSRSReview,
+  onOpenEpub,
 }: HomeScreenProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const attemptsToShow = comprehensionAttempts.slice(0, MAX_HISTORY_ATTEMPTS);
@@ -216,7 +218,7 @@ export function HomeScreen({
             <p className="mode-card-desc">Read with adjustable pace guidance</p>
             <div className="mode-card-chips">
               <span className="mode-chip">RSVP</span>
-              <span className="mode-chip">Saccade</span>
+              <span className="mode-chip">Guided</span>
               <span className="mode-chip">Generation</span>
             </div>
             <div className="mode-card-actions">
@@ -287,6 +289,19 @@ export function HomeScreen({
                 onClick={onStartDrill}
               >
                 Random Drill
+              </button>
+            </div>
+          </article>
+
+          <article className="mode-card">
+            <h2 className="mode-card-title">EPUB Reader</h2>
+            <p className="mode-card-desc">Read EPUB books with pacer and generation modes</p>
+            <div className="mode-card-actions">
+              <button
+                className="launcher-primary-btn"
+                onClick={onOpenEpub}
+              >
+                Open EPUB
               </button>
             </div>
           </article>

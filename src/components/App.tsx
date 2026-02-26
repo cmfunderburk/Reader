@@ -16,8 +16,10 @@ import { ComprehensionCheck } from './ComprehensionCheck';
 import { ComprehensionCheckBoundary } from './ComprehensionCheckBoundary';
 import { ComprehensionExamBuilder } from './ComprehensionExamBuilder';
 import { SRSReviewSession } from './SRSReviewSession';
+import { EpubReader } from './EpubReader';
 import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
+import { useEpubReader } from '../hooks/useEpubReader';
 import { useComprehensionState } from '../hooks/useComprehensionState';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
 import {
@@ -54,8 +56,8 @@ import type {
   Activity,
   DisplayMode,
   GenerationDifficulty,
-  SaccadePacerStyle,
-  SaccadeFocusTarget,
+  GuidedPacerStyle,
+  GuidedFocusTarget,
   Passage,
   PassageCaptureKind,
   PassageReviewMode,
@@ -230,6 +232,7 @@ export function App() {
     comprehensionGeminiModel: settings.comprehensionGeminiModel,
   });
   const { srsCards, setSrsSessionCards } = comp;
+  const epub = useEpubReader();
 
   const resolvedTheme = useMemo(
     () => resolveThemePreference(displaySettings.themePreference, systemTheme),
@@ -267,7 +270,7 @@ export function App() {
     rampStartPercent: settings.rampStartPercent,
     rampRate: settings.rampRate,
     rampInterval: settings.rampInterval,
-    saccadeLength: settings.saccadeLength,
+    guidedLength: settings.guidedLength,
     onComplete: () => {},
   });
   const previousReadingModeRef = useRef<DisplayMode>(rsvp.displayMode);
@@ -570,24 +573,24 @@ export function App() {
     patchDisplaySettings({ rsvpShowORP: enabled });
   }, [patchDisplaySettings]);
 
-  const handleSaccadeShowOVPChange = useCallback((enabled: boolean) => {
-    patchDisplaySettings({ saccadeShowOVP: enabled });
+  const handleGuidedShowOVPChange = useCallback((enabled: boolean) => {
+    patchDisplaySettings({ guidedShowOVP: enabled });
   }, [patchDisplaySettings]);
 
-  const handleSaccadePacerStyleChange = useCallback((style: SaccadePacerStyle) => {
-    patchDisplaySettings({ saccadePacerStyle: style, saccadeShowSweep: style === 'sweep' });
+  const handleGuidedPacerStyleChange = useCallback((style: GuidedPacerStyle) => {
+    patchDisplaySettings({ guidedPacerStyle: style, guidedShowSweep: style === 'sweep' });
   }, [patchDisplaySettings]);
 
-  const handleSaccadeFocusTargetChange = useCallback((target: SaccadeFocusTarget) => {
-    patchDisplaySettings({ saccadeFocusTarget: target });
+  const handleGuidedFocusTargetChange = useCallback((target: GuidedFocusTarget) => {
+    patchDisplaySettings({ guidedFocusTarget: target });
   }, [patchDisplaySettings]);
 
-  const handleSaccadeMergeShortFunctionWordsChange = useCallback((enabled: boolean) => {
-    patchDisplaySettings({ saccadeMergeShortFunctionWords: enabled });
+  const handleGuidedMergeShortFunctionWordsChange = useCallback((enabled: boolean) => {
+    patchDisplaySettings({ guidedMergeShortFunctionWords: enabled });
   }, [patchDisplaySettings]);
 
-  const handleSaccadeLengthChange = useCallback((length: number) => {
-    patchDisplaySettings({ saccadeLength: length });
+  const handleGuidedLengthChange = useCallback((length: number) => {
+    patchDisplaySettings({ guidedLength: length });
   }, [patchDisplaySettings]);
 
   const handleGenerationDifficultyChange = useCallback((difficulty: GenerationDifficulty) => {
@@ -603,10 +606,10 @@ export function App() {
     rsvp.goToIndex(newIndex);
   }, [rsvp]);
 
-  const flatSaccadeLines = useMemo(() => {
+  const flatGuidedLines = useMemo(() => {
     const chunkIndexByLineKey = new Map<string, number>();
     for (let i = 0; i < rsvp.chunks.length; i++) {
-      const sac = rsvp.chunks[i].saccade;
+      const sac = rsvp.chunks[i].guided;
       if (!sac) continue;
       const key = `${sac.pageIndex}:${sac.lineIndex}`;
       if (!chunkIndexByLineKey.has(key)) {
@@ -614,7 +617,7 @@ export function App() {
       }
     }
 
-    return rsvp.saccadePages.flatMap((page, pageIndex) =>
+    return rsvp.guidedPages.flatMap((page, pageIndex) =>
       page.lines.map((line, lineIndex) => {
         const key = `${pageIndex}:${lineIndex}`;
         const chunkIndex = chunkIndexByLineKey.get(key);
@@ -628,19 +631,19 @@ export function App() {
         };
       })
     ).map((line, idx) => ({ ...line, globalLineIndex: idx }));
-  }, [rsvp.chunks, rsvp.saccadePages]);
+  }, [rsvp.chunks, rsvp.guidedPages]);
 
-  const currentSaccadeCaptureContext = useMemo(() => {
-    if (rsvp.displayMode !== 'saccade' && rsvp.displayMode !== 'generation') return null;
-    if (!rsvp.article || !rsvp.currentChunk?.saccade) return null;
+  const currentGuidedCaptureContext = useMemo(() => {
+    if (rsvp.displayMode !== 'guided' && rsvp.displayMode !== 'generation') return null;
+    if (!rsvp.article || !rsvp.currentChunk?.guided) return null;
 
-    const currentSac = rsvp.currentChunk.saccade;
-    const globalLineIndex = flatSaccadeLines.findIndex((line) =>
+    const currentSac = rsvp.currentChunk.guided;
+    const globalLineIndex = flatGuidedLines.findIndex((line) =>
       line.pageIndex === currentSac.pageIndex && line.lineIndex === currentSac.lineIndex
     );
     if (globalLineIndex < 0) return null;
 
-    const line = flatSaccadeLines[globalLineIndex];
+    const line = flatGuidedLines[globalLineIndex];
     if (!line || line.type === 'blank' || normalizeCaptureLineText(line.text).length === 0) return null;
 
     return {
@@ -651,7 +654,7 @@ export function App() {
       globalLineIndex,
       currentChunkIndex: rsvp.currentChunkIndex,
     };
-  }, [flatSaccadeLines, rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.displayMode]);
+  }, [flatGuidedLines, rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.displayMode]);
 
   const capturePassageFromLines = useCallback((
     captureKind: PassageCaptureKind,
@@ -664,7 +667,7 @@ export function App() {
     }>,
     textOverride?: string
   ): Passage | null => {
-    const ctx = currentSaccadeCaptureContext;
+    const ctx = currentGuidedCaptureContext;
     if (!ctx) return null;
 
     const lines = selectedLines
@@ -704,30 +707,30 @@ export function App() {
     setPassages((prev) => [passage, ...prev.filter((existing) => existing.id !== passage.id)]);
     setCaptureNotice(`Saved ${captureKindLabel(captureKind)} to passage queue`);
     return passage;
-  }, [currentSaccadeCaptureContext]);
+  }, [currentGuidedCaptureContext]);
 
   const handleCaptureSentence = useCallback(() => {
-    const ctx = currentSaccadeCaptureContext;
+    const ctx = currentGuidedCaptureContext;
     if (!ctx) return;
-    const sentencePlan = planSentenceCapture(flatSaccadeLines, ctx.globalLineIndex);
+    const sentencePlan = planSentenceCapture(flatGuidedLines, ctx.globalLineIndex);
     if (!sentencePlan) return;
     capturePassageFromLines('sentence', sentencePlan.sentenceLines, sentencePlan.sentenceText);
-  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
+  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
 
   const handleCaptureParagraph = useCallback(() => {
-    const ctx = currentSaccadeCaptureContext;
+    const ctx = currentGuidedCaptureContext;
     if (!ctx) return;
-    const paragraphLines = planParagraphCapture(flatSaccadeLines, ctx.globalLineIndex);
+    const paragraphLines = planParagraphCapture(flatGuidedLines, ctx.globalLineIndex);
     if (!paragraphLines) return;
     capturePassageFromLines('paragraph', paragraphLines);
-  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
+  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
 
   const handleCaptureLastLines = useCallback(() => {
-    const ctx = currentSaccadeCaptureContext;
+    const ctx = currentGuidedCaptureContext;
     if (!ctx) return;
-    const selected = planLastLinesCapture(flatSaccadeLines, ctx.globalLineIndex, PASSAGE_CAPTURE_LAST_LINE_COUNT);
+    const selected = planLastLinesCapture(flatGuidedLines, ctx.globalLineIndex, PASSAGE_CAPTURE_LAST_LINE_COUNT);
     capturePassageFromLines('last-lines', selected);
-  }, [capturePassageFromLines, currentSaccadeCaptureContext, flatSaccadeLines]);
+  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
 
   const reviewQueue = useMemo(() => {
     return buildPassageReviewQueue(passages);
@@ -869,6 +872,24 @@ export function App() {
     setSrsSessionCards([]);
     goHome();
   }, [setSrsSessionCards, goHome]);
+
+  const handleOpenEpubBuffer = useCallback(async (buffer: ArrayBuffer) => {
+    await epub.loadBook(buffer);
+    setViewState({ screen: 'epub-reader' });
+  }, [epub, setViewState]);
+
+  const handleOpenEpub = useCallback(async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.epub';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const buffer = await file.arrayBuffer();
+      await handleOpenEpubBuffer(buffer);
+    };
+    input.click();
+  }, [handleOpenEpubBuffer]);
 
   const launchFeaturedArticle = useCallback(async ({
     fetchArticle,
@@ -1036,8 +1057,8 @@ export function App() {
       allowedDisplayModes={allowedModes}
       showPacer={rsvp.showPacer}
       linesPerPage={rsvp.linesPerPage}
-      currentPageIndex={rsvp.currentSaccadePageIndex}
-      totalPages={rsvp.saccadePages.length}
+      currentPageIndex={rsvp.currentGuidedPageIndex}
+      totalPages={rsvp.guidedPages.length}
       onPlay={rsvp.play}
       onPause={rsvp.pause}
       onNext={rsvp.next}
@@ -1058,16 +1079,16 @@ export function App() {
       onAlternateColorsChange={handleAlternateColorsChange}
       showORP={displaySettings.rsvpShowORP}
       onShowORPChange={handleShowORPChange}
-      saccadeShowOVP={displaySettings.saccadeShowOVP}
-      onSaccadeShowOVPChange={handleSaccadeShowOVPChange}
-      saccadePacerStyle={displaySettings.saccadePacerStyle}
-      onSaccadePacerStyleChange={handleSaccadePacerStyleChange}
-      saccadeFocusTarget={displaySettings.saccadeFocusTarget}
-      onSaccadeFocusTargetChange={handleSaccadeFocusTargetChange}
-      saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
-      onSaccadeMergeShortFunctionWordsChange={handleSaccadeMergeShortFunctionWordsChange}
-      saccadeLength={displaySettings.saccadeLength}
-      onSaccadeLengthChange={handleSaccadeLengthChange}
+      guidedShowOVP={displaySettings.guidedShowOVP}
+      onGuidedShowOVPChange={handleGuidedShowOVPChange}
+      guidedPacerStyle={displaySettings.guidedPacerStyle}
+      onGuidedPacerStyleChange={handleGuidedPacerStyleChange}
+      guidedFocusTarget={displaySettings.guidedFocusTarget}
+      onGuidedFocusTargetChange={handleGuidedFocusTargetChange}
+      guidedMergeShortFunctionWords={displaySettings.guidedMergeShortFunctionWords}
+      onGuidedMergeShortFunctionWordsChange={handleGuidedMergeShortFunctionWordsChange}
+      guidedLength={displaySettings.guidedLength}
+      onGuidedLengthChange={handleGuidedLengthChange}
       generationDifficulty={displaySettings.generationDifficulty}
       onGenerationDifficultyChange={handleGenerationDifficultyChange}
       generationSweepReveal={displaySettings.generationSweepReveal}
@@ -1096,9 +1117,9 @@ export function App() {
 
   const renderPassageWorkspace = () => {
     const canCapture = viewState.screen === 'active-reader'
-      && (rsvp.displayMode === 'saccade' || rsvp.displayMode === 'generation')
+      && (rsvp.displayMode === 'guided' || rsvp.displayMode === 'generation')
       && !rsvp.isPlaying
-      && !!currentSaccadeCaptureContext;
+      && !!currentGuidedCaptureContext;
     const queueItems = reviewQueue;
 
     return (
@@ -1129,7 +1150,7 @@ export function App() {
             className="control-btn"
             onClick={handleCaptureSentence}
             disabled={!canCapture}
-            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save sentence at current focus'}
+            title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save sentence at current focus'}
           >
             Save Sentence
           </button>
@@ -1137,7 +1158,7 @@ export function App() {
             className="control-btn"
             onClick={handleCaptureParagraph}
             disabled={!canCapture}
-            title={!canCapture ? 'Pause Saccade reading to capture passages' : 'Save current paragraph'}
+            title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save current paragraph'}
           >
             Save Paragraph
           </button>
@@ -1145,7 +1166,7 @@ export function App() {
             className="control-btn"
             onClick={handleCaptureLastLines}
             disabled={!canCapture}
-            title={!canCapture ? 'Pause Saccade reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}
+            title={!canCapture ? 'Pause Guided reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}
           >
             Save Last {PASSAGE_CAPTURE_LAST_LINE_COUNT}
           </button>
@@ -1210,7 +1231,7 @@ export function App() {
   return (
     <div className="app" style={{
       '--rsvp-font-size': `${displaySettings.rsvpFontSize}rem`,
-      '--saccade-font-size': `${displaySettings.saccadeFontSize}rem`,
+      '--guided-font-size': `${displaySettings.guidedFontSize}rem`,
       '--prediction-font-size': `${displaySettings.predictionFontSize}rem`,
       '--prediction-line-width': `${PREDICTION_LINE_WIDTHS[displaySettings.predictionLineWidth]}ch`,
     } as React.CSSProperties}>
@@ -1284,6 +1305,7 @@ export function App() {
             comprehensionAttempts={comp.comprehensionAttempts}
             srsDueCount={srsDueCount}
             onStartSRSReview={handleStartSRSReview}
+            onOpenEpub={handleOpenEpub}
           />
         )}
 
@@ -1310,6 +1332,7 @@ export function App() {
             onRemoveFeed={handleRemoveFeed}
             onRefreshFeed={handleRefreshFeed}
             onOpenLibrarySettings={() => navigate({ screen: 'library-settings' })}
+            onOpenEpubBuffer={handleOpenEpubBuffer}
             onBack={goHome}
           />
         )}
@@ -1325,24 +1348,24 @@ export function App() {
           />
         )}
 
-        {/* Paced Reading: RSVP / Saccade */}
+        {/* Paced Reading: RSVP / Guided */}
         {viewState.screen === 'active-reader' && (
           <>
             <Reader
               chunk={rsvp.currentChunk}
               isPlaying={rsvp.isPlaying}
               displayMode={rsvp.displayMode}
-              saccadePage={rsvp.currentSaccadePage}
+              guidedPage={rsvp.currentGuidedPage}
               showPacer={rsvp.showPacer}
               wpm={rsvp.effectiveWpm}
               colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
               showORP={displaySettings.rsvpShowORP}
-              saccadeShowOVP={displaySettings.saccadeShowOVP}
-              saccadeShowSweep={displaySettings.saccadeShowSweep}
-              saccadePacerStyle={displaySettings.saccadePacerStyle}
-              saccadeFocusTarget={displaySettings.saccadeFocusTarget}
-              saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
-              saccadeLength={displaySettings.saccadeLength}
+              guidedShowOVP={displaySettings.guidedShowOVP}
+              guidedShowSweep={displaySettings.guidedShowSweep}
+              guidedPacerStyle={displaySettings.guidedPacerStyle}
+              guidedFocusTarget={displaySettings.guidedFocusTarget}
+              guidedMergeShortFunctionWords={displaySettings.guidedMergeShortFunctionWords}
+              guidedLength={displaySettings.guidedLength}
               generationDifficulty={displaySettings.generationDifficulty}
               generationSweepReveal={displaySettings.generationSweepReveal}
               generationMaskSeed={generationMaskSeed}
@@ -1350,7 +1373,7 @@ export function App() {
             />
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
-            {renderReaderControls(['rsvp', 'saccade', 'generation'], 'paced-reading')}
+            {renderReaderControls(['rsvp', 'guided', 'generation'], 'paced-reading')}
             {isAtEndOfText && (
               <div className="reader-finish-actions">
                 <button className="control-btn" onClick={handleStartComprehensionFromReading}>
@@ -1374,7 +1397,7 @@ export function App() {
               <div className="recall-container">
                 <PredictionStats stats={rsvp.predictionStats} />
                 <RecallReader
-                  pages={rsvp.saccadePages}
+                  pages={rsvp.guidedPages}
                   chunks={rsvp.chunks}
                   currentChunkIndex={rsvp.currentChunkIndex}
                   onAdvance={rsvp.advanceSelfPaced}
@@ -1414,12 +1437,12 @@ export function App() {
             <TrainingReader
               article={viewState.article}
               initialWpm={getActivityWpm('training')}
-              saccadeShowOVP={displaySettings.saccadeShowOVP}
-              saccadeShowSweep={displaySettings.saccadeShowSweep}
-              saccadePacerStyle={displaySettings.saccadePacerStyle}
-              saccadeFocusTarget={displaySettings.saccadeFocusTarget}
-              saccadeMergeShortFunctionWords={displaySettings.saccadeMergeShortFunctionWords}
-              saccadeLength={displaySettings.saccadeLength}
+              guidedShowOVP={displaySettings.guidedShowOVP}
+              guidedShowSweep={displaySettings.guidedShowSweep}
+              guidedPacerStyle={displaySettings.guidedPacerStyle}
+              guidedFocusTarget={displaySettings.guidedFocusTarget}
+              guidedMergeShortFunctionWords={displaySettings.guidedMergeShortFunctionWords}
+              guidedLength={displaySettings.guidedLength}
               onClose={goHome}
               onWpmChange={(nextWpm) => setActivityWpm('training', nextWpm)}
               onSelectArticle={() => navigate({ screen: 'content-browser', activity: 'training' })}
@@ -1451,6 +1474,11 @@ export function App() {
               onClose={closeSRSReview}
             />
           </ComprehensionCheckBoundary>
+        )}
+
+        {/* EPUB Reader */}
+        {viewState.screen === 'epub-reader' && (
+          <EpubReader epub={epub} onBack={goHome} />
         )}
 
         {/* Add Article */}

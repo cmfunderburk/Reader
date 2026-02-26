@@ -7,7 +7,7 @@ function makePassage(id: string): Passage {
     id,
     articleId: `article-${id}`,
     articleTitle: `Article ${id}`,
-    sourceMode: 'saccade',
+    sourceMode: 'guided',
     captureKind: 'sentence',
     text: 'Alpha beta gamma.',
     createdAt: 1,
@@ -30,7 +30,7 @@ describe('passageReviewLaunch', () => {
       currentReading: {
         articleId: 'article-a',
         chunkIndex: 42,
-        displayMode: 'saccade',
+        displayMode: 'guided',
       },
       sourceArticle: {
         source: 'Wikipedia',
@@ -44,7 +44,7 @@ describe('passageReviewLaunch', () => {
       reading: {
         articleId: 'article-a',
         chunkIndex: 42,
-        displayMode: 'saccade',
+        displayMode: 'guided',
       },
       training: {
         passageId: 'p1',

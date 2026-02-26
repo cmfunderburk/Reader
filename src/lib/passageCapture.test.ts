@@ -5,7 +5,7 @@ import {
   planLastLinesCapture,
   planParagraphCapture,
   planSentenceCapture,
-  type FlatSaccadeCaptureLine,
+  type FlatGuidedCaptureLine,
 } from './passageCapture';
 
 function makeLine(
@@ -14,7 +14,7 @@ function makeLine(
   lineIndex: number,
   text: string,
   type: string = 'body'
-): FlatSaccadeCaptureLine {
+): FlatGuidedCaptureLine {
   return {
     globalLineIndex,
     pageIndex,

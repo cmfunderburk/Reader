@@ -3,26 +3,26 @@ import type { CSSProperties } from 'react';
 import type {
   Chunk,
   GenerationDifficulty,
-  SaccadePage,
-  SaccadeLine,
-  SaccadePacerStyle,
-  SaccadeFocusTarget,
+  GuidedPage,
+  GuidedLine,
+  GuidedPacerStyle,
+  GuidedFocusTarget,
 } from '../types';
-import { computeLineFixations, calculateSaccadeLineDuration, computeFocusTargets, computeFocusTargetTimings, computeWordFocusTargetsAndFixations } from '../lib/saccade';
+import { computeLineFixations, calculateGuidedLineDuration, computeFocusTargets, computeFocusTargetTimings, computeWordFocusTargetsAndFixations } from '../lib/saccade';
 import { maskGenerationLine } from '../lib/generationMask';
 
-interface SaccadeReaderProps {
-  page: SaccadePage | null;
+interface GuidedReaderProps {
+  page: GuidedPage | null;
   chunk: Chunk | null;
   isPlaying: boolean;
   showPacer: boolean;
   wpm: number;
-  saccadeShowOVP?: boolean;
-  saccadeShowSweep?: boolean;
-  saccadePacerStyle?: SaccadePacerStyle;
-  saccadeFocusTarget?: SaccadeFocusTarget;
-  saccadeMergeShortFunctionWords?: boolean;
-  saccadeLength?: number;
+  guidedShowOVP?: boolean;
+  guidedShowSweep?: boolean;
+  guidedPacerStyle?: GuidedPacerStyle;
+  guidedFocusTarget?: GuidedFocusTarget;
+  guidedMergeShortFunctionWords?: boolean;
+  guidedLength?: number;
   generationMode?: boolean;
   generationDifficulty?: GenerationDifficulty;
   generationSweepReveal?: boolean;
@@ -35,24 +35,24 @@ const EMPTY_WORD_FOCUS_DATA = {
   fixations: [] as number[],
 };
 
-export function SaccadeReader({
+export function GuidedReader({
   page,
   chunk,
   isPlaying,
   showPacer,
   wpm,
-  saccadeShowOVP,
-  saccadeShowSweep,
-  saccadePacerStyle,
-  saccadeFocusTarget,
-  saccadeMergeShortFunctionWords,
-  saccadeLength,
+  guidedShowOVP,
+  guidedShowSweep,
+  guidedPacerStyle,
+  guidedFocusTarget,
+  guidedMergeShortFunctionWords,
+  guidedLength,
   generationMode = false,
   generationDifficulty = 'normal',
   generationSweepReveal = true,
   generationMaskSeed = 0,
   generationReveal = false,
-}: SaccadeReaderProps) {
+}: GuidedReaderProps) {
   const readerRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [figureMaxHeightPx, setFigureMaxHeightPx] = useState<number | null>(null);
@@ -67,9 +67,9 @@ export function SaccadeReader({
     const pageEl = pageRef.current;
     if (!readerEl || !pageEl) return;
 
-    const lineElements = Array.from(pageEl.querySelectorAll<HTMLElement>(':scope > .saccade-line'));
+    const lineElements = Array.from(pageEl.querySelectorAll<HTMLElement>(':scope > .guided-line'));
     const figureElements = lineElements.filter((lineEl) =>
-      lineEl.classList.contains('saccade-line-figure') && !lineEl.classList.contains('saccade-line-equation')
+      lineEl.classList.contains('guided-line-figure') && !lineEl.classList.contains('guided-line-equation')
     );
 
     if (figureElements.length === 0) {
@@ -94,12 +94,12 @@ export function SaccadeReader({
 
     for (const lineEl of lineElements) {
       const lineHeight = getOuterHeight(lineEl);
-      if (!lineEl.classList.contains('saccade-line-figure') || lineEl.classList.contains('saccade-line-equation')) {
+      if (!lineEl.classList.contains('guided-line-figure') || lineEl.classList.contains('guided-line-equation')) {
         nonFigureHeight += lineHeight;
         continue;
       }
 
-      const imageEl = lineEl.querySelector<HTMLElement>('.saccade-figure-image');
+      const imageEl = lineEl.querySelector<HTMLElement>('.guided-figure-image');
       const imageHeight = imageEl ? getOuterHeight(imageEl) : 0;
       figureChromeHeight += Math.max(0, lineHeight - imageHeight);
     }
@@ -125,7 +125,7 @@ export function SaccadeReader({
       : null;
     resizeObserver?.observe(readerEl);
 
-    const imageElements = Array.from(readerEl.querySelectorAll<HTMLImageElement>('.saccade-figure-image'));
+    const imageElements = Array.from(readerEl.querySelectorAll<HTMLImageElement>('.guided-figure-image'));
     imageElements.forEach((img) => img.addEventListener('load', recalculateFigureHeight));
 
     const rafId = requestAnimationFrame(() => {
@@ -163,7 +163,7 @@ export function SaccadeReader({
 
   if (!page) {
     return (
-      <div className="reader saccade-reader">
+      <div className="reader guided-reader">
         <div className="reader-display">
           <span className="reader-placeholder">No article loaded</span>
         </div>
@@ -171,14 +171,14 @@ export function SaccadeReader({
     );
   }
 
-  const currentLineIndex = chunk?.saccade?.lineIndex ?? -1;
+  const currentLineIndex = chunk?.guided?.lineIndex ?? -1;
   const pageStyle = figureMaxHeightPx !== null
-    ? ({ '--saccade-figure-max-height': `${figureMaxHeightPx}px` } as CSSProperties)
+    ? ({ '--guided-figure-max-height': `${figureMaxHeightPx}px` } as CSSProperties)
     : undefined;
 
   return (
-    <div className="reader saccade-reader" ref={readerRef}>
-      <div className="saccade-page" ref={pageRef} style={pageStyle}>
+    <div className="reader guided-reader" ref={readerRef}>
+      <div className="guided-page" ref={pageRef} style={pageStyle}>
         {page.lines.map((line, lineIndex) => {
           const isMaskableLine = line.type !== 'figure' && line.type !== 'blank';
           // In generation sweep-reveal mode, previously swept lines stay revealed.
@@ -192,7 +192,7 @@ export function SaccadeReader({
           const shouldMaskLine = generationMode && !generationReveal && isMaskableLine && !keepLineRevealed;
 
           return (
-          <SaccadeLineComponent
+          <GuidedLineComponent
             key={lineIndex}
             line={line}
             lineIndex={lineIndex}
@@ -208,23 +208,23 @@ export function SaccadeReader({
             isFutureLine={showPacer && lineIndex > currentLineIndex}
             showPacer={showPacer}
             wpm={wpm}
-            saccadeShowOVP={saccadeShowOVP}
-            saccadeShowSweep={saccadeShowSweep}
-            saccadePacerStyle={saccadePacerStyle}
-            saccadeFocusTarget={saccadeFocusTarget}
-            saccadeMergeShortFunctionWords={saccadeMergeShortFunctionWords}
-            saccadeLength={saccadeLength}
+            guidedShowOVP={guidedShowOVP}
+            guidedShowSweep={guidedShowSweep}
+            guidedPacerStyle={guidedPacerStyle}
+            guidedFocusTarget={guidedFocusTarget}
+            guidedMergeShortFunctionWords={guidedMergeShortFunctionWords}
+            guidedLength={guidedLength}
             onOpenFigure={handleOpenFigure}
           />
           );
         })}
       </div>
       {magnifiedFigure && (
-        <div className="saccade-figure-lightbox" onClick={() => setMagnifiedFigure(null)}>
-          <div className="saccade-figure-lightbox-dialog" onClick={(event) => event.stopPropagation()}>
+        <div className="guided-figure-lightbox" onClick={() => setMagnifiedFigure(null)}>
+          <div className="guided-figure-lightbox-dialog" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
-              className="saccade-figure-lightbox-close"
+              className="guided-figure-lightbox-close"
               onClick={() => setMagnifiedFigure(null)}
               aria-label="Close figure"
             >
@@ -233,10 +233,10 @@ export function SaccadeReader({
             <img
               src={magnifiedFigure.src}
               alt={magnifiedFigure.alt}
-              className="saccade-figure-lightbox-image"
+              className="guided-figure-lightbox-image"
             />
             {magnifiedFigure.caption && (
-              <div className="saccade-figure-lightbox-caption">{magnifiedFigure.caption}</div>
+              <div className="guided-figure-lightbox-caption">{magnifiedFigure.caption}</div>
             )}
           </div>
         </div>
@@ -245,8 +245,8 @@ export function SaccadeReader({
   );
 }
 
-export interface SaccadeLineProps {
-  line: SaccadeLine;
+export interface GuidedLineProps {
+  line: GuidedLine;
   lineIndex: number;
   displayText?: string;
   renderGenerationMaskSlots?: boolean;
@@ -256,16 +256,16 @@ export interface SaccadeLineProps {
   isFutureLine: boolean;
   showPacer: boolean;
   wpm: number;
-  saccadeShowOVP?: boolean;
-  saccadeShowSweep?: boolean;
-  saccadePacerStyle?: SaccadePacerStyle;
-  saccadeFocusTarget?: SaccadeFocusTarget;
-  saccadeMergeShortFunctionWords?: boolean;
-  saccadeLength?: number;
+  guidedShowOVP?: boolean;
+  guidedShowSweep?: boolean;
+  guidedPacerStyle?: GuidedPacerStyle;
+  guidedFocusTarget?: GuidedFocusTarget;
+  guidedMergeShortFunctionWords?: boolean;
+  guidedLength?: number;
   onOpenFigure?: (figure: { src: string; alt: string; caption?: string }) => void;
 }
 
-export const SaccadeLineComponent = memo(function SaccadeLineComponent({
+export const GuidedLineComponent = memo(function GuidedLineComponent({
   line,
   lineIndex,
   displayText,
@@ -276,14 +276,14 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
   isFutureLine,
   showPacer,
   wpm,
-  saccadeShowOVP,
-  saccadeShowSweep,
-  saccadePacerStyle,
-  saccadeFocusTarget,
-  saccadeMergeShortFunctionWords,
-  saccadeLength,
+  guidedShowOVP,
+  guidedShowSweep,
+  guidedPacerStyle,
+  guidedFocusTarget,
+  guidedMergeShortFunctionWords,
+  guidedLength,
   onOpenFigure,
-}: SaccadeLineProps) {
+}: GuidedLineProps) {
   const isBlank = line.type === 'blank';
   const isFigure = line.type === 'figure';
   const isHeading = line.type === 'heading';
@@ -292,24 +292,24 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
 
   // Character-based line duration: 5 chars = 1 word at configured WPM
   const lineDuration = useMemo(
-    () => calculateSaccadeLineDuration(textLength, wpm),
+    () => calculateGuidedLineDuration(textLength, wpm),
     [textLength, wpm]
   );
-  const pacerStyle = saccadePacerStyle ?? (saccadeShowSweep === false ? 'focus' : 'sweep');
-  const focusTarget = saccadeFocusTarget ?? 'fixation';
+  const pacerStyle = guidedPacerStyle ?? (guidedShowSweep === false ? 'focus' : 'sweep');
+  const focusTarget = guidedFocusTarget ?? 'fixation';
   const useWordFocus = pacerStyle === 'focus' && focusTarget === 'word';
 
   const fixationBasedFixations = useMemo(
-    () => (((!isBlank && !isFigure) && saccadeLength && lineText)
-      ? computeLineFixations(lineText, saccadeLength)
+    () => (((!isBlank && !isFigure) && guidedLength && lineText)
+      ? computeLineFixations(lineText, guidedLength)
       : []),
-    [isBlank, isFigure, lineText, saccadeLength]
+    [isBlank, isFigure, lineText, guidedLength]
   );
   const wordFocusData = useMemo(
     () => (useWordFocus && !isBlank && !isFigure
-      ? computeWordFocusTargetsAndFixations(lineText, saccadeMergeShortFunctionWords ?? false)
+      ? computeWordFocusTargetsAndFixations(lineText, guidedMergeShortFunctionWords ?? false)
       : EMPTY_WORD_FOCUS_DATA),
-    [isBlank, isFigure, lineText, saccadeMergeShortFunctionWords, useWordFocus]
+    [isBlank, isFigure, lineText, guidedMergeShortFunctionWords, useWordFocus]
   );
   const fixations = useWordFocus
     ? wordFocusData.fixations
@@ -345,11 +345,11 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
   ), [focusTargets, focusTimings, lineText, useFocusTargets]);
 
   // Sweep-synced ORP decoloring: ORPs start amber, turn plain as sweep passes
-  const sweepDecolors = useSweepBar && saccadeShowOVP && fixations.length > 0;
-  const focusDecolors = useFocusTargets && saccadeShowOVP && fixations.length > 0;
+  const sweepDecolors = useSweepBar && guidedShowOVP && fixations.length > 0;
+  const focusDecolors = useFocusTargets && guidedShowOVP && fixations.length > 0;
 
   // Static amber ORPs: all lines when pacer off, or current + future lines when pacer on
-  const showStaticOVP = saccadeShowOVP && !sweepDecolors && !focusDecolors && (
+  const showStaticOVP = guidedShowOVP && !sweepDecolors && !focusDecolors && (
     !showPacer || isActiveLine || isFutureLine
   );
 
@@ -395,10 +395,10 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
   ), [focusSegments, isPlaying, lineDuration, lineIndex, useFocusTargets]);
 
   const lineClasses = [
-    'saccade-line',
-    isHeading && 'saccade-line-heading',
-    useSweepBar && 'saccade-line-sweep',
-    useFocusTargets && 'saccade-line-focus',
+    'guided-line',
+    isHeading && 'guided-line-heading',
+    useSweepBar && 'guided-line-sweep',
+    useFocusTargets && 'guided-line-focus',
   ].filter(Boolean).join(' ');
   const sweepLeft = isHeading ? `calc(50% - ${textLength / 2}ch)` : '0';
 
@@ -467,7 +467,7 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
 
   if (isBlank) {
     return (
-      <div className="saccade-line">
+      <div className="guided-line">
         <span>{'\u00A0'}</span>
       </div>
     );
@@ -475,10 +475,10 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
 
   if (isFigure) {
     const figureClassName = [
-      'saccade-line',
-      'saccade-line-figure',
-      line.isEquation && 'saccade-line-equation',
-      isActiveLine && 'saccade-line-figure-active',
+      'guided-line',
+      'guided-line-figure',
+      line.isEquation && 'guided-line-equation',
+      isActiveLine && 'guided-line-figure-active',
     ].filter(Boolean).join(' ');
 
     return (
@@ -486,7 +486,7 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
         {line.figureSrc ? (
           <button
             type="button"
-            className="saccade-figure-button"
+            className="guided-figure-button"
             onClick={() => {
               if (isPlaying) return;
               if (!line.figureSrc) return;
@@ -502,17 +502,17 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
             <img
               src={line.figureSrc}
               alt={line.figureCaption || line.text || `Figure ${line.figureId || ''}`}
-              className="saccade-figure-image"
+              className="guided-figure-image"
               loading="lazy"
             />
           </button>
         ) : (
-          <div className="saccade-figure-missing">
+          <div className="guided-figure-missing">
             [{line.isEquation ? 'Missing equation image' : `Missing figure${line.figureId ? `: ${line.figureId}` : ''}`}]
           </div>
         )}
         {line.figureCaption && (
-          <div className="saccade-figure-caption">{line.figureCaption}</div>
+          <div className="guided-figure-caption">{line.figureCaption}</div>
         )}
       </div>
     );
@@ -523,7 +523,7 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
       {keyframeBlocks.length > 0 && <style>{keyframeBlocks.join(' ')}</style>}
       {useSweepBar && (
         <span
-          className="saccade-sweep"
+          className="guided-sweep"
           style={{
             left: sweepLeft,
             animation: `sweep-${lineIndex} ${lineDuration}ms linear both`,
@@ -547,7 +547,7 @@ export const SaccadeLineComponent = memo(function SaccadeLineComponent({
   );
 });
 
-SaccadeLineComponent.displayName = 'SaccadeLineComponent';
+GuidedLineComponent.displayName = 'GuidedLineComponent';
 
 function renderGenerationSweepRevealLine(config: {
   isHeading: boolean;
@@ -555,7 +555,7 @@ function renderGenerationSweepRevealLine(config: {
   originalText: string;
   revealCharCount: number;
 }): JSX.Element {
-  const className = config.isHeading ? 'saccade-heading' : 'saccade-body';
+  const className = config.isHeading ? 'guided-heading' : 'guided-body';
   const chars: JSX.Element[] = [];
   const revealLimit = Math.max(0, Math.min(config.maskedText.length, config.revealCharCount));
 
@@ -581,7 +581,7 @@ function renderGenerationSweepRevealLine(config: {
  * Uses paired keyframes with a 0.01% gap for sharp transitions.
  */
 function generateDecolorKeyframes(lineIndex: number, fixations: number[], textLength: number): string {
-  const amber = 'color: var(--saccade-ovp-color); font-weight: 600';
+  const amber = 'color: var(--guided-ovp-color); font-weight: 600';
   const plain = 'color: var(--text-primary); font-weight: normal';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);
@@ -599,7 +599,7 @@ function generateFocusDecolorKeyframes(
   focusTargets: Array<{ startChar: number; endChar: number }>,
   focusTimings: Array<{ startPct: number; endPct: number }>,
 ): string {
-  const amber = 'color: var(--saccade-ovp-color); font-weight: 600';
+  const amber = 'color: var(--guided-ovp-color); font-weight: 600';
   const plain = 'color: var(--text-primary); font-weight: normal';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);
@@ -629,7 +629,7 @@ function generateFocusKeyframes(
   lineIndex: number,
   focusTimings: Array<{ startPct: number; endPct: number }>
 ): string {
-  const active = 'background: var(--saccade-focus-highlight)';
+  const active = 'background: var(--guided-focus-highlight)';
   const inactive = 'background: transparent';
   const eps = 0.01;
   const fmt = (v: number) => v.toFixed(2);
@@ -729,7 +729,7 @@ function renderLineTextWithFocus(
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
   renderGenerationMaskSlots = false,
 ): JSX.Element {
-  const className = isHeading ? 'saccade-heading' : 'saccade-body';
+  const className = isHeading ? 'guided-heading' : 'guided-body';
 
   if (!text || focusConfig.focusSegments.length === 0) {
     return renderLineText(text, isHeading, showOVP, fixations, decolorConfig, renderGenerationMaskSlots);
@@ -770,7 +770,7 @@ function renderLineTextWithFocus(
       segments.push(
         <span
           key={`focus-wrap-${i}`}
-          className="saccade-focus-target"
+          className="guided-focus-target"
           style={{
             animation: `focus-${focusConfig.lineIndex}-${i} ${focusConfig.lineDuration}ms linear both`,
             animationPlayState: focusConfig.isPlaying ? 'running' : 'paused',
@@ -809,7 +809,7 @@ function renderLineText(
   decolorConfig?: { lineIndex: number; lineDuration: number; isPlaying: boolean },
   renderGenerationMaskSlots = false,
 ): JSX.Element {
-  const className = isHeading ? 'saccade-heading' : 'saccade-body';
+  const className = isHeading ? 'guided-heading' : 'guided-body';
 
   if (!showOVP || !fixations || fixations.length === 0 || !text) {
     return <span className={className}>{renderMaskedSlotsText(text || '\u00A0', renderGenerationMaskSlots)}</span>;
@@ -859,13 +859,13 @@ function renderTextSliceWithFixations(
         animationPlayState: decolorConfig.isPlaying ? 'running' as const : 'paused' as const,
       };
       segments.push(
-        <span key={`${keyPrefix}-f-${i}`} className="saccade-fixation" style={style}>
+        <span key={`${keyPrefix}-f-${i}`} className="guided-fixation" style={style}>
           {textSlice[localIdx]}
         </span>
       );
     } else {
       segments.push(
-        <span key={`${keyPrefix}-f-${i}`} className="saccade-fixation">{textSlice[localIdx]}</span>
+        <span key={`${keyPrefix}-f-${i}`} className="guided-fixation">{textSlice[localIdx]}</span>
       );
     }
     cursor = localIdx + 1;

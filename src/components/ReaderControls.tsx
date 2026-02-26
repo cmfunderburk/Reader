@@ -1,4 +1,4 @@
-import type { TokenMode, DisplayMode, SaccadePacerStyle, SaccadeFocusTarget, GenerationDifficulty } from '../types';
+import type { TokenMode, DisplayMode, GuidedPacerStyle, GuidedFocusTarget, GenerationDifficulty } from '../types';
 
 interface ReaderControlsProps {
   isPlaying: boolean;
@@ -30,16 +30,16 @@ interface ReaderControlsProps {
   onAlternateColorsChange: (enabled: boolean) => void;
   showORP: boolean;
   onShowORPChange: (enabled: boolean) => void;
-  saccadeShowOVP: boolean;
-  onSaccadeShowOVPChange: (enabled: boolean) => void;
-  saccadePacerStyle: SaccadePacerStyle;
-  onSaccadePacerStyleChange: (style: SaccadePacerStyle) => void;
-  saccadeFocusTarget: SaccadeFocusTarget;
-  onSaccadeFocusTargetChange: (target: SaccadeFocusTarget) => void;
-  saccadeMergeShortFunctionWords: boolean;
-  onSaccadeMergeShortFunctionWordsChange: (enabled: boolean) => void;
-  saccadeLength: number;
-  onSaccadeLengthChange: (length: number) => void;
+  guidedShowOVP: boolean;
+  onGuidedShowOVPChange: (enabled: boolean) => void;
+  guidedPacerStyle: GuidedPacerStyle;
+  onGuidedPacerStyleChange: (style: GuidedPacerStyle) => void;
+  guidedFocusTarget: GuidedFocusTarget;
+  onGuidedFocusTargetChange: (target: GuidedFocusTarget) => void;
+  guidedMergeShortFunctionWords: boolean;
+  onGuidedMergeShortFunctionWordsChange: (enabled: boolean) => void;
+  guidedLength: number;
+  onGuidedLengthChange: (length: number) => void;
   generationDifficulty: GenerationDifficulty;
   onGenerationDifficultyChange: (difficulty: GenerationDifficulty) => void;
   generationSweepReveal: boolean;
@@ -76,26 +76,26 @@ export function ReaderControls({
   onAlternateColorsChange,
   showORP,
   onShowORPChange,
-  saccadeShowOVP,
-  onSaccadeShowOVPChange,
-  saccadePacerStyle,
-  onSaccadePacerStyleChange,
-  saccadeFocusTarget,
-  onSaccadeFocusTargetChange,
-  saccadeMergeShortFunctionWords,
-  onSaccadeMergeShortFunctionWordsChange,
-  saccadeLength,
-  onSaccadeLengthChange,
+  guidedShowOVP,
+  onGuidedShowOVPChange,
+  guidedPacerStyle,
+  onGuidedPacerStyleChange,
+  guidedFocusTarget,
+  onGuidedFocusTargetChange,
+  guidedMergeShortFunctionWords,
+  onGuidedMergeShortFunctionWordsChange,
+  guidedLength,
+  onGuidedLengthChange,
   generationDifficulty,
   onGenerationDifficultyChange,
   generationSweepReveal,
   onGenerationSweepRevealChange,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall' || displayMode === 'training';
-  const showChunks = !isSelfPaced && displayMode !== 'saccade' && displayMode !== 'generation';
-  const showSaccadePageTransport = !isSelfPaced && (displayMode === 'saccade' || displayMode === 'generation');
-  const hasSaccadePages = totalPages > 0;
-  const safePageNumber = hasSaccadePages ? currentPageIndex + 1 : 0;
+  const showChunks = !isSelfPaced && displayMode !== 'guided' && displayMode !== 'generation';
+  const showGuidedPageTransport = !isSelfPaced && (displayMode === 'guided' || displayMode === 'generation');
+  const hasGuidedPages = totalPages > 0;
+  const safePageNumber = hasGuidedPages ? currentPageIndex + 1 : 0;
 
   return (
     <div className="reader-controls">
@@ -108,11 +108,11 @@ export function ReaderControls({
           <button onClick={onPrev} title="Previous chunk (←)" className="control-btn">
             ⏪
           </button>
-          {showSaccadePageTransport && (
+          {showGuidedPageTransport && (
             <>
               <button
                 onClick={onPrevPage}
-                disabled={!hasSaccadePages || currentPageIndex <= 0}
+                disabled={!hasGuidedPages || currentPageIndex <= 0}
                 className="control-btn control-btn-page"
                 title="Previous page"
               >
@@ -133,10 +133,10 @@ export function ReaderControls({
           <button onClick={onNext} title="Next chunk (→)" className="control-btn">
             ⏩
           </button>
-          {showSaccadePageTransport && (
+          {showGuidedPageTransport && (
             <button
               onClick={onNextPage}
-              disabled={!hasSaccadePages || currentPageIndex >= totalPages - 1}
+              disabled={!hasGuidedPages || currentPageIndex >= totalPages - 1}
               className="control-btn control-btn-page"
               title="Next page"
             >
@@ -203,7 +203,7 @@ export function ReaderControls({
         {(() => {
           const ALL_MODES: { value: DisplayMode; label: string }[] = [
             { value: 'rsvp', label: 'RSVP' },
-            { value: 'saccade', label: 'Saccade' },
+            { value: 'guided', label: 'Guided' },
             { value: 'generation', label: 'Generation' },
             { value: 'prediction', label: 'Prediction' },
             { value: 'recall', label: 'Recall' },
@@ -228,7 +228,7 @@ export function ReaderControls({
           ) : null;
         })()}
 
-        {/* Hide chunk mode in self-paced and saccade modes */}
+        {/* Hide chunk mode in self-paced and guided modes */}
         {showChunks && (
           <>
             <label className="control-group">
@@ -244,23 +244,23 @@ export function ReaderControls({
             </label>
             {mode === 'custom' && (
               <label className="control-group">
-                <span className="control-label">Saccade:</span>
+                <span className="control-label">Guided:</span>
                 <input
                   type="range"
                   min="7"
                   max="15"
                   step="1"
-                  value={saccadeLength}
-                  onChange={e => onSaccadeLengthChange(Number(e.target.value))}
+                  value={guidedLength}
+                  onChange={e => onGuidedLengthChange(Number(e.target.value))}
                   className="control-slider"
                 />
-                <span className="control-value">{saccadeLength}ch</span>
+                <span className="control-value">{guidedLength}ch</span>
               </label>
             )}
           </>
         )}
 
-        {displayMode === 'saccade' && (
+        {displayMode === 'guided' && (
           <>
             <label className="control-group control-checkbox">
               <input
@@ -273,8 +273,8 @@ export function ReaderControls({
             <label className="control-group control-checkbox">
               <input
                 type="checkbox"
-                checked={saccadeShowOVP}
-                onChange={e => onSaccadeShowOVPChange(e.target.checked)}
+                checked={guidedShowOVP}
+                onChange={e => onGuidedShowOVPChange(e.target.checked)}
               />
               <span className="control-label">OVP</span>
             </label>
@@ -282,8 +282,8 @@ export function ReaderControls({
               <label className="control-group">
                 <span className="control-label">Pacer style:</span>
                 <select
-                  value={saccadePacerStyle}
-                  onChange={e => onSaccadePacerStyleChange(e.target.value as SaccadePacerStyle)}
+                  value={guidedPacerStyle}
+                  onChange={e => onGuidedPacerStyleChange(e.target.value as GuidedPacerStyle)}
                   className="control-select"
                 >
                   <option value="sweep">Sweep</option>
@@ -291,12 +291,12 @@ export function ReaderControls({
                 </select>
               </label>
             )}
-            {showPacer && saccadePacerStyle === 'focus' && (
+            {showPacer && guidedPacerStyle === 'focus' && (
               <label className="control-group">
                 <span className="control-label">Focus by:</span>
                 <select
-                  value={saccadeFocusTarget}
-                  onChange={e => onSaccadeFocusTargetChange(e.target.value as SaccadeFocusTarget)}
+                  value={guidedFocusTarget}
+                  onChange={e => onGuidedFocusTargetChange(e.target.value as GuidedFocusTarget)}
                   className="control-select"
                 >
                   <option value="fixation">Fixation</option>
@@ -304,30 +304,30 @@ export function ReaderControls({
                 </select>
               </label>
             )}
-            {showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'word' && (
+            {showPacer && guidedPacerStyle === 'focus' && guidedFocusTarget === 'word' && (
               <label className="control-group control-checkbox">
                 <input
                   type="checkbox"
-                  checked={saccadeMergeShortFunctionWords}
-                  onChange={e => onSaccadeMergeShortFunctionWordsChange(e.target.checked)}
+                  checked={guidedMergeShortFunctionWords}
+                  onChange={e => onGuidedMergeShortFunctionWordsChange(e.target.checked)}
                 />
                 <span className="control-label">Merge short words</span>
               </label>
             )}
-            {(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'fixation')
-              || (saccadeShowOVP && !(showPacer && saccadePacerStyle === 'focus' && saccadeFocusTarget === 'word')) ? (
+            {(showPacer && guidedPacerStyle === 'focus' && guidedFocusTarget === 'fixation')
+              || (guidedShowOVP && !(showPacer && guidedPacerStyle === 'focus' && guidedFocusTarget === 'word')) ? (
               <label className="control-group">
-                <span className="control-label">Saccade:</span>
+                <span className="control-label">Guided:</span>
                 <input
                   type="range"
                   min="7"
                   max="15"
                   step="1"
-                  value={saccadeLength}
-                  onChange={e => onSaccadeLengthChange(Number(e.target.value))}
+                  value={guidedLength}
+                  onChange={e => onGuidedLengthChange(Number(e.target.value))}
                   className="control-slider"
                 />
-                <span className="control-value">{saccadeLength}ch</span>
+                <span className="control-value">{guidedLength}ch</span>
               </label>
             ) : null}
           </>
@@ -367,7 +367,7 @@ export function ReaderControls({
           </>
         )}
 
-        {(displayMode === 'saccade' || displayMode === 'generation' || displayMode === 'recall') && (
+        {(displayMode === 'guided' || displayMode === 'generation' || displayMode === 'recall') && (
           <label className="control-group">
             <span className="control-label">Lines:</span>
             <input
