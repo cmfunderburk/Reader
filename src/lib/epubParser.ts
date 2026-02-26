@@ -1,5 +1,6 @@
 import ePub from 'epubjs';
 import type Section from 'epubjs/types/section';
+import { splitChapterOnHeadings } from './epubChapterSplit';
 
 export interface EpubChapter {
   id: string;
@@ -74,8 +75,10 @@ export async function loadEpubFromBuffer(buffer: ArrayBuffer): Promise<EpubBookD
 
   // Extract chapters from spine (reading order)
   const chapters: EpubChapter[] = [];
-  const spine = book.spine as unknown as { items?: Section[] } & Iterable<Section>;
-  const sections: Section[] = spine.items ?? Array.from(spine);
+  // epub.js Spine stores Section instances in `spineItems`, not `items`
+  // (`items` holds raw packaging data without load() method)
+  const spine = book.spine as unknown as { spineItems?: Section[] };
+  const sections: Section[] = spine.spineItems ?? [];
 
   for (const section of sections) {
     try {
@@ -97,7 +100,13 @@ export async function loadEpubFromBuffer(buffer: ArrayBuffer): Promise<EpubBookD
     }
   }
 
-  return { title, chapters, resources };
+  // Split monolithic chapters that contain multiple headings
+  const splitChapters: EpubChapter[] = [];
+  for (const chapter of chapters) {
+    splitChapters.push(...splitChapterOnHeadings(chapter));
+  }
+
+  return { title, chapters: splitChapters, resources };
 }
 
 /**
