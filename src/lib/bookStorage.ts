@@ -2,10 +2,10 @@ import type { BookState } from '../types';
 
 const STORAGE_KEY = 'reader:book_states';
 
-export function generateBookId(title: string, chapterCount: number): string {
-  // Simple deterministic hash — combine title + chapter count
+export function generateBookId(title: string, chapterCount: number, firstChapterTitle?: string): string {
+  // Simple deterministic hash — combine title + chapter count + first chapter title
   let hash = 0;
-  const str = `${title}::${chapterCount}`;
+  const str = `${title}::${chapterCount}::${firstChapterTitle ?? ''}`;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
   }

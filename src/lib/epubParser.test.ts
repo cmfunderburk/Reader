@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPlainText, type EpubBookData, type EpubChapter } from './epubParser';
+import { extractPlainText, flattenToc, type EpubBookData, type EpubChapter } from './epubParser';
 
 describe('epubParser', () => {
   it('exports EpubBookData and EpubChapter types with correct shape', () => {
@@ -49,5 +49,74 @@ describe('epubParser', () => {
 
   it('handles whitespace-only input', () => {
     expect(extractPlainText('   ')).toBe('');
+  });
+
+  describe('flattenToc', () => {
+    it('flattens a flat TOC', () => {
+      const items = [
+        { href: 'ch1.xhtml', label: 'Chapter 1' },
+        { href: 'ch2.xhtml', label: 'Chapter 2' },
+      ];
+      expect(flattenToc(items)).toEqual([
+        { href: 'ch1.xhtml', label: 'Chapter 1' },
+        { href: 'ch2.xhtml', label: 'Chapter 2' },
+      ]);
+    });
+
+    it('flattens nested subitems', () => {
+      const items = [
+        {
+          href: 'part1.xhtml',
+          label: 'Part 1',
+          subitems: [
+            { href: 'ch1.xhtml', label: 'Chapter 1' },
+            { href: 'ch2.xhtml', label: 'Chapter 2' },
+          ],
+        },
+        { href: 'part2.xhtml', label: 'Part 2' },
+      ];
+      expect(flattenToc(items)).toEqual([
+        { href: 'part1.xhtml', label: 'Part 1' },
+        { href: 'ch1.xhtml', label: 'Chapter 1' },
+        { href: 'ch2.xhtml', label: 'Chapter 2' },
+        { href: 'part2.xhtml', label: 'Part 2' },
+      ]);
+    });
+
+    it('handles deeply nested items', () => {
+      const items = [
+        {
+          href: 'a.xhtml',
+          label: 'A',
+          subitems: [
+            {
+              href: 'b.xhtml',
+              label: 'B',
+              subitems: [
+                { href: 'c.xhtml', label: 'C' },
+              ],
+            },
+          ],
+        },
+      ];
+      expect(flattenToc(items)).toEqual([
+        { href: 'a.xhtml', label: 'A' },
+        { href: 'b.xhtml', label: 'B' },
+        { href: 'c.xhtml', label: 'C' },
+      ]);
+    });
+
+    it('handles empty subitems', () => {
+      const items = [
+        { href: 'ch1.xhtml', label: 'Chapter 1', subitems: [] },
+      ];
+      expect(flattenToc(items)).toEqual([
+        { href: 'ch1.xhtml', label: 'Chapter 1' },
+      ]);
+    });
+
+    it('handles empty input', () => {
+      expect(flattenToc([])).toEqual([]);
+    });
   });
 });

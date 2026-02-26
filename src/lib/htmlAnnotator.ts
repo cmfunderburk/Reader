@@ -13,6 +13,29 @@ export interface AnnotationOptions {
 }
 
 /**
+ * Resolve an image src against a resource map.
+ * Tries: exact match, stripped leading ../ segments, and basename-only fallback.
+ */
+export function resolveResourceUrl(src: string, resources: Map<string, string>): string | undefined {
+  // 1. Exact match
+  if (resources.has(src)) return resources.get(src);
+
+  // 2. Strip leading ../ segments
+  const stripped = src.replace(/^(\.\.\/)+/, '');
+  if (stripped !== src && resources.has(stripped)) return resources.get(stripped);
+
+  // 3. Basename-only fallback
+  const basename = src.split('/').pop();
+  if (basename) {
+    for (const [key, url] of resources) {
+      if (key.split('/').pop() === basename) return url;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Walk all text nodes in the HTML, split into words, and wrap each word
  * in a <span data-word-idx="N"> element. Preserves all HTML structure,
  * images, and non-text content.
@@ -38,11 +61,21 @@ export function annotateHtmlWords(html: string, options?: AnnotationOptions): An
     const images = doc.body.querySelectorAll('img');
     for (const img of images) {
       const src = img.getAttribute('src');
-      if (src && options.resources.has(src)) {
-        img.setAttribute('src', options.resources.get(src)!);
+      if (src) {
+        const resolved = resolveResourceUrl(src, options.resources);
+        if (resolved) {
+          img.setAttribute('src', resolved);
+        }
       }
     }
   }
+
+  // Sanitize: remove <script> and <style> elements
+  for (const tag of ['script', 'style'] as const) {
+    const els = doc.body.querySelectorAll(tag);
+    for (const el of els) el.remove();
+  }
+
   const words: string[] = [];
   let wordIndex = 0;
 
@@ -57,10 +90,6 @@ export function annotateHtmlWords(html: string, options?: AnnotationOptions): An
   for (const textNode of textNodes) {
     const text = textNode.textContent || '';
     if (!text.trim()) continue;
-
-    // Skip text inside <script>, <style> tags
-    const parent = textNode.parentElement;
-    if (parent && (parent.tagName === 'SCRIPT' || parent.tagName === 'STYLE')) continue;
 
     const fragment = doc.createDocumentFragment();
     // Split on word boundaries, preserving whitespace segments
@@ -82,6 +111,26 @@ export function annotateHtmlWords(html: string, options?: AnnotationOptions): An
     }
 
     textNode.parentNode?.replaceChild(fragment, textNode);
+  }
+
+  // Sanitize: strip inline event handlers and javascript: URLs
+  const allElements = doc.body.querySelectorAll('*');
+  for (const el of allElements) {
+    const attrsToRemove: string[] = [];
+    for (const attr of el.attributes) {
+      if (attr.name.startsWith('on')) {
+        attrsToRemove.push(attr.name);
+      }
+      if (
+        (attr.name === 'href' || attr.name === 'src') &&
+        attr.value.trim().toLowerCase().startsWith('javascript:')
+      ) {
+        attrsToRemove.push(attr.name);
+      }
+    }
+    for (const name of attrsToRemove) {
+      el.removeAttribute(name);
+    }
   }
 
   const annotatedHtml = doc.body.innerHTML;

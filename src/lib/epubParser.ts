@@ -15,6 +15,21 @@ export interface EpubBookData {
 }
 
 /**
+ * Recursively flatten a TOC tree into an ordered list of { href, label } entries.
+ * Handles nested sub-items (e.g. sub-chapters) that epubjs exposes via `subitems`.
+ */
+export function flattenToc(items: Array<{ href: string; label: string; subitems?: any[] }>): Array<{ href: string; label: string }> {
+  const result: Array<{ href: string; label: string }> = [];
+  for (const item of items) {
+    result.push({ href: item.href, label: item.label });
+    if (item.subitems?.length) {
+      result.push(...flattenToc(item.subitems));
+    }
+  }
+  return result;
+}
+
+/**
  * Load and parse an EPUB file from an ArrayBuffer.
  * Extracts chapter HTML, TOC titles, and resource blob URLs.
  */
@@ -25,11 +40,13 @@ export async function loadEpubFromBuffer(buffer: ArrayBuffer): Promise<EpubBookD
   const title = book.packaging?.metadata?.title || 'Untitled';
   const toc = await book.loaded.navigation;
 
-  // Build TOC title lookup: href -> title
+  // Build TOC title lookup: href -> title (recursively flattening nested items)
   const tocTitles = new Map<string, string>();
-  for (const item of toc.toc) {
+  for (const item of flattenToc(toc.toc)) {
     const href = item.href.split('#')[0]; // strip fragment
-    tocTitles.set(href, item.label.trim());
+    if (!tocTitles.has(href)) {
+      tocTitles.set(href, item.label.trim());
+    }
   }
 
   // Extract resources (images, fonts) as blob URLs

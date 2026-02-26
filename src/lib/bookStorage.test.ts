@@ -59,4 +59,29 @@ describe('bookStorage', () => {
     localStorage.setItem('reader:book_states', 'not-json');
     expect(loadBookState('any')).toBeNull();
   });
+
+  it('includes firstChapterTitle in ID generation', () => {
+    const a = generateBookId('Same Title', 10, 'Chapter 1');
+    const b = generateBookId('Same Title', 10, 'Prologue');
+    expect(a).not.toBe(b);
+  });
+
+  it('differentiates books with same title and chapter count but different first chapters', () => {
+    const a = generateBookId('My Book', 5, 'Introduction');
+    const b = generateBookId('My Book', 5, 'Foreword');
+    expect(a).not.toBe(b);
+  });
+
+  it('is backward compatible when firstChapterTitle is omitted', () => {
+    const withUndefined = generateBookId('Test', 5);
+    const withEmptyString = generateBookId('Test', 5, '');
+    // Both should produce the same ID (undefined defaults to '')
+    expect(withUndefined).toBe(withEmptyString);
+  });
+
+  it('is deterministic with firstChapterTitle', () => {
+    const a = generateBookId('Book', 10, 'Ch1');
+    const b = generateBookId('Book', 10, 'Ch1');
+    expect(a).toBe(b);
+  });
 });

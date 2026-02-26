@@ -92,7 +92,7 @@ export function useEpubReader(): UseEpubReaderResult {
     setError(null);
     try {
       const bookData = await loadEpubFromBuffer(buffer);
-      const id = generateBookId(bookData.title, bookData.chapters.length);
+      const id = generateBookId(bookData.title, bookData.chapters.length, bookData.chapters[0]?.title);
       bookIdRef.current = id;
 
       // Check for saved position

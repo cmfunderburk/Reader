@@ -4,6 +4,8 @@ export interface UseEpubPacerOptions {
   wordCount: number;
   wpm: number;
   enabled: boolean;
+  /** Starting word index (e.g. from saved position). Used on mount and when wordCount changes. */
+  initialWordIndex?: number;
 }
 
 export interface UseEpubPacerResult {
@@ -24,8 +26,9 @@ export function useEpubPacer({
   wordCount,
   wpm,
   enabled,
+  initialWordIndex,
 }: UseEpubPacerOptions): UseEpubPacerResult {
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [currentWordIndex, setCurrentWordIndex] = useState(initialWordIndex ?? 0);
   const [isPlaying, setIsPlaying] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -42,9 +45,9 @@ export function useEpubPacer({
   // Reset when wordCount changes (new chapter loaded)
   useEffect(() => {
     clearTimer();
-    setCurrentWordIndex(0);
+    setCurrentWordIndex(initialWordIndex ?? 0);
     setIsPlaying(false);
-  }, [wordCount, clearTimer]);
+  }, [wordCount, clearTimer]); // intentionally omit initialWordIndex — only react to new chapter
 
   // Core interval effect: run the timer when playing and enabled
   useEffect(() => {

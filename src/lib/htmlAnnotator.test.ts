@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { annotateHtmlWords, type AnnotationResult } from './htmlAnnotator';
+import { annotateHtmlWords, resolveResourceUrl, type AnnotationResult } from './htmlAnnotator';
 
 describe('annotateHtmlWords', () => {
   it('wraps words in plain text paragraph', () => {
@@ -113,6 +113,104 @@ describe('annotateHtmlWords', () => {
       const result = annotateHtmlWords('<p>Hello <img src="x.png" /> world</p>');
       expect(result.html).toContain('src="x.png"');
       expect(result.wordCount).toBe(2);
+    });
+
+    it('resolves relative paths with ../ prefix', () => {
+      const resources = new Map([['images/photo.jpg', 'blob:resolved']]);
+      const result = annotateHtmlWords(
+        '<p>Text <img src="../images/photo.jpg" /> more</p>',
+        { resources }
+      );
+      expect(result.html).toContain('blob:resolved');
+    });
+
+    it('resolves deeply nested ../ paths', () => {
+      const resources = new Map([['images/photo.jpg', 'blob:deep']]);
+      const result = annotateHtmlWords(
+        '<p><img src="../../images/photo.jpg" /></p>',
+        { resources }
+      );
+      expect(result.html).toContain('blob:deep');
+    });
+
+    it('falls back to basename-only matching', () => {
+      const resources = new Map([['OEBPS/images/cover.png', 'blob:cover']]);
+      const result = annotateHtmlWords(
+        '<p><img src="images/cover.png" /></p>',
+        { resources }
+      );
+      expect(result.html).toContain('blob:cover');
+    });
+  });
+
+  describe('resolveResourceUrl', () => {
+    const resources = new Map([
+      ['images/photo.jpg', 'blob:exact'],
+      ['fonts/serif.woff', 'blob:font'],
+    ]);
+
+    it('returns exact match', () => {
+      expect(resolveResourceUrl('images/photo.jpg', resources)).toBe('blob:exact');
+    });
+
+    it('strips ../ and matches', () => {
+      expect(resolveResourceUrl('../images/photo.jpg', resources)).toBe('blob:exact');
+    });
+
+    it('strips multiple ../ and matches', () => {
+      expect(resolveResourceUrl('../../images/photo.jpg', resources)).toBe('blob:exact');
+    });
+
+    it('falls back to basename match', () => {
+      expect(resolveResourceUrl('other/path/photo.jpg', resources)).toBe('blob:exact');
+    });
+
+    it('returns undefined for no match', () => {
+      expect(resolveResourceUrl('missing.png', resources)).toBeUndefined();
+    });
+  });
+
+  describe('HTML sanitization', () => {
+    it('removes script elements', () => {
+      const result = annotateHtmlWords('<p>Hello</p><script>alert("xss")</script><p>world</p>');
+      expect(result.html).not.toContain('<script');
+      expect(result.html).not.toContain('alert');
+      expect(result.wordCount).toBe(2);
+    });
+
+    it('removes style elements', () => {
+      const result = annotateHtmlWords('<style>body{color:red}</style><p>Hello</p>');
+      expect(result.html).not.toContain('<style');
+      expect(result.html).not.toContain('color:red');
+      expect(result.wordCount).toBe(1);
+    });
+
+    it('strips inline event handlers', () => {
+      const result = annotateHtmlWords('<p onclick="alert(1)" onmouseover="hack()">Click me</p>');
+      expect(result.html).not.toContain('onclick');
+      expect(result.html).not.toContain('onmouseover');
+      expect(result.wordCount).toBe(2);
+    });
+
+    it('strips onerror on images', () => {
+      const result = annotateHtmlWords('<p>Text <img src="x.png" onerror="alert(1)" /> more</p>');
+      expect(result.html).not.toContain('onerror');
+    });
+
+    it('strips javascript: URLs from href', () => {
+      const result = annotateHtmlWords('<p><a href="javascript:alert(1)">Click</a></p>');
+      expect(result.html).not.toContain('javascript:');
+    });
+
+    it('strips javascript: URLs from src', () => {
+      const result = annotateHtmlWords('<p><img src="javascript:alert(1)" /></p>');
+      expect(result.html).not.toContain('javascript:');
+    });
+
+    it('preserves normal attributes', () => {
+      const result = annotateHtmlWords('<p class="intro" id="p1">Hello</p>');
+      expect(result.html).toContain('class="intro"');
+      expect(result.html).toContain('id="p1"');
     });
   });
 });

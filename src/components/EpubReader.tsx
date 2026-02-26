@@ -41,7 +41,15 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
     wordCount: epub.wordCount,
     wpm: pacerWpm,
     enabled: isPacerMode,
+    initialWordIndex: epub.currentWordIndex,
   });
+
+  // Sync pacer position back to epub for persistence
+  useEffect(() => {
+    if (isPacerMode) {
+      epub.setCurrentWordIndex(pacer.currentWordIndex);
+    }
+  }, [isPacerMode, pacer.currentWordIndex]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deterministic seed from chapter index (changes per chapter)
   const maskSeed = epub.currentChapterIndex * 31337 + 42;

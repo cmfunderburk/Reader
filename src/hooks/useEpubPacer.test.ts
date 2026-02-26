@@ -98,4 +98,44 @@ describe('useEpubPacer', () => {
     act(() => result.current.toggle());
     expect(result.current.isPlaying).toBe(false);
   });
+
+  describe('initialWordIndex', () => {
+    it('starts at initialWordIndex when provided', () => {
+      const { result } = renderHook(() =>
+        useEpubPacer({ wordCount: 100, wpm: 300, enabled: true, initialWordIndex: 42 })
+      );
+      expect(result.current.currentWordIndex).toBe(42);
+    });
+
+    it('resets to initialWordIndex on wordCount change', () => {
+      const { result, rerender } = renderHook(
+        (props) => useEpubPacer(props),
+        { initialProps: { wordCount: 100, wpm: 300, enabled: true, initialWordIndex: 25 } }
+      );
+      act(() => result.current.play());
+      act(() => { vi.advanceTimersByTime(600); }); // advance 3 words
+      expect(result.current.currentWordIndex).toBe(28);
+
+      // New chapter with new initialWordIndex
+      rerender({ wordCount: 200, wpm: 300, enabled: true, initialWordIndex: 10 });
+      expect(result.current.currentWordIndex).toBe(10);
+      expect(result.current.isPlaying).toBe(false);
+    });
+
+    it('defaults to 0 when initialWordIndex is not provided', () => {
+      const { result } = renderHook(() =>
+        useEpubPacer({ wordCount: 100, wpm: 300, enabled: true })
+      );
+      expect(result.current.currentWordIndex).toBe(0);
+    });
+
+    it('plays forward from initialWordIndex', () => {
+      const { result } = renderHook(() =>
+        useEpubPacer({ wordCount: 100, wpm: 300, enabled: true, initialWordIndex: 50 })
+      );
+      act(() => result.current.play());
+      act(() => { vi.advanceTimersByTime(200); }); // 1 word at 300 WPM
+      expect(result.current.currentWordIndex).toBe(51);
+    });
+  });
 });
