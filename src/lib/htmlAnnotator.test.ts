@@ -75,4 +75,44 @@ describe('annotateHtmlWords', () => {
     expect(typeof result.wordCount).toBe('number');
     expect(Array.isArray(result.words)).toBe(true);
   });
+
+  describe('resource URL rewriting', () => {
+    it('rewrites image src to blob URLs', () => {
+      const resources = new Map([['images/photo.jpg', 'blob:http://localhost/abc123']]);
+      const result = annotateHtmlWords(
+        '<p>Text <img src="images/photo.jpg" /> more</p>',
+        { resources }
+      );
+      expect(result.html).toContain('blob:http://localhost/abc123');
+      expect(result.html).not.toContain('src="images/photo.jpg"');
+    });
+
+    it('leaves non-matching images unchanged', () => {
+      const resources = new Map([['other.jpg', 'blob:xyz']]);
+      const result = annotateHtmlWords(
+        '<p><img src="missing.jpg" /></p>',
+        { resources }
+      );
+      expect(result.html).toContain('src="missing.jpg"');
+    });
+
+    it('rewrites multiple images', () => {
+      const resources = new Map([
+        ['img/a.png', 'blob:aaa'],
+        ['img/b.png', 'blob:bbb'],
+      ]);
+      const result = annotateHtmlWords(
+        '<p><img src="img/a.png" /> text <img src="img/b.png" /></p>',
+        { resources }
+      );
+      expect(result.html).toContain('blob:aaa');
+      expect(result.html).toContain('blob:bbb');
+    });
+
+    it('does not affect annotation when no resources provided', () => {
+      const result = annotateHtmlWords('<p>Hello <img src="x.png" /> world</p>');
+      expect(result.html).toContain('src="x.png"');
+      expect(result.wordCount).toBe(2);
+    });
+  });
 });

@@ -873,6 +873,11 @@ export function App() {
     goHome();
   }, [setSrsSessionCards, goHome]);
 
+  const handleOpenEpubBuffer = useCallback(async (buffer: ArrayBuffer) => {
+    await epub.loadBook(buffer);
+    setViewState({ screen: 'epub-reader' });
+  }, [epub, setViewState]);
+
   const handleOpenEpub = useCallback(async () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -881,11 +886,10 @@ export function App() {
       const file = input.files?.[0];
       if (!file) return;
       const buffer = await file.arrayBuffer();
-      await epub.loadBook(buffer);
-      setViewState({ screen: 'epub-reader' });
+      await handleOpenEpubBuffer(buffer);
     };
     input.click();
-  }, [epub, setViewState]);
+  }, [handleOpenEpubBuffer]);
 
   const launchFeaturedArticle = useCallback(async ({
     fetchArticle,
@@ -1328,6 +1332,7 @@ export function App() {
             onRemoveFeed={handleRemoveFeed}
             onRefreshFeed={handleRefreshFeed}
             onOpenLibrarySettings={() => navigate({ screen: 'library-settings' })}
+            onOpenEpubBuffer={handleOpenEpubBuffer}
             onBack={goHome}
           />
         )}

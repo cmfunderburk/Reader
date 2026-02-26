@@ -42,6 +42,7 @@ describe('Library', () => {
         return Promise.resolve([]);
       }),
       openBook: vi.fn(),
+      readFileBuffer: vi.fn(),
       addSource: vi.fn(),
       removeSource: vi.fn(),
       selectDirectory: vi.fn(),

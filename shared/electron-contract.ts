@@ -50,6 +50,7 @@ export interface LibraryAPI {
   getSources(): Promise<LibrarySource[]>
   listBooks(dirPath: string): Promise<LibraryItem[]>
   openBook(filePath: string): Promise<ExtractedContent>
+  readFileBuffer(filePath: string): Promise<ArrayBuffer>
   addSource(source: LibrarySource): Promise<void>
   removeSource(sourcePath: string): Promise<void>
   selectDirectory(): Promise<string | null>

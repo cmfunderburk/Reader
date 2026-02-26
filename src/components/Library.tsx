@@ -6,6 +6,7 @@ import { formatBookName } from '../lib/libraryFormatting';
 interface LibraryProps {
   onAdd: (article: Omit<Article, 'id' | 'addedAt' | 'readPosition' | 'isRead'>) => void;
   onOpenSettings: () => void;
+  onOpenEpubBuffer?: (buffer: ArrayBuffer) => void;
 }
 
 interface BookGroup {
@@ -15,7 +16,7 @@ interface BookGroup {
   frontmatterCount: number;
 }
 
-export function Library({ onAdd, onOpenSettings }: LibraryProps) {
+export function Library({ onAdd, onOpenSettings, onOpenEpubBuffer }: LibraryProps) {
   const [sources, setSources] = useState<LibrarySource[]>([]);
   const [selectedSource, setSelectedSource] = useState<LibrarySource | null>(null);
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -72,6 +73,13 @@ export function Library({ onAdd, onOpenSettings }: LibraryProps) {
       setError(null);
 
       try {
+        // For EPUB files, prefer the buffer path so the full EPUB reader is used
+        if (item.type === 'epub' && onOpenEpubBuffer) {
+          const buffer = await window.library.readFileBuffer(item.path);
+          onOpenEpubBuffer(buffer);
+          return;
+        }
+
         const content = await window.library.openBook(item.path);
         onAdd({
           title: content.title,
@@ -87,7 +95,7 @@ export function Library({ onAdd, onOpenSettings }: LibraryProps) {
         setLoadingItem(null);
       }
     },
-    [onAdd]
+    [onAdd, onOpenEpubBuffer]
   );
 
   const formatSize = (bytes: number): string => {

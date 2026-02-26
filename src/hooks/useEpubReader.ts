@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { loadEpubFromBuffer, type EpubBookData, type EpubChapter } from '../lib/epubParser';
 import { annotateHtmlWords, type AnnotationResult } from '../lib/htmlAnnotator';
+import { generateBookId, loadBookState, saveBookState } from '../lib/bookStorage';
 
 export type EpubReadingMode = 'browse' | 'pacer' | 'generation';
 
@@ -48,6 +49,8 @@ export function useEpubReader(): UseEpubReaderResult {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [currentWordIndex, setCurrentWordIndex] = useState(0);
   const [mode, setMode] = useState<EpubReadingMode>('browse');
+  const bookIdRef = useRef<string | null>(null);
+  const saveCounterRef = useRef(0);
 
   const currentChapter = book ? (book.chapters[currentChapterIndex] ?? null) : null;
 
@@ -55,18 +58,64 @@ export function useEpubReader(): UseEpubReaderResult {
     if (!currentChapter) {
       return { html: '', wordCount: 0, words: [] };
     }
-    return annotateHtmlWords(currentChapter.html);
-  }, [currentChapter]);
+    return annotateHtmlWords(currentChapter.html, {
+      resources: book?.resources,
+    });
+  }, [currentChapter, book?.resources]);
+
+  // Persist position on chapter change
+  useEffect(() => {
+    const id = bookIdRef.current;
+    if (!id || !book) return;
+    saveBookState(id, {
+      title: book.title,
+      lastChapterIndex: currentChapterIndex,
+      lastWordIndex: 0,
+      lastOpenedAt: Date.now(),
+    });
+  }, [currentChapterIndex, book]);
+
+  // Persist word position periodically (every 10 words)
+  useEffect(() => {
+    const id = bookIdRef.current;
+    if (!id || !book || currentWordIndex === 0) return;
+    if (currentWordIndex % 10 !== 0) return;
+    saveCounterRef.current++;
+    saveBookState(id, {
+      title: book.title,
+      lastChapterIndex: currentChapterIndex,
+      lastWordIndex: currentWordIndex,
+      lastOpenedAt: Date.now(),
+    });
+  }, [currentWordIndex, currentChapterIndex, book]);
 
   const loadBook = useCallback(async (buffer: ArrayBuffer) => {
     setIsLoading(true);
     setError(null);
     try {
       const bookData = await loadEpubFromBuffer(buffer);
+      const id = generateBookId(bookData.title, bookData.chapters.length);
+      bookIdRef.current = id;
+
+      // Check for saved position
+      const saved = loadBookState(id);
+      const resumeChapter = saved
+        ? Math.min(saved.lastChapterIndex, bookData.chapters.length - 1)
+        : 0;
+      const resumeWord = saved ? saved.lastWordIndex : 0;
+
       setBook(bookData);
-      setCurrentChapterIndex(0);
-      setCurrentWordIndex(0);
+      setCurrentChapterIndex(resumeChapter);
+      setCurrentWordIndex(resumeWord);
       setMode('browse');
+
+      // Update lastOpenedAt
+      saveBookState(id, {
+        title: bookData.title,
+        lastChapterIndex: resumeChapter,
+        lastWordIndex: resumeWord,
+        lastOpenedAt: Date.now(),
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load EPUB';
       setError(message);
@@ -101,6 +150,7 @@ export function useEpubReader(): UseEpubReaderResult {
   }, [book]);
 
   const unloadBook = useCallback(() => {
+    bookIdRef.current = null;
     setBook(null);
     setCurrentChapterIndex(0);
     setCurrentWordIndex(0);

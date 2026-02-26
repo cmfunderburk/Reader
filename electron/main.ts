@@ -357,6 +357,17 @@ ipcMain.handle('library:openBook', async (_, filePath: string) => {
   }
 })
 
+ipcMain.handle('library:readFileBuffer', async (_, filePath: string) => {
+  const allowedPath = resolveAllowedLibraryPath(filePath)
+  const ext = path.extname(allowedPath).toLowerCase()
+  if (!SUPPORTED_BOOK_EXTENSIONS.has(ext)) {
+    throw new Error(`Unsupported file type: ${ext}`)
+  }
+  console.log(`Reading file buffer: ${allowedPath}`)
+  const buffer = fs.readFileSync(allowedPath)
+  return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength)
+})
+
 ipcMain.handle('library:addSource', async (_, source: LibrarySource) => {
   const normalized = normalizePath(source.path)
   if (!normalized) {

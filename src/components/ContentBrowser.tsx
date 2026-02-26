@@ -25,6 +25,7 @@ interface ContentBrowserProps {
   onRemoveFeed: (id: string) => void;
   onRefreshFeed: (feed: Feed) => Promise<void>;
   onOpenLibrarySettings: () => void;
+  onOpenEpubBuffer?: (buffer: ArrayBuffer) => void;
   onBack: () => void;
 }
 
@@ -41,6 +42,7 @@ export function ContentBrowser({
   onRemoveFeed,
   onRefreshFeed,
   onOpenLibrarySettings,
+  onOpenEpubBuffer,
   onBack,
 }: ContentBrowserProps) {
   const [addContentResetKey, setAddContentResetKey] = useState(0);
@@ -81,6 +83,7 @@ export function ContentBrowser({
             <Library
               onAdd={onAddArticle}
               onOpenSettings={onOpenLibrarySettings}
+              onOpenEpubBuffer={onOpenEpubBuffer}
             />
           )}
         </div>

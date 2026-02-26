@@ -7,6 +7,11 @@ export interface AnnotationResult {
   words: string[];
 }
 
+export interface AnnotationOptions {
+  /** Map of original resource href to blob URL — used to rewrite <img> src attributes */
+  resources?: Map<string, string>;
+}
+
 /**
  * Walk all text nodes in the HTML, split into words, and wrap each word
  * in a <span data-word-idx="N"> element. Preserves all HTML structure,
@@ -15,14 +20,29 @@ export interface AnnotationResult {
  * Word indices are continuous across the entire document, enabling
  * downstream consumers (pacer, generation masking) to target words
  * by index regardless of their position in the HTML tree.
+ *
+ * When `options.resources` is provided, rewrites <img> src attributes
+ * whose original value matches a key in the map to the corresponding
+ * blob URL. This enables EPUB images to display correctly.
  */
-export function annotateHtmlWords(html: string): AnnotationResult {
+export function annotateHtmlWords(html: string, options?: AnnotationOptions): AnnotationResult {
   if (!html.trim()) {
     return { html: '', wordCount: 0, words: [] };
   }
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+
+  // Rewrite resource URLs (e.g. EPUB images)
+  if (options?.resources) {
+    const images = doc.body.querySelectorAll('img');
+    for (const img of images) {
+      const src = img.getAttribute('src');
+      if (src && options.resources.has(src)) {
+        img.setAttribute('src', options.resources.get(src)!);
+      }
+    }
+  }
   const words: string[] = [];
   let wordIndex = 0;
 
