@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { UseEpubReaderResult, EpubReadingMode } from '../hooks/useEpubReader';
+import type { GenerationDifficulty } from '../types';
+import { useEpubPacer } from '../hooks/useEpubPacer';
+import { selectMaskedWords } from '../lib/epubGenerationMask';
 
 interface EpubReaderProps {
   epub: UseEpubReaderResult;
@@ -12,8 +15,114 @@ const MODE_LABELS: Record<EpubReadingMode, string> = {
   generation: 'Generation',
 };
 
+const DIFFICULTY_LABELS: Record<GenerationDifficulty, string> = {
+  normal: 'Normal',
+  hard: 'Hard',
+  recall: 'Recall',
+};
+
+const DEFAULT_PACER_WPM = 300;
+const MIN_PACER_WPM = 100;
+const MAX_PACER_WPM = 900;
+const WPM_STEP = 50;
+
 export function EpubReader({ epub, onBack }: EpubReaderProps) {
   const [showTOC, setShowTOC] = useState(false);
+  const [pacerWpm, setPacerWpm] = useState(DEFAULT_PACER_WPM);
+  const [generationDifficulty, setGenerationDifficulty] = useState<GenerationDifficulty>('normal');
+  const [revealed, setRevealed] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const prevHighlightRef = useRef<Element | null>(null);
+
+  const isPacerMode = epub.mode === 'pacer';
+  const isGenerationMode = epub.mode === 'generation';
+
+  const pacer = useEpubPacer({
+    wordCount: epub.wordCount,
+    wpm: pacerWpm,
+    enabled: isPacerMode,
+  });
+
+  // Deterministic seed from chapter index (changes per chapter)
+  const maskSeed = epub.currentChapterIndex * 31337 + 42;
+
+  // Compute masked word indices
+  const maskedIndices = useMemo(() => {
+    if (!isGenerationMode || epub.words.length === 0) return new Set<number>();
+    return selectMaskedWords(epub.words, generationDifficulty, maskSeed);
+  }, [isGenerationMode, epub.words, generationDifficulty, maskSeed]);
+
+  // Reset revealed state when chapter or difficulty changes
+  useEffect(() => {
+    setRevealed(false);
+  }, [epub.currentChapterIndex, generationDifficulty]);
+
+  // Apply/remove highlight class on the current word span (pacer mode)
+  useEffect(() => {
+    if (!isPacerMode || !contentRef.current) {
+      // Clean up any lingering highlight when leaving pacer mode
+      if (prevHighlightRef.current) {
+        prevHighlightRef.current.classList.remove('epub-word-highlight');
+        prevHighlightRef.current = null;
+      }
+      return;
+    }
+
+    // Remove previous highlight
+    if (prevHighlightRef.current) {
+      prevHighlightRef.current.classList.remove('epub-word-highlight');
+      prevHighlightRef.current = null;
+    }
+
+    // Apply new highlight
+    const span = contentRef.current.querySelector(
+      `[data-word-idx="${pacer.currentWordIndex}"]`
+    );
+    if (span) {
+      span.classList.add('epub-word-highlight');
+      prevHighlightRef.current = span;
+
+      // Auto-scroll to keep highlighted word visible
+      span.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [isPacerMode, pacer.currentWordIndex]);
+
+  // Apply/remove masked class on masked word spans (generation mode)
+  useEffect(() => {
+    if (!contentRef.current) return;
+
+    const container = contentRef.current;
+
+    if (!isGenerationMode) {
+      // Clean up all masked classes when leaving generation mode
+      const maskedSpans = container.querySelectorAll('.epub-word-masked');
+      maskedSpans.forEach(span => {
+        span.classList.remove('epub-word-masked', 'revealed');
+      });
+      return;
+    }
+
+    // First, clear any existing masked/revealed classes
+    const allMasked = container.querySelectorAll('.epub-word-masked');
+    allMasked.forEach(span => {
+      span.classList.remove('epub-word-masked', 'revealed');
+    });
+
+    // Apply masked class to selected word indices
+    maskedIndices.forEach(idx => {
+      const span = container.querySelector(`[data-word-idx="${idx}"]`);
+      if (span) {
+        span.classList.add('epub-word-masked');
+        if (revealed) {
+          span.classList.add('revealed');
+        }
+      }
+    });
+  }, [isGenerationMode, maskedIndices, revealed]);
+
+  const handleWpmChange = useCallback((delta: number) => {
+    setPacerWpm(prev => Math.max(MIN_PACER_WPM, Math.min(MAX_PACER_WPM, prev + delta)));
+  }, []);
 
   if (epub.isLoading) {
     return (
@@ -91,9 +200,59 @@ export function EpubReader({ epub, onBack }: EpubReaderProps) {
       )}
 
       <div
+        ref={contentRef}
         className="epub-content"
         dangerouslySetInnerHTML={{ __html: annotatedHtml }}
       />
+
+      {isPacerMode && (
+        <div className="epub-pacer-controls">
+          <button
+            className="control-btn"
+            onClick={() => handleWpmChange(-WPM_STEP)}
+            disabled={pacerWpm <= MIN_PACER_WPM}
+            aria-label="Decrease WPM"
+          >
+            -
+          </button>
+          <span className="epub-pacer-wpm">{pacerWpm} WPM</span>
+          <button
+            className="control-btn"
+            onClick={() => handleWpmChange(WPM_STEP)}
+            disabled={pacerWpm >= MAX_PACER_WPM}
+            aria-label="Increase WPM"
+          >
+            +
+          </button>
+          <button
+            className="control-btn epub-pacer-play"
+            onClick={pacer.toggle}
+            aria-label={pacer.isPlaying ? 'Pause' : 'Play'}
+          >
+            {pacer.isPlaying ? 'Pause' : 'Play'}
+          </button>
+        </div>
+      )}
+
+      {isGenerationMode && (
+        <div className="epub-generation-controls">
+          {(Object.keys(DIFFICULTY_LABELS) as GenerationDifficulty[]).map(d => (
+            <button
+              key={d}
+              className={`control-btn${generationDifficulty === d ? ' active' : ''}`}
+              onClick={() => setGenerationDifficulty(d)}
+            >
+              {DIFFICULTY_LABELS[d]}
+            </button>
+          ))}
+          <button
+            className="control-btn"
+            onClick={() => setRevealed(prev => !prev)}
+          >
+            {revealed ? 'Hide' : 'Reveal'}
+          </button>
+        </div>
+      )}
 
       <div className="epub-controls">
         <button
