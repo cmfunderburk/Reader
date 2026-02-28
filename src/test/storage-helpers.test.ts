@@ -57,57 +57,57 @@ describe('storage-helpers', () => {
     expect(a.readPosition).toBe(42);
   });
 
-  it('seedArticles + getStoredArticles round-trips', () => {
+  it('seedArticles + getStoredArticles round-trips', async () => {
     const articles = [createTestArticle(), createTestArticle()];
-    seedArticles(articles);
-    expect(getStoredArticles()).toEqual(articles);
+    await seedArticles(articles);
+    expect(await getStoredArticles()).toEqual(articles);
   });
 
-  it('clearStorage removes all app keys', () => {
-    seedArticles([createTestArticle()]);
+  it('clearStorage removes all app keys', async () => {
+    await seedArticles([createTestArticle()]);
     clearStorage();
-    expect(getStoredArticles()).toEqual([]);
+    expect(await getStoredArticles()).toEqual([]);
   });
 });
 
 describe('storage-helpers with real storage functions', () => {
-  it('updateArticlePosition is readable via getStoredPosition', () => {
+  it('updateArticlePosition is readable via getStoredPosition', async () => {
     const article = createTestArticle();
-    seedArticles([article]);
+    await seedArticles([article]);
 
-    updateArticlePosition(article.id, 25);
+    await updateArticlePosition(article.id, 25);
 
-    expect(getStoredPosition(article.id)).toBe(25);
+    expect(await getStoredPosition(article.id)).toBe(25);
   });
 
-  it('updateArticlePredictionPosition is readable via getStoredPredictionPosition', () => {
+  it('updateArticlePredictionPosition is readable via getStoredPredictionPosition', async () => {
     const article = createTestArticle();
-    seedArticles([article]);
+    await seedArticles([article]);
 
-    updateArticlePredictionPosition(article.id, 100);
+    await updateArticlePredictionPosition(article.id, 100);
 
-    expect(getStoredPredictionPosition(article.id)).toBe(100);
+    expect(await getStoredPredictionPosition(article.id)).toBe(100);
   });
 
-  it('position updates do not corrupt other articles', () => {
+  it('position updates do not corrupt other articles', async () => {
     const a = createTestArticle();
     const b = createTestArticle();
-    seedArticles([a, b]);
+    await seedArticles([a, b]);
 
-    updateArticlePosition(a.id, 10);
+    await updateArticlePosition(a.id, 10);
 
-    expect(getStoredPosition(a.id)).toBe(10);
-    expect(getStoredPosition(b.id)).toBe(0); // unchanged
+    expect(await getStoredPosition(a.id)).toBe(10);
+    expect(await getStoredPosition(b.id)).toBe(0); // unchanged
   });
 
-  it('updating nonexistent article is a no-op', () => {
+  it('updating nonexistent article is a no-op', async () => {
     const article = createTestArticle();
-    seedArticles([article]);
+    await seedArticles([article]);
 
-    updateArticlePosition('nonexistent', 99);
+    await updateArticlePosition('nonexistent', 99);
 
-    expect(getStoredPosition(article.id)).toBe(0); // unchanged
-    expect(getStoredArticles()).toHaveLength(1);
+    expect(await getStoredPosition(article.id)).toBe(0); // unchanged
+    expect(await getStoredArticles()).toHaveLength(1);
   });
 
   it('upsertPassage + loadPassages round-trips with review updates', () => {

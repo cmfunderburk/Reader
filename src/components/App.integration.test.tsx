@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { Activity, Article, SRSCard, TokenMode } from '../types';
 import { App } from './App';
 import { getTodayUTC } from '../lib/wikipedia';
+import { resetArticleDb } from '../lib/storage';
 
 const mockUseRSVP = vi.fn();
 const mockUseKeyboard = vi.fn();
@@ -130,6 +131,8 @@ describe('App integration smoke', () => {
   });
 
   beforeEach(() => {
+    resetArticleDb();
+    indexedDB.deleteDatabase('reader');
     localStorage.clear();
     mockFetchDailyArticle.mockReset();
     mockComprehensionCheck.mockReset();
@@ -201,7 +204,9 @@ describe('App integration smoke', () => {
   it('navigates home -> content-browser -> preview -> active-reader -> home', async () => {
     render(<App />);
 
-    expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-paced' }));
     await waitFor(() => {
@@ -235,6 +240,9 @@ describe('App integration smoke', () => {
     rsvp.isPlaying = true;
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-paced' }));
     await waitFor(() => {
@@ -263,6 +271,9 @@ describe('App integration smoke', () => {
     localStorage.setItem('speedread_daily_article_id', 'a1');
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'start-daily' }));
     await waitFor(() => {
@@ -278,6 +289,9 @@ describe('App integration smoke', () => {
 
   it('navigates into active recall exercise and returns home via header action', async () => {
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-recall' }));
     await waitFor(() => {
@@ -307,6 +321,9 @@ describe('App integration smoke', () => {
 
   it('opens comprehension check from launcher flow and closes back home', async () => {
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-comprehension' }));
     await waitFor(() => {
@@ -337,6 +354,9 @@ describe('App integration smoke', () => {
     ]));
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'start-srs-review' }));
     await waitFor(() => {
@@ -369,6 +389,9 @@ describe('App integration smoke', () => {
     ]));
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'start-srs-review' }));
     await waitFor(() => {
@@ -397,6 +420,9 @@ describe('App integration smoke', () => {
 
   it('resumes reading from snapshot when closing active exercise', async () => {
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-recall' }));
     await waitFor(() => {
@@ -462,6 +488,9 @@ describe('App integration smoke', () => {
     }));
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'continue-session' }));
     await waitFor(() => {
@@ -476,6 +505,9 @@ describe('App integration smoke', () => {
 
   it('opens and closes the comprehension exam builder', async () => {
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'build-exam' }));
     await waitFor(() => {
@@ -511,6 +543,9 @@ describe('App integration smoke', () => {
     localStorage.setItem('speedread_articles', JSON.stringify([articleZ, articleA]));
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'build-exam' }));
     fireEvent.click(screen.getByRole('button', { name: 'Next' }));
@@ -582,6 +617,9 @@ describe('App integration smoke', () => {
     ];
 
     render(<App />);
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-screen')).not.toBeNull();
+    });
 
     fireEvent.click(screen.getByRole('button', { name: 'open-paced' }));
     await waitFor(() => {

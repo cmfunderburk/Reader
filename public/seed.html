@@ -7,29 +7,79 @@ h1{font-size:1.3em}p{line-height:1.5}#status{padding:12px;border-radius:8px;marg
 </head>
 <body>
 <h1>Seed Reading Queue</h1>
-<p>Loading articles into localStorage...</p>
+<p>Loading articles into IndexedDB...</p>
 <div id="status">Working...</div>
 <script>
 (async () => {
   const el = document.getElementById('status');
+  const DB_NAME = 'reader';
+  const STORE_NAME = 'articles';
+  const DB_VERSION = 1;
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+          db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function getAllArticles(db) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function putAllArticles(db, articles) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      for (const a of articles) store.put(a);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
   try {
     const resp = await fetch('/seed-articles.json');
     if (!resp.ok) throw new Error('Failed to fetch seed-articles.json: ' + resp.status);
     const newArticles = await resp.json();
 
-    // Merge with any existing articles (don't overwrite)
-    const existing = JSON.parse(localStorage.getItem('speedread_articles') || '[]');
+    const db = await openDb();
+
+    // Migrate any leftover localStorage articles into IndexedDB first
+    try {
+      const lsRaw = localStorage.getItem('speedread_articles');
+      if (lsRaw) {
+        const lsArticles = JSON.parse(lsRaw);
+        if (lsArticles.length > 0) await putAllArticles(db, lsArticles);
+        localStorage.removeItem('speedread_articles');
+      }
+    } catch (_) { /* ignore corrupt localStorage */ }
+
+    // Merge with existing articles (don't overwrite)
+    const existing = await getAllArticles(db);
     const existingTitles = new Set(existing.map(a => a.title + '|' + a.group));
     let added = 0;
+    const toAdd = [];
     for (const a of newArticles) {
       const key = a.title + '|' + a.group;
       if (!existingTitles.has(key)) {
-        existing.push(a);
+        toAdd.push(a);
         existingTitles.add(key);
         added++;
       }
     }
-    localStorage.setItem('speedread_articles', JSON.stringify(existing));
+    if (toAdd.length > 0) await putAllArticles(db, toAdd);
 
     el.className = 'ok';
     el.innerHTML = `Done! Added <strong>${added}</strong> articles (${newArticles.length - added} already existed).<br><br><a href="/" style="color:#6f6">Open Reader</a>`;

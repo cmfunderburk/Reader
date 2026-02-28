@@ -9,6 +9,8 @@ import type {
 import { STORAGE_KEYS } from './storageKeys';
 import { runStorageMigrations } from './storageMigrations';
 export { runStorageMigrations } from './storageMigrations';
+import { loadArticlesFromDb, saveArticlesToDb } from './articleDb';
+export { resetArticleDb } from './articleDb';
 
 export { type Settings, DEFAULT_SETTINGS, loadSettings, saveSettings } from './storageSettings';
 
@@ -29,24 +31,18 @@ export {
 } from './storageComprehension';
 
 /**
- * Load articles from localStorage.
+ * Load articles from IndexedDB (migrates from localStorage on first load).
  */
-export function loadArticles(): Article[] {
+export async function loadArticles(): Promise<Article[]> {
   runStorageMigrations();
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.articles);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+  return loadArticlesFromDb();
 }
 
 /**
- * Save articles to localStorage.
+ * Save articles to IndexedDB.
  */
-export function saveArticles(articles: Article[]): void {
-  runStorageMigrations();
-  localStorage.setItem(STORAGE_KEYS.articles, JSON.stringify(articles));
+export async function saveArticles(articles: Article[]): Promise<void> {
+  return saveArticlesToDb(articles);
 }
 
 /**
@@ -176,8 +172,8 @@ export function clearSessionSnapshot(): void {
 /**
  * Update reading position for an article.
  */
-export function updateArticlePosition(articleId: string, position: number): void {
-  updateArticleInStorage(articleId, (article) => (
+export async function updateArticlePosition(articleId: string, position: number): Promise<void> {
+  await updateArticleInStorage(articleId, (article) => (
     article.readPosition === position
       ? article
       : { ...article, readPosition: position }
@@ -187,8 +183,8 @@ export function updateArticlePosition(articleId: string, position: number): void
 /**
  * Update prediction position for an article (separate from RSVP/guided position).
  */
-export function updateArticlePredictionPosition(articleId: string, position: number): void {
-  updateArticleInStorage(articleId, (article) => (
+export async function updateArticlePredictionPosition(articleId: string, position: number): Promise<void> {
+  await updateArticleInStorage(articleId, (article) => (
     article.predictionPosition === position
       ? article
       : { ...article, predictionPosition: position }
@@ -198,16 +194,16 @@ export function updateArticlePredictionPosition(articleId: string, position: num
 /**
  * Mark an article as read.
  */
-export function markArticleAsRead(articleId: string): void {
-  updateArticleInStorage(articleId, (article) => (
+export async function markArticleAsRead(articleId: string): Promise<void> {
+  await updateArticleInStorage(articleId, (article) => (
     article.isRead
       ? article
       : { ...article, isRead: true }
   ));
 }
 
-function updateArticleInStorage(articleId: string, updater: (article: Article) => Article): void {
-  const articles = loadArticles();
+async function updateArticleInStorage(articleId: string, updater: (article: Article) => Article): Promise<void> {
+  const articles = await loadArticles();
   const index = articles.findIndex((article) => article.id === articleId);
   if (index === -1) return;
 
@@ -216,7 +212,7 @@ function updateArticleInStorage(articleId: string, updater: (article: Article) =
   if (updated === current) return;
 
   articles[index] = updated;
-  saveArticles(articles);
+  await saveArticles(articles);
 }
 
 // --- Daily article persistence ---

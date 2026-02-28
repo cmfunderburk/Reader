@@ -243,7 +243,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     const nextIndex = clampChunkIndex(index, totalChunks);
     const last = lastPersistedReadingRef.current;
     if (last.articleId === articleId && last.index === nextIndex) return;
-    updateArticlePosition(articleId, nextIndex);
+    void updateArticlePosition(articleId, nextIndex);
     lastPersistedReadingRef.current = { articleId, index: nextIndex };
   }, []);
 
@@ -251,7 +251,7 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     const nextIndex = clampProgressIndex(index, totalChunks);
     const last = lastPersistedPredictionRef.current;
     if (last.articleId === articleId && last.index === nextIndex) return;
-    updateArticlePredictionPosition(articleId, nextIndex);
+    void updateArticlePredictionPosition(articleId, nextIndex);
     lastPersistedPredictionRef.current = { articleId, index: nextIndex };
   }, []);
 

@@ -1,6 +1,5 @@
 import type { Article } from '../types';
-
-const STORAGE_KEY = 'speedread_articles';
+import { loadArticles, saveArticles, resetArticleDb } from '../lib/storage';
 
 let idCounter = 0;
 
@@ -22,42 +21,45 @@ export function createTestArticle(overrides: Partial<Article> = {}): Article {
 }
 
 /**
- * Seed articles into localStorage (replaces any existing).
+ * Seed articles into IndexedDB (replaces any existing).
  */
-export function seedArticles(articles: Article[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(articles));
+export async function seedArticles(articles: Article[]): Promise<void> {
+  await saveArticles(articles);
 }
 
 /**
- * Read articles currently in localStorage.
+ * Read articles currently in IndexedDB.
  */
-export function getStoredArticles(): Article[] {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+export async function getStoredArticles(): Promise<Article[]> {
+  return loadArticles();
 }
 
 /**
- * Read a single article's readPosition from localStorage.
+ * Read a single article's readPosition from IndexedDB.
  * Returns undefined if article not found.
  */
-export function getStoredPosition(articleId: string): number | undefined {
-  return getStoredArticles().find(a => a.id === articleId)?.readPosition;
+export async function getStoredPosition(articleId: string): Promise<number | undefined> {
+  const articles = await loadArticles();
+  return articles.find(a => a.id === articleId)?.readPosition;
 }
 
 /**
- * Read a single article's predictionPosition from localStorage.
+ * Read a single article's predictionPosition from IndexedDB.
  * Returns undefined if article not found or field not set.
  */
-export function getStoredPredictionPosition(articleId: string): number | undefined {
-  return getStoredArticles().find(a => a.id === articleId)?.predictionPosition;
+export async function getStoredPredictionPosition(articleId: string): Promise<number | undefined> {
+  const articles = await loadArticles();
+  return articles.find(a => a.id === articleId)?.predictionPosition;
 }
 
 /**
  * Clear all app storage keys. Call in beforeEach for isolation.
  */
 export function clearStorage(): void {
+  resetArticleDb();
+  indexedDB.deleteDatabase('reader');
   localStorage.removeItem('speedread_schema_version');
-  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('speedread_articles');
   localStorage.removeItem('speedread_feeds');
   localStorage.removeItem('speedread_settings');
   localStorage.removeItem('speedread_passages');

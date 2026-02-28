@@ -123,36 +123,39 @@ export function App() {
     if (!window.matchMedia) return 'dark';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
-  const [articles, setArticles] = useState<Article[]>(() => {
-    const loaded = loadArticles();
-    let needsUpdate = false;
-    const migrated = loaded.map(article => {
-      let updated = article;
-      if (isWikipediaSource(updated.source)) {
-        const normalized = normalizeWikipediaContentForReader(updated.content);
-        if (normalized && normalized !== updated.content) {
-          needsUpdate = true;
-          const metrics = measureTextMetrics(normalized);
-          updated = { ...updated, content: normalized, ...metrics };
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [articlesLoaded, setArticlesLoaded] = useState(false);
+
+  // Async article init: load from IndexedDB, run migrations, gate rendering
+  useEffect(() => {
+    loadArticles().then(loaded => {
+      let needsUpdate = false;
+      const migrated = loaded.map(article => {
+        let updated = article;
+        if (isWikipediaSource(updated.source)) {
+          const normalized = normalizeWikipediaContentForReader(updated.content);
+          if (normalized && normalized !== updated.content) {
+            needsUpdate = true;
+            const metrics = measureTextMetrics(normalized);
+            updated = { ...updated, content: normalized, ...metrics };
+          }
         }
-      }
-      if (updated.charCount == null || updated.wordCount == null) {
-        needsUpdate = true;
-        const metrics = measureTextMetrics(updated.content);
-        updated = { ...updated, ...metrics };
-      }
-      if (!updated.group && (updated.source === 'Wikipedia Daily' || updated.source === 'Wikipedia Featured')) {
-        needsUpdate = true;
-        updated = { ...updated, group: 'Wikipedia' };
-      }
-      return updated;
+        if (updated.charCount == null || updated.wordCount == null) {
+          needsUpdate = true;
+          const metrics = measureTextMetrics(updated.content);
+          updated = { ...updated, ...metrics };
+        }
+        if (!updated.group && (updated.source === 'Wikipedia Daily' || updated.source === 'Wikipedia Featured')) {
+          needsUpdate = true;
+          updated = { ...updated, group: 'Wikipedia' };
+        }
+        return updated;
+      });
+      if (needsUpdate) void saveArticles(migrated);
+      setArticles(migrated);
+      setArticlesLoaded(true);
     });
-    if (needsUpdate) {
-      saveArticles(migrated);
-      return migrated;
-    }
-    return loaded;
-  });
+  }, []);
 
   // One-time backfill: assign groups to legacy Library articles using directory metadata
   useEffect(() => {
@@ -192,7 +195,7 @@ export function App() {
           return { ...article, source: 'Library', ...(group ? { group } : {}) };
         });
         if (changed) {
-          saveArticles(updated);
+          void saveArticles(updated);
           return updated;
         }
         return prev;
@@ -494,7 +497,7 @@ export function App() {
     };
     const updated = [...articles, newArticle];
     setArticles(updated);
-    saveArticles(updated);
+    void saveArticles(updated);
     // If in content-browser stay there; if launched from add screen go home
     if (viewState.screen === 'add') {
       setViewState({ screen: 'home' });
@@ -504,7 +507,7 @@ export function App() {
   const handleRemoveArticle = useCallback((id: string) => {
     const updated = articles.filter(a => a.id !== id);
     setArticles(updated);
-    saveArticles(updated);
+    void saveArticles(updated);
   }, [articles]);
 
   const handleAddFeed = useCallback(async (url: string) => {
@@ -519,7 +522,7 @@ export function App() {
       setArticles((prevArticles) => {
         const articlePlan = mergeFeedArticles(prevArticles, feedArticles);
         if (articlePlan.addedArticleCount === 0) return prevArticles;
-        saveArticles(articlePlan.nextArticles);
+        void saveArticles(articlePlan.nextArticles);
         return articlePlan.nextArticles;
       });
     } finally {
@@ -540,7 +543,7 @@ export function App() {
       setArticles((prevArticles) => {
         const articlePlan = mergeFeedArticles(prevArticles, feedArticles);
         if (articlePlan.addedArticleCount === 0) return prevArticles;
-        saveArticles(articlePlan.nextArticles);
+        void saveArticles(articlePlan.nextArticles);
         return articlePlan.nextArticles;
       });
       setFeeds((prevFeeds) => {
@@ -922,7 +925,7 @@ export function App() {
       if (resultPlan.upserted.changed) {
         articlesRef.current = resultPlan.upserted.articles;
         setArticles(resultPlan.upserted.articles);
-        saveArticles(resultPlan.upserted.articles);
+        void saveArticles(resultPlan.upserted.articles);
       }
       const article = resultPlan.upserted.article;
 
@@ -1227,6 +1230,8 @@ export function App() {
       </section>
     );
   };
+
+  if (!articlesLoaded) return null;
 
   return (
     <div className="app" style={{
