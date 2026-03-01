@@ -131,12 +131,10 @@ export function SRSCardManager({
         <h2>SRS Cards</h2>
         <p>{cards.length} total cards</p>
       </div>
-      <div className="srs-filter-bar" role="tablist">
+      <div className="srs-filter-bar">
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            role="tab"
-            aria-selected={activeTab === tab.key}
             className={`srs-filter-tab${activeTab === tab.key ? ' srs-filter-tab-active' : ''}`}
             onClick={() => setActiveTab(tab.key)}
           >

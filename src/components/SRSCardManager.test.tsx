@@ -56,7 +56,7 @@ describe('SRSCardManager', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Deferred/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Deferred/i }));
     expect(screen.getByText('Deferred Q?')).toBeTruthy();
     expect(screen.queryByText('Active Q?')).toBeNull();
   });
@@ -161,7 +161,7 @@ describe('SRSCardManager', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Complete/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Complete/i }));
     expect(screen.getByText(/no cards/i)).toBeTruthy();
   });
 });
