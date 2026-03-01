@@ -1059,7 +1059,6 @@ export function App() {
       displayMode={rsvp.displayMode}
       allowedDisplayModes={allowedModes}
       showPacer={rsvp.showPacer}
-      linesPerPage={rsvp.linesPerPage}
       currentPageIndex={rsvp.currentGuidedPageIndex}
       totalPages={rsvp.guidedPages.length}
       onPlay={rsvp.play}
@@ -1072,7 +1071,6 @@ export function App() {
       onModeChange={rsvp.setMode}
       onDisplayModeChange={rsvp.setDisplayMode}
       onShowPacerChange={rsvp.setShowPacer}
-      onLinesPerPageChange={rsvp.setLinesPerPage}
       onNextPage={rsvp.nextPage}
       onPrevPage={rsvp.prevPage}
       rampEnabled={rsvp.rampEnabled}
