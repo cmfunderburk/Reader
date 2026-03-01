@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   backfillFromAttempts,
+  deleteCard,
   hasInitializedSRSBackfill,
   ingestComprehensionAttempt,
   loadSRSPool,
   markSRSBackfillInitialized,
+  resetCard,
   saveSRSPool,
   updateCardAfterReview,
   updateCardStatus,
@@ -335,6 +337,50 @@ describe('srsStore', () => {
       const result = updateCardStatus([target, other], 'target', 'deferred');
       expect(result[0].status).toBe('deferred');
       expect(result[1].status).toBe('active');
+    });
+  });
+
+  describe('deleteCard', () => {
+    it('removes the card with matching key', () => {
+      const keep = makeCard({ key: 'a1::keep', prompt: 'Keep?' });
+      const remove = makeCard({ key: 'a1::remove', prompt: 'Remove?' });
+      const result = deleteCard([keep, remove], 'a1::remove');
+      expect(result).toHaveLength(1);
+      expect(result[0].key).toBe('a1::keep');
+    });
+
+    it('returns all cards unchanged when key not found', () => {
+      const card = makeCard();
+      const result = deleteCard([card], 'nonexistent');
+      expect(result).toEqual([card]);
+    });
+  });
+
+  describe('resetCard', () => {
+    it('resets matching card to box 1 with fresh scheduling', () => {
+      const card = makeCard({ box: 4, reviewCount: 10, lapseCount: 3 });
+      const now = 5_000_000;
+      const result = resetCard([card], card.key, now);
+      expect(result[0].box).toBe(1);
+      expect(result[0].reviewCount).toBe(0);
+      expect(result[0].lapseCount).toBe(0);
+      expect(result[0].nextDueAt).toBe(now + LEITNER_INTERVALS[1] * MS_PER_DAY);
+      expect(result[0].lastReviewedAt).toBe(now);
+    });
+
+    it('does not affect other cards', () => {
+      const target = makeCard({ key: 'a1::target', box: 4 });
+      const other = makeCard({ key: 'a1::other', box: 3 });
+      const now = 5_000_000;
+      const result = resetCard([target, other], 'a1::target', now);
+      expect(result[0].box).toBe(1);
+      expect(result[1].box).toBe(3);
+    });
+
+    it('preserves card status', () => {
+      const card = makeCard({ box: 4, status: 'deferred' });
+      const result = resetCard([card], card.key, 5_000_000);
+      expect(result[0].status).toBe('deferred');
     });
   });
 });

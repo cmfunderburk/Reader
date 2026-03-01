@@ -180,3 +180,21 @@ export function updateCardStatus(
     return { ...card, status };
   });
 }
+
+export function deleteCard(cards: SRSCard[], cardKey: string): SRSCard[] {
+  return cards.filter((card) => card.key !== cardKey);
+}
+
+export function resetCard(cards: SRSCard[], cardKey: string, now: number): SRSCard[] {
+  return cards.map((card) => {
+    if (card.key !== cardKey) return card;
+    return {
+      ...card,
+      box: 1 as LeitnerBox,
+      reviewCount: 0,
+      lapseCount: 0,
+      lastReviewedAt: now,
+      nextDueAt: computeNextDueAt(1, now),
+    };
+  });
+}
