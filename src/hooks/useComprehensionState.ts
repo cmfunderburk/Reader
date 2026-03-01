@@ -21,6 +21,8 @@ import {
   backfillFromAttempts,
   updateCardAfterReview,
   updateCardStatus,
+  deleteCard,
+  resetCard,
   hasInitializedSRSBackfill,
   markSRSBackfillInitialized,
 } from '../lib/srsStore';
@@ -44,6 +46,8 @@ interface UseComprehensionStateReturn {
   handleComprehensionAttemptSaved: (attempt: ComprehensionAttempt) => void;
   handleSRSCardReviewed: (cardKey: string, selfGradeCorrect: boolean) => void;
   handleSRSCardStatusChange: (cardKey: string, status: SRSCardStatus) => void;
+  handleDeleteSRSCard: (cardKey: string) => void;
+  handleResetSRSCard: (cardKey: string) => void;
 }
 
 export function useComprehensionState({
@@ -130,6 +134,22 @@ export function useComprehensionState({
     });
   }, []);
 
+  const handleDeleteSRSCard = useCallback((cardKey: string) => {
+    setSrsCards((existing) => {
+      const updated = deleteCard(existing, cardKey);
+      saveSRSPool(updated);
+      return updated;
+    });
+  }, []);
+
+  const handleResetSRSCard = useCallback((cardKey: string) => {
+    setSrsCards((existing) => {
+      const updated = resetCard(existing, cardKey, Date.now());
+      saveSRSPool(updated);
+      return updated;
+    });
+  }, []);
+
   return {
     comprehensionApiKey,
     comprehensionApiKeyStorageMode,
@@ -142,5 +162,7 @@ export function useComprehensionState({
     handleComprehensionAttemptSaved,
     handleSRSCardReviewed,
     handleSRSCardStatusChange,
+    handleDeleteSRSCard,
+    handleResetSRSCard,
   };
 }
