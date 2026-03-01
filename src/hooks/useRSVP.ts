@@ -37,7 +37,6 @@ interface UseRSVPReturn {
   currentGuidedPage: GuidedPage | null;
   currentGuidedPageIndex: number;
   showPacer: boolean;
-  linesPerPage: number;
   predictionStats: PredictionStats;
   play: () => void;
   pause: () => void;
@@ -590,7 +589,6 @@ export function useRSVP(options: UseRSVPOptions = {}): UseRSVPReturn {
     currentGuidedPage,
     currentGuidedPageIndex,
     showPacer,
-    linesPerPage,
     predictionStats,
     play,
     pause,
