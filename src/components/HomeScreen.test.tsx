@@ -20,6 +20,10 @@ const baseProps = {
   srsDueCount: 0,
   onStartSRSReview: vi.fn(),
   onOpenEpub: vi.fn(),
+  srsCards: [],
+  onDeleteSRSCard: vi.fn(),
+  onResetSRSCard: vi.fn(),
+  onUpdateSRSCardStatus: vi.fn(),
 };
 
 function makeAttempt(overrides: Partial<ComprehensionAttempt> = {}): ComprehensionAttempt {
