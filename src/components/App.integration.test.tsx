@@ -636,6 +636,10 @@ describe('App integration smoke', () => {
       expect(screen.queryByTestId('active-reader')).not.toBeNull();
     });
 
+    fireEvent.click(screen.getByRole('button', { name: /^Passages/ }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: 'Save Sentence' })).not.toBeNull();
+    });
     const captureBtn = screen.getByRole('button', { name: 'Save Sentence' });
     expect((captureBtn as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(captureBtn);

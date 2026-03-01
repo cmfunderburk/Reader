@@ -745,11 +745,7 @@ export function App() {
     return buildPassageReviewQueue(passages);
   }, [passages]);
 
-  useEffect(() => {
-    if (reviewQueue.length === 0 && isPassageWorkspaceOpen) {
-      setIsPassageWorkspaceOpen(false);
-    }
-  }, [isPassageWorkspaceOpen, reviewQueue.length]);
+  // Auto-close removed: overlay now contains capture buttons, not just queue
 
   useEffect(() => {
     if (activePassageId && !reviewQueue.some((passage) => passage.id === activePassageId)) {
@@ -1130,65 +1126,20 @@ export function App() {
     const queueItems = reviewQueue;
 
     return (
-      <section className={`passage-workspace ${isPassageWorkspaceOpen ? 'passage-workspace-open' : ''}`}>
-        <div className="passage-workspace-toolbar">
-          <div className="passage-workspace-header">
-            <strong>Passage Workspace</strong>
-            <span className="passage-workspace-count">{reviewQueue.length} queued</span>
-          </div>
-          <button
-            className={`control-btn passage-workspace-toggle ${isPassageWorkspaceOpen ? 'control-btn-active' : ''}`}
-            onClick={() => setIsPassageWorkspaceOpen((open) => !open)}
-            title={queueItems.length === 0
-              ? 'Capture passages to enable queue review'
-              : isPassageWorkspaceOpen
-                ? 'Hide passage queue'
-                : 'Show passage queue'}
-            aria-expanded={isPassageWorkspaceOpen}
-            aria-controls="passage-queue-panel"
-            disabled={queueItems.length === 0}
-          >
-            {isPassageWorkspaceOpen ? 'Hide Queue' : 'Show Queue'}
-          </button>
-        </div>
-
-        <div className="passage-capture-actions">
-          <button
-            className="control-btn"
-            onClick={handleCaptureSentence}
-            disabled={!canCapture}
-            title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save sentence at current focus'}
-          >
-            Save Sentence
-          </button>
-          <button
-            className="control-btn"
-            onClick={handleCaptureParagraph}
-            disabled={!canCapture}
-            title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save current paragraph'}
-          >
-            Save Paragraph
-          </button>
-          <button
-            className="control-btn"
-            onClick={handleCaptureLastLines}
-            disabled={!canCapture}
-            title={!canCapture ? 'Pause Guided reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}
-          >
-            Save Last {PASSAGE_CAPTURE_LAST_LINE_COUNT}
-          </button>
-          <button
-            className="control-btn"
-            onClick={() => {
-              if (reviewQueue.length === 0) return;
-              startPassageReview(reviewQueue[0], 'recall');
-            }}
-            disabled={reviewQueue.length === 0}
-            title="Start quick recall with the highest-priority queued passage"
-          >
-            Review Next
-          </button>
-        </div>
+      <div className="passage-workspace-anchor">
+        <button
+          className={`control-btn passage-workspace-toggle ${isPassageWorkspaceOpen ? 'control-btn-active' : ''}`}
+          onClick={() => setIsPassageWorkspaceOpen((open) => !open)}
+          title={queueItems.length === 0
+            ? 'Capture passages to enable queue review'
+            : isPassageWorkspaceOpen
+              ? 'Hide passage workspace'
+              : 'Show passage workspace'}
+          aria-expanded={isPassageWorkspaceOpen}
+          aria-controls="passage-workspace-panel"
+        >
+          Passages{queueItems.length > 0 ? ` (${queueItems.length})` : ''}
+        </button>
 
         {captureNotice && (
           <div className="passage-capture-notice-toast" role="status" aria-live="polite">
@@ -1196,42 +1147,52 @@ export function App() {
           </div>
         )}
 
-        {isPassageWorkspaceOpen && queueItems.length > 0 && (
-          <div id="passage-queue-panel" className="passage-workspace-panel">
-            <div className="passage-queue-list">
-              {queueItems.map((passage) => (
-                <article
-                  key={passage.id}
-                  className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}
-                >
-                  <div className="passage-queue-meta">
-                    <span>{passage.articleTitle}</span>
-                    <span>{passage.captureKind} • {passage.reviewState}</span>
-                  </div>
-                  <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
-                  <div className="passage-queue-actions">
-                    <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>
-                      Recall
-                    </button>
-                    <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>
-                      Predict
-                    </button>
-                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>
-                      Hard
-                    </button>
-                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>
-                      Easy
-                    </button>
-                    <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>
-                      Done
-                    </button>
-                  </div>
-                </article>
-              ))}
+        {isPassageWorkspaceOpen && (
+          <div id="passage-workspace-panel" className="passage-workspace-panel-overlay">
+            <div className="passage-capture-actions">
+              <button className="control-btn" onClick={handleCaptureSentence} disabled={!canCapture}
+                title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save sentence at current focus'}>
+                Save Sentence
+              </button>
+              <button className="control-btn" onClick={handleCaptureParagraph} disabled={!canCapture}
+                title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save current paragraph'}>
+                Save Paragraph
+              </button>
+              <button className="control-btn" onClick={handleCaptureLastLines} disabled={!canCapture}
+                title={!canCapture ? 'Pause Guided reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}>
+                Save Last {PASSAGE_CAPTURE_LAST_LINE_COUNT}
+              </button>
+              <button className="control-btn"
+                onClick={() => { if (reviewQueue.length === 0) return; startPassageReview(reviewQueue[0], 'recall'); }}
+                disabled={reviewQueue.length === 0}
+                title="Start quick recall with the highest-priority queued passage">
+                Review Next
+              </button>
             </div>
+
+            {queueItems.length > 0 && (
+              <div className="passage-queue-list">
+                {queueItems.map((passage) => (
+                  <article key={passage.id} className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}>
+                    <div className="passage-queue-meta">
+                      <span>{passage.articleTitle}</span>
+                      <span>{passage.captureKind} • {passage.reviewState}</span>
+                    </div>
+                    <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
+                    <div className="passage-queue-actions">
+                      <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>Recall</button>
+                      <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>Predict</button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>Hard</button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>Easy</button>
+                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>Done</button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         )}
-      </section>
+      </div>
     );
   };
 

@@ -530,44 +530,10 @@ button {
   align-items: center;
 }
 
-.passage-workspace {
-  width: min(1100px, 100%);
-  margin-inline: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.55rem 0.65rem;
-  background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+.passage-workspace-anchor {
   position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  flex-shrink: 0;
-}
-
-.passage-workspace-open {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-
-.passage-workspace-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.6rem;
-  min-width: 0;
-}
-
-.passage-workspace-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.88rem;
-  min-width: 0;
-}
-
-.passage-workspace-count {
-  color: var(--text-secondary);
-  font-size: 0.76rem;
-  white-space: nowrap;
+  justify-content: center;
 }
 
 .passage-workspace-toggle {
@@ -611,20 +577,21 @@ button {
   pointer-events: none;
 }
 
-.passage-workspace-panel {
+.passage-workspace-panel-overlay {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(100% + 0.45rem);
-  z-index: 12;
+  bottom: calc(100% + 0.4rem);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(1100px, calc(100vw - 2rem));
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.6rem;
-  background: color-mix(in srgb, var(--bg-secondary) 95%, transparent);
-  box-shadow: 0 8px 22px rgba(0,0,0,0.35);
+  padding: 0.55rem 0.65rem;
+  background: var(--bg-secondary);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  z-index: 20;
 }
 
 .passage-queue-empty {
@@ -682,12 +649,7 @@ button {
 }
 
 @media (max-width: 900px) {
-  .passage-workspace-toolbar {
-    flex-wrap: wrap;
-    row-gap: 0.35rem;
-  }
-
-  .passage-workspace-panel {
+  .passage-workspace-panel-overlay {
     max-height: min(52vh, 360px);
   }
 }
