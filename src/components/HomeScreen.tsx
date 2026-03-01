@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { Activity, Article, ComprehensionAttempt, DisplayMode } from '../types';
+import { SRSCardManager } from './SRSCardManager';
+import type { Activity, Article, ComprehensionAttempt, DisplayMode, SRSCard, SRSCardStatus } from '../types';
 
 interface ContinueInfo {
   article: Article;
@@ -24,6 +25,10 @@ interface HomeScreenProps {
   srsDueCount: number;
   onStartSRSReview: () => void;
   onOpenEpub: () => void;
+  srsCards: SRSCard[];
+  onDeleteSRSCard: (cardKey: string) => void;
+  onResetSRSCard: (cardKey: string) => void;
+  onUpdateSRSCardStatus: (cardKey: string, status: SRSCardStatus) => void;
 }
 
 const MAX_HISTORY_ATTEMPTS = 30;
@@ -98,8 +103,13 @@ export function HomeScreen({
   srsDueCount,
   onStartSRSReview,
   onOpenEpub,
+  srsCards,
+  onDeleteSRSCard,
+  onResetSRSCard,
+  onUpdateSRSCardStatus,
 }: HomeScreenProps) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isCardManagerOpen, setIsCardManagerOpen] = useState(false);
   const attemptsToShow = comprehensionAttempts.slice(0, MAX_HISTORY_ATTEMPTS);
   const dailyStatusText = dailyStatus === 'loading'
     ? 'Fetching...'
@@ -203,9 +213,21 @@ export function HomeScreen({
             </button>
             <button
               className="launcher-secondary-btn"
-              onClick={() => setIsHistoryOpen((value) => !value)}
+              onClick={() => {
+                setIsHistoryOpen((v) => !v);
+                if (!isHistoryOpen) setIsCardManagerOpen(false);
+              }}
             >
               {isHistoryOpen ? 'Hide History' : 'Review History'}
+            </button>
+            <button
+              className="launcher-secondary-btn"
+              onClick={() => {
+                setIsCardManagerOpen((v) => !v);
+                if (!isCardManagerOpen) setIsHistoryOpen(false);
+              }}
+            >
+              {isCardManagerOpen ? 'Hide Cards' : 'Manage Cards'}
             </button>
           </div>
         </section>
@@ -352,6 +374,15 @@ export function HomeScreen({
             </div>
           )}
         </section>
+      )}
+
+      {isCardManagerOpen && (
+        <SRSCardManager
+          cards={srsCards}
+          onDeleteCard={onDeleteSRSCard}
+          onResetCard={onResetSRSCard}
+          onUpdateCardStatus={onUpdateSRSCardStatus}
+        />
       )}
     </div>
   );

@@ -1276,6 +1276,10 @@ export function App() {
             srsDueCount={srsDueCount}
             onStartSRSReview={handleStartSRSReview}
             onOpenEpub={handleOpenEpub}
+            srsCards={srsCards}
+            onDeleteSRSCard={comp.handleDeleteSRSCard}
+            onResetSRSCard={comp.handleResetSRSCard}
+            onUpdateSRSCardStatus={comp.handleSRSCardStatusChange}
           />
         )}
 
