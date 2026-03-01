@@ -153,6 +153,13 @@ button {
 }
 
 /* Reader */
+.reader-measure {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
 .reader {
   flex: 1;
   display: flex;

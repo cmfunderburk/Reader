@@ -21,6 +21,7 @@ import { useRSVP } from '../hooks/useRSVP';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useEpubReader } from '../hooks/useEpubReader';
 import { useComprehensionState } from '../hooks/useComprehensionState';
+import { useAutoLines } from '../hooks/useAutoLines';
 import { calculateRemainingTime, formatTime, calculateProgress } from '../lib/rsvp';
 import {
   loadArticles,
@@ -276,6 +277,11 @@ export function App() {
     guidedLength: settings.guidedLength,
     onComplete: () => {},
   });
+  const readerContainerRef = useAutoLines(
+    displaySettings.guidedFontSize,
+    rsvp.setLinesPerPage,
+  );
+
   const previousReadingModeRef = useRef<DisplayMode>(rsvp.displayMode);
   const previousReadingArticleIdRef = useRef<string | null>(rsvp.article?.id ?? null);
   const generationRevealHeldRef = useRef(false);
@@ -1354,26 +1360,28 @@ export function App() {
         {/* Paced Reading: RSVP / Guided */}
         {viewState.screen === 'active-reader' && (
           <>
-            <Reader
-              chunk={rsvp.currentChunk}
-              isPlaying={rsvp.isPlaying}
-              displayMode={rsvp.displayMode}
-              guidedPage={rsvp.currentGuidedPage}
-              showPacer={rsvp.showPacer}
-              wpm={rsvp.effectiveWpm}
-              colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
-              showORP={displaySettings.rsvpShowORP}
-              guidedShowOVP={displaySettings.guidedShowOVP}
-              guidedShowSweep={displaySettings.guidedShowSweep}
-              guidedPacerStyle={displaySettings.guidedPacerStyle}
-              guidedFocusTarget={displaySettings.guidedFocusTarget}
-              guidedMergeShortFunctionWords={displaySettings.guidedMergeShortFunctionWords}
-              guidedLength={displaySettings.guidedLength}
-              generationDifficulty={displaySettings.generationDifficulty}
-              generationSweepReveal={displaySettings.generationSweepReveal}
-              generationMaskSeed={generationMaskSeed}
-              generationReveal={generationRevealHeld}
-            />
+            <div ref={readerContainerRef} className="reader-measure">
+              <Reader
+                chunk={rsvp.currentChunk}
+                isPlaying={rsvp.isPlaying}
+                displayMode={rsvp.displayMode}
+                guidedPage={rsvp.currentGuidedPage}
+                showPacer={rsvp.showPacer}
+                wpm={rsvp.effectiveWpm}
+                colorPhase={displaySettings.rsvpAlternateColors ? (rsvp.currentChunkIndex % 2 === 0 ? 'a' : 'b') : undefined}
+                showORP={displaySettings.rsvpShowORP}
+                guidedShowOVP={displaySettings.guidedShowOVP}
+                guidedShowSweep={displaySettings.guidedShowSweep}
+                guidedPacerStyle={displaySettings.guidedPacerStyle}
+                guidedFocusTarget={displaySettings.guidedFocusTarget}
+                guidedMergeShortFunctionWords={displaySettings.guidedMergeShortFunctionWords}
+                guidedLength={displaySettings.guidedLength}
+                generationDifficulty={displaySettings.generationDifficulty}
+                generationSweepReveal={displaySettings.generationSweepReveal}
+                generationMaskSeed={generationMaskSeed}
+                generationReveal={generationRevealHeld}
+              />
+            </div>
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
             {renderReaderControls(['rsvp', 'guided', 'generation'], 'paced-reading')}
