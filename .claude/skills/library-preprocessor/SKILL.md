@@ -1,15 +1,27 @@
 ---
 name: Library Content Preprocessor
-description: This skill should be used when the user asks to "preprocess library content", "clean up a PDF", "optimize content for speed reading", "fix extracted text", "review library file", or discusses improving text quality for the speed reader. Handles variable content types including EPUBs, web-saved PDFs, academic papers, and book chapters.
+description: Use when preprocessing/importing local source material (EPUB, PDF, or text bundles) into Reader-ready chapter files, including structure cleanup, section splitting, figure/equation handling, structured content preservation, and extraction QA. Handles variable content types including EPUBs, web-saved PDFs, academic papers, and book chapters.
 ---
 
 # Library Content Preprocessor
 
-This skill assists with preprocessing and optimizing library content for the SpeedRead application. Since library content varies significantly (Gutenberg EPUBs, web pages saved as PDFs, academic papers, scanned book chapters), automated cleanup often needs LLM-assisted finishing touches.
+Converts local source content into Reader-ready chapter files for Saccade, RSVP, Recall, and Prediction workflows. Content varies significantly (Gutenberg EPUBs, commercial EPUBs, web-saved PDFs, academic papers, textbook chapters), so automated cleanup often needs LLM-assisted finishing touches.
+
+## Output Contract (Reader-ready)
+
+- One UTF-8 `.txt` file per chapter/section in stable reading order.
+- Output location: `library/<collection>/<book-slug>/`.
+- Paragraphs separated by one blank line.
+- No HTML artifacts, page labels, or scanner metadata.
+- Use markdown headings (`#`, `##`, `###`) for chapter/section structure (see Saccade Mode Optimization).
+- If figures are present:
+  - Marker line: `[FIGURE:<id>]`
+  - **Figure IDs must be globally unique across the entire book** because the app resolves all figures from a single shared `images/` directory per book. Use `chNN-N` format (e.g., `ch02-1`, `ch11-5`) where `NN` is the chapter file prefix number and `N` is the per-chapter image sequence number.
+  - Optional caption line: `[FIGURE <caption text>]`
+  - Store figure image files as `images/<id>.jpg` inside the book directory.
+- If unresolved equation images remain: `[EQN_IMAGE:<n>]` placeholders (per-chapter numbering).
 
 ## Library Structure
-
-The `library/` directory uses a processing pipeline:
 
 ```
 library/
@@ -26,86 +38,301 @@ library/
 
 ## Content Types and Their Challenges
 
-### EPUBs (Non-Gutenberg)
-- **Source**: Commercial or independently published EPUBs
-- **Issues**: Structured HTML content (numbered lists, ordered items) lost during text extraction; footnote superscripts embedded inline; CSS-styled elements with no semantic HTML tags
-- **Critical pitfall**: EPUB chapters use `<p>` elements with CSS classes (e.g., `class="order"`, `class="order-indent"`) for numbered lists instead of `<ol>/<li>`. These contain substantive content but are easily stripped during HTML-to-text conversion. See "Structured Content Preservation" below.
-- **Example**: `How to Read a Book.epub` — ordered lists of rules, questions, and methods
-
-### Classics (`unprocessed/classics/`)
-- **Source**: Project Gutenberg EPUBs, public domain texts
-- **Issues**: Gutenberg headers/footers, transcriber notes, inconsistent formatting
-- **Example**: `brothers-karamazov.epub`, `nicomachean-ethics.epub`
+### EPUBs (Gutenberg and Non-Gutenberg)
+- **Gutenberg**: Headers/footers, transcriber notes, inconsistent formatting
+- **Non-Gutenberg**: CSS-styled structured content lost during text extraction; footnote superscripts inline; no semantic HTML tags for lists
+- **Critical pitfall**: EPUB chapters use `<p>` elements with CSS classes (e.g., `class="order"`) for numbered lists instead of `<ol>/<li>`. See Workflow B for preservation strategy.
 
 ### Articles (`unprocessed/articles/`)
-- **Source**: Academic papers, web pages saved as PDF, short works
-- **Issues**: Web print artifacts (timestamps, URLs), paper metadata (author blocks, abstracts), reference sections
-- **Example**: `attention.pdf` (academic), `wittgenstein-lecture-on-ethics.pdf` (web-saved)
+- Web print artifacts (timestamps, URLs), paper metadata, reference sections
 
 ### References (`unprocessed/references/`)
-- **Source**: Textbook chapters split into individual PDFs
-- **Issues**: Running headers/footers, page numbers, cross-references, frontmatter files
-- **Structure**: Organized by book (e.g., `kreps-micro-foundations-i/`, `osborne-rubinstein-game-theory/`)
+- Running headers/footers, page numbers, cross-references, organized by book
 
-## Structured Content Preservation (EPUB Critical)
+See `references/content-patterns.md` for detailed patterns per content type.
 
-**This is the most common source of content loss during preprocessing.** EPUBs often use CSS-styled `<p>` elements for numbered lists and ordered items instead of semantic `<ol>/<li>` tags. These look like regular paragraphs in the HTML but contain critical content (rules, steps, questions, enumerations).
+## Workflow A: Plan Source → Output
 
-### The Problem
+1. Confirm source and target paths.
+2. Decide split strategy before extraction:
+   - EPUB: TOC/flow IDs and heading anchors.
+   - PDF: heading regex boundaries (`No. <n>`, `Chapter <n>`, etc.).
+3. Keep source-specific extraction helpers local when tied to copyrighted content.
 
-When converting EPUB HTML to plain text, `body.textContent` or similar methods strip all HTML structure. Numbered list items in elements like `<p class="order">` become indistinguishable from surrounding prose and are often lost entirely — leaving blank lines where content should be.
+## Workflow B: EPUB Import
 
-**Known affected patterns** (from Calibre-formatted EPUBs):
-- `<p class="order">` — numbered items (e.g., "1. WHAT IS THE BOOK ABOUT AS A WHOLE?...")
-- `<p class="order-indent">` — continuation paragraphs under a numbered item
-- `<p class="orderb">` / `<p class="order-indentb">` — bottom-margin variants
-- `<p class="order1b">` / `<p class="order1ba">` — alternate numbering styles
-- `<sup>` footnote markers embedded inline (e.g., superscript "I" becomes stray letter)
+### Step 1: Inspect Reading Flow
 
-### How to Preserve Structured Content
+**Important**: Write epub/JSDOM scripts to temp files rather than using `node -e` inline. The Bash tool escapes `!` characters, breaking `if (!err)` and similar patterns. Use `NODE_PATH=./node_modules` when running from `/tmp`.
 
-When preprocessing EPUBs, **always extract and inspect the raw HTML** before converting to text:
-
-```bash
-# Extract raw HTML for a chapter to inspect structure
-node -e "
+```javascript
+// /tmp/inspect_flow.js — run with: NODE_PATH=./node_modules node /tmp/inspect_flow.js "<source.epub>"
 const EPub = require('epub');
-const epub = new EPub('library/BOOK.epub');
+const epub = new EPub(process.argv[2]);
+epub.on('end', () => (epub.flow || []).forEach((item, i) => {
+  console.log(i, item.id, item.href, item.title || '');
+}));
+epub.parse();
+```
+
+### Step 2: Detect Structured Content (Critical)
+
+**This is the most common source of content loss.** EPUBs often use CSS-styled `<p>` elements for numbered lists instead of semantic `<ol>/<li>` tags. These look like regular paragraphs in HTML but contain critical content.
+
+**Known affected CSS class patterns** (Calibre-formatted EPUBs):
+- `order` — numbered items
+- `order-indent` — continuation paragraphs under a numbered item
+- `orderb` / `order-indentb` — bottom-margin variants
+- `order1b` / `order1ba` / `order1b1` — alternate numbering styles
+- `<sup>` footnote markers embedded inline (extract as stray characters)
+
+Scan all chapters for structured content:
+
+```javascript
+// /tmp/detect_structured.js — run with: NODE_PATH=./node_modules node /tmp/detect_structured.js "<source.epub>"
+const EPub = require('epub');
+const { JSDOM } = require('jsdom');
+const epub = new EPub(process.argv[2]);
 epub.on('end', () => {
-  epub.getChapter('CHAPTER_ID', (err, html) => {
-    // Look for ordered/list elements
-    const orderCount = (html.match(/class=\"order/g) || []).length;
-    if (orderCount > 0) console.log('WARNING: ' + orderCount + ' ordered items found');
-    console.log(html);
+  const flow = epub.flow || [];
+  let pending = flow.length;
+  flow.forEach(item => {
+    epub.getChapter(item.id, (err, html) => {
+      pending--;
+      if (!err && html) {
+        const dom = new JSDOM(html);
+        const items = dom.window.document.querySelectorAll('[class^="order"]');
+        if (items.length > 0) {
+          process.stdout.write(item.href + ': ' + items.length + ' items\n');
+          items.forEach(el => {
+            const text = el.textContent.trim().substring(0, 80);
+            process.stdout.write('  [' + el.className + '] ' + text + '\n');
+          });
+        }
+      }
+      if (pending === 0) process.stdout.write('DONE\n');
+    });
   });
 });
 epub.parse();
-"
 ```
 
 When ordered items are found:
 1. Parse the HTML with JSDOM
 2. Extract text from `[class^="order"]` elements separately
-3. Prefix each with its number (preserve the "1. ITEM TEXT" format)
+3. Prefix each with its number (preserve "1. ITEM TEXT" format)
 4. Insert them in the correct position in the output text
 
-### Verification After Preprocessing
+### Step 2b: Scan for Images, Figures, and Equations
 
-**Always check for content gaps** in the output `.txt` file:
+Scan all chapters for `<img>` tags to plan figure/equation handling:
+
+Write a scan script to a temp file (inline `-e` scripts break on `!` due to shell escaping — always use temp files for JSDOM/epub scripts):
+
+```javascript
+// /tmp/scan_patterns.js — run with: NODE_PATH=./node_modules node /tmp/scan_patterns.js "<source.epub>"
+const EPub = require('epub');
+const { JSDOM } = require('jsdom');
+const epub = new EPub(process.argv[2]);
+epub.on('end', () => {
+  const flow = epub.flow || [];
+  let pending = flow.length;
+  flow.forEach(item => {
+    epub.getChapter(item.id, (err, html) => {
+      pending--;
+      if (!err && html) {
+        const dom = new JSDOM(html);
+        const doc = dom.window.document;
+        const sups = doc.querySelectorAll('sup');
+        const imgs = doc.querySelectorAll('img');
+        const tables = doc.querySelectorAll('table');
+        if (sups.length + imgs.length + tables.length > 0) {
+          console.log(`${item.id}: ${imgs.length} imgs, ${sups.length} sups, ${tables.length} tables`);
+        }
+      }
+      if (pending === 0) console.log('DONE');
+    });
+  });
+});
+epub.parse();
+```
+
+### Step 3: Extract and Normalize
+
+Extract in flow order and split by in-text chapter headings when needed. Normalize:
+- Collapse broken intra-word wraps.
+- Remove Gutenberg boilerplate/HTML/entity artifacts.
+- Preserve deliberate lists and headings.
+- Convert chapter/section headings to markdown format (see Saccade Mode Optimization).
+- Strip footnote superscripts (stray letters like "I" at end of paragraphs).
+- **XHTML pitfall**: Some EPUBs use self-closing `<em/>` tags (empty emphasis). JSDOM's HTML parser treats these as unclosed `<em>` tags that swallow all subsequent content. Preprocess HTML with `html.replace(/<em\/>/g, '<em></em>')` before parsing.
+
+### Step 4: Verify Content Integrity
+
+Check for content gaps in each output `.txt` file:
 
 ```bash
-# Check for runs of 3+ consecutive blank lines (likely stripped content)
 perl -0777 -ne 'print scalar(() = /\n{4,}/g)' output.txt
 ```
 
-If gaps are found, compare with the source EPUB HTML to identify what was lost. Common signs:
-- Text says "There are four main questions..." followed by blank lines then "We will return to these four questions..." — the questions themselves were stripped
-- Text says "Here are some devices that can be used:" followed by blank lines — an enumerated list was lost
-- A stray letter (like "I") at the end of a paragraph — a footnote superscript was partially extracted
+Signs of stripped content:
+- "There are four main questions..." followed by blank lines then "We will return to these..." — the questions were stripped
+- "Here are some devices:" followed by blank lines — an enumerated list was lost
+- A stray letter at the end of a paragraph — a footnote superscript was partially extracted
+
+## Workflow C: PDF Import (Heading-Based Splitting)
+
+Use for long-form PDFs where sections must be split into chapter files.
+
+1. Extract raw text:
+   ```bash
+   pdftotext "<source.pdf>" /tmp/extracted.txt
+   ```
+2. Verify heading boundaries exist:
+   ```bash
+   rg -n '<heading-pattern>' /tmp/extracted.txt | head
+   ```
+3. Split by heading boundaries and emit files in target directory:
+   - Frontmatter files: `00-<name>.txt`
+   - Chapter files: `01-<name>.txt` through `NN-<name>.txt`
+4. Strip recurring page noise during cleanup (running headers, page numbers, URLs, etc.)
+
+## Workflow D: Figures and Equation Placeholders
+
+Use only when source content contains figure/equation images.
+
+### Step 1: Extract Images from EPUB
+
+The `epub` library provides `epub.getImage(manifestId, callback)` to extract image data. The manifest ID can be found from `<img>` src attributes: the src format is `/images/{manifestId}/OEBPS/images/...`.
+
+Write a per-chapter extraction script that:
+1. Parses each chapter's HTML to find all `<img>` tags in order
+2. Extracts the manifest ID from each img src
+3. Classifies each as equation or figure (see classification below)
+4. Numbers images sequentially per chapter (both types share one counter)
+5. Extracts image data via `epub.getImage(manifestId, (err, data, mimeType) => ...)`
+6. Saves to per-chapter directories: `/tmp/<book>-images/<chapter-name>/`
+7. Writes a `manifest.json` per chapter mapping index → type, filename, manifest src
+8. Updates text files with numbered placeholders: `[EQN_IMAGE:N]` and `[FIGURE:N]`
+
+### Step 2: Classify Images
+
+Use manifest ID patterns to classify (these are heuristics — verify in Step 4):
+- **Inline equations**: IDs containing `Art_in`, `Art_oneby`, `Art_twoby`, `Art_arr`, `Art_mdash`, `Art_vcirc`, `Art_sqrt`, `Art_sigma`, etc.
+- **Page-level figures**: IDs containing `Art_P` (followed by page number)
+- **Skip**: cover images, publisher logos, title page art
+
+**Classification pitfall**: Some prefixes are ambiguous. `Art_fg` (which looks like "figure") was used for both inline equations and actual chart/diagram figures. Always verify classification against surrounding text context in Step 4.
+
+### Step 3: Make Figure IDs Globally Unique
+
+**Critical**: All chapter `.txt` files share a single `images/` directory. Per-chapter figure numbers (`[FIGURE:1]`) collide across chapters.
+
+After extraction, rename all figure markers to globally unique IDs:
+- `[FIGURE:2]` in `04-the-science-of-many-models.txt` → `[FIGURE:ch04-2]`
+- Copy `fig_2.jpg` → `images/ch04-2.jpg`
+
+The final `images/` directory lives at `library/<collection>/<book-slug>/images/`.
+
+### Step 4: Verify Image Classification
+
+After extraction, visually spot-check a sample of images to catch misclassifications:
+- Read a few `eqn_N.jpg` files — are they actually equations (fractions, symbols, formulas) or diagrams/charts?
+- If figures were misclassified as equations: convert `[EQN_IMAGE:N]` → `[FIGURE:chNN-N]` in the text, remove from the equation ledger, and copy the image to the `images/` directory.
+
+### Step 5: Build Equation Ledger
+
+```bash
+node .claude/skills/library-preprocessor/scripts/build_equation_ledger.js \
+  --content-dir "library/<collection>/<book-slug>" \
+  --images-dir "<temp-image-dir>" \
+  --ledger "library/<collection>/<book-slug>/equation-transcriptions.json"
+```
+
+### Step 6: Transcribe Equations
+
+For books with many equations (100+), batch transcription across parallel agents (~40 equations per batch). Each agent:
+1. Reads each equation image file visually
+2. Reads surrounding text context for disambiguation
+3. Transcribes to Unicode following `references/unicode-equation-format.md`
+4. Writes results to a temp JSON file
+
+Merge all batch results into the ledger, then apply:
+
+```bash
+node .claude/skills/library-preprocessor/scripts/apply_equation_ledger.js \
+  --content-dir "library/<collection>/<book-slug>" \
+  --ledger "library/<collection>/<book-slug>/equation-transcriptions.json"
+```
+
+The apply script supports `action: "replace"` (substitute unicode), `action: "drop"` (remove placeholder). Entries with empty `unicode` and no special action are reported as unresolved.
+
+## Workflow E: QA and Validation
+
+Run before considering import complete:
+
+```bash
+# File count and empty file check
+find "library/<collection>/<book-slug>" -maxdepth 1 -type f -name '*.txt' | wc -l
+find "library/<collection>/<book-slug>" -maxdepth 1 -type f -name '*.txt' -size 0
+
+# Artifact scan
+rg -n "<[^>]+>|&[a-z]+;|page_[0-9]+|Online Library of Liberty|PLL v" "library/<collection>/<book-slug>"/*.txt
+
+# Content gap detection (3+ consecutive blank lines)
+for f in library/<collection>/<book-slug>/*.txt; do
+  gaps=$(perl -0777 -ne 'print scalar(() = /\n{4,}/g)' "$f")
+  if [ "$gaps" -gt 0 ]; then echo "$f: $gaps"; fi
+done
+```
+
+If equations should be resolved:
+```bash
+rg -n "\\[EQN_IMAGE:" "library/<collection>/<book-slug>"/*.txt
+```
+
+If figure markers should exist:
+```bash
+rg -n "\\[FIGURE:" "library/<collection>/<book-slug>"/*.txt
+```
+
+## Workflow F: PDF Import with Docling
+
+Use when a PDF benefits from stronger layout handling (figures/formulas/tables). PDF only — Docling does not support EPUB.
+
+1. Run the converter:
+   ```bash
+   uvx --python 3.12 --from docling python \
+     .claude/skills/library-preprocessor/scripts/docling_pdf_to_reader.py \
+     --input-pdf "<source.pdf>" \
+     --output-dir "library/<collection>/<book-slug>" \
+     --pdf-backend pypdfium2 \
+     --drop-markdown-tables \
+     --save-raw-markdown
+   ```
+2. Optional section splitting:
+   ```bash
+   uvx --python 3.12 --from docling python \
+     .claude/skills/library-preprocessor/scripts/docling_pdf_to_reader.py \
+     --input-pdf "<source.pdf>" \
+     --output-dir "library/<collection>/<book-slug>" \
+     --chapter-regex '^Chapter\\s+[0-9]+' \
+     --keep-frontmatter
+   ```
+3. Optional figure image export:
+   ```bash
+   uvx --python 3.12 --from docling python \
+     .claude/skills/library-preprocessor/scripts/docling_pdf_to_reader.py \
+     --input-pdf "<source.pdf>" \
+     --output-dir "library/<collection>/<book-slug>" \
+     --export-figure-images
+   ```
+4. Run Workflow E QA checks.
+5. If equation placeholders remain, continue with Workflow D.
 
 ## Existing Cleanup Infrastructure
 
-The app has an automated cleanup module at `electron/lib/cleanup.ts` with these capabilities:
+The app has an automated cleanup module at `electron/lib/cleanup.ts`:
 
 ```typescript
 interface CleanupOptions {
@@ -121,61 +348,7 @@ interface CleanupOptions {
 }
 ```
 
-The automated cleanup handles common patterns but cannot:
-- Distinguish meaningful content from boilerplate in edge cases
-- Fix OCR errors or garbled text
-- Identify section boundaries in poorly structured documents
-- Handle content-specific decisions (keep this footnote? remove this aside?)
-
-## Preprocessing Workflow
-
-### Step 1: Assess Content Quality
-
-To assess a library file, extract and examine its content:
-
-```bash
-# For PDFs - use the app's extraction
-node -e "
-const { extractPdfText } = require('./dist-electron/lib/pdf.js');
-extractPdfText('library/articles/FILENAME.pdf', { cleanup: false })
-  .then(r => console.log(r.content.substring(0, 3000)));
-"
-
-# For EPUBs - inspect raw HTML structure (critical for detecting ordered lists)
-node -e "
-const EPub = require('epub');
-const epub = new EPub('library/BOOK.epub');
-epub.on('end', () => {
-  const flow = epub.flow || [];
-  let pending = flow.length;
-  flow.forEach((item, i) => {
-    epub.getChapter(item.id, (err, html) => {
-      pending--;
-      if (!err && html) {
-        const orderCount = (html.match(/class=\"order/g) || []).length;
-        if (orderCount > 0)
-          process.stdout.write(item.href + ': ' + orderCount + ' ordered items\n');
-      }
-      if (pending === 0) process.stdout.write('DONE\n');
-    });
-  });
-});
-epub.parse();
-"
-```
-
-Or read the file directly to see raw extraction issues.
-
-Identify:
-- Content type (academic paper, book chapter, web article, literature)
-- Major artifacts (page numbers, headers, metadata blocks)
-- Text quality (clean extraction vs. OCR errors vs. no text layer)
-- Structure (chapters, sections, continuous prose)
-- **For EPUBs**: Whether chapters contain `<p class="order*">` or other structured list elements
-
-### Step 2: Apply Automated Cleanup
-
-Test the automated cleanup on the content:
+Test automated cleanup on extracted content:
 
 ```bash
 node -e "
@@ -185,111 +358,47 @@ const fs = require('fs');
 "
 ```
 
-Note what the automated cleanup handles well and what remains.
+The automated cleanup handles common patterns but cannot distinguish meaningful content from boilerplate in edge cases, fix OCR errors, identify section boundaries in poorly structured documents, or make content-specific decisions.
 
-### Step 3: LLM-Assisted Refinement
+## LLM-Assisted Refinement
 
-For issues the automated cleanup cannot handle, apply targeted fixes:
+For issues automation cannot handle:
 
-**Boilerplate identification**: Review extracted text and identify blocks that should be removed but weren't caught by pattern matching.
+- **Boilerplate identification**: Review and identify blocks that weren't caught by pattern matching.
+- **Content decisions**: Keep or remove translator's notes, footnotes, section headers, cross-references to figures/tables.
+- **Text repair**: Fix OCR artifacts (`rn`→`m`, `l`→`1`, `O`→`0`), garbled Unicode, column layout fragments.
 
-**Content decisions**: Determine whether to keep or remove:
-- Translator's notes in classic literature
-- Extensive footnotes that break reading flow
-- Section headers that may or may not be useful
-- Cross-references to figures/tables (useless without the figures)
+## Saccade Mode Optimization
 
-**Text repair**: Fix:
-- OCR artifacts (common character substitutions: rn→m, l→1, O→0)
-- Garbled Unicode or encoding issues
-- Sentence fragments from column layout extraction
+Saccade mode displays full-page text with a sliding highlight. It detects and renders markdown headings with special formatting (centered, blank lines above/below).
 
-### Step 4: Create Optimized Version
+### Heading Format
 
-Options for storing optimized content:
+Convert source headings to markdown:
 
-1. **Pre-extracted text files**: Store cleaned `.txt` alongside source files
-2. **Metadata files**: Create `.meta.json` with cleanup decisions
-3. **Direct modification**: For user-owned content, update the source
-
-### Step 5: Verify Output Integrity
-
-**Always run after creating output files**, especially for EPUB sources:
-
-```bash
-# Check for content gaps (3+ consecutive blank lines = likely stripped content)
-gaps=$(perl -0777 -ne 'print scalar(() = /\n{4,}/g)' output.txt)
-if [ "$gaps" -gt 0 ]; then
-  echo "WARNING: $gaps content gap(s) found — compare with source"
-fi
+```
+# Chapter Title
+## Section Heading
+### Subsection
 ```
 
-If gaps are found:
-1. Locate each gap and read the surrounding context (look for "there are N..." or "here are..." followed by blanks)
-2. Compare with the source file's HTML to find what was stripped
-3. Restore the missing content with proper numbered formatting
+**Examples:**
 
-## Common Content Patterns
+Raw: `CHAPTER V / THE GRAND INQUISITOR` → `# Chapter V: The Grand Inquisitor`
 
-### Gutenberg EPUBs
-```
-*** START OF THE PROJECT GUTENBERG EBOOK ***
-[content]
-*** END OF THE PROJECT GUTENBERG EBOOK ***
-Transcriber's Notes: [notes]
-```
-**Action**: Remove Gutenberg markers and transcriber notes unless specifically relevant.
+Raw: `5.2 Nash Equilibrium` → `## Nash Equilibrium`
 
-### Web-Saved PDFs
-```
-12/23/25, 9:21 AM    Page Title - Website Name
-https://example.com/page    1/8
--- 1 of 8 --
-[content repeated with headers on each page]
-```
-**Action**: Remove timestamps, URLs, page fractions. The automated cleanup handles most of this.
+Remove redundant numbering — heading level provides hierarchy.
 
-### Academic Papers
-```
-Title
-Author1, Author2
-Institution, email@domain.com
-Abstract: [abstract text]
-1. Introduction
-[content]
-References
-[bibliography]
-```
-**Action**: Optionally keep abstract (useful context), remove author block and references.
+### Line Width and Mode Compatibility
 
-### Textbook Chapters
-```
-Chapter 5: Topic Name
-[content with section numbers like 5.1, 5.2]
-[running header: "Chapter 5: Topic Name" on each page]
-[page numbers]
-[cross-references: "See Figure 5.3" or "As shown in Section 5.1"]
-```
-**Action**: Remove running headers/page numbers. Keep or contextualize cross-references.
-
-## Reference Files
-
-For detailed patterns and edge cases:
-- **`references/content-patterns.md`** - Specific patterns for each content type with examples
-
-## Workflow Commands
-
-When preprocessing library content:
-
-1. **List available content**: `ls -la library/{classics,articles,references}`
-2. **Check file type**: `file library/path/to/file.pdf`
-3. **Extract sample**: Use node script above or read directly
-4. **Test cleanup**: Apply cleanup module and review output
-5. **Apply LLM fixes**: Edit cleanup.ts patterns or create content-specific overrides
+- Saccade mode uses **80-character line width**. Pre-wrapping at 80 chars is optional (app handles it).
+- RSVP mode ignores line breaks (whitespace collapsed). Content formatted for saccade works fine in RSVP.
+- Paragraph breaks (blank lines) create pause markers in RSVP.
 
 ## Output Considerations for Speed Reading
 
-Optimized content for the speed reader should:
+Optimized content should:
 
 - Flow continuously without jarring breaks
 - Avoid orphaned references ("See Figure 3" with no figure)
@@ -298,64 +407,17 @@ Optimized content for the speed reader should:
 - Keep content that aids comprehension (abstracts, key definitions)
 - Remove content that breaks immersion (lengthy footnotes, bibliographies)
 
-The goal is text that reads naturally when presented word-by-word or phrase-by-phrase at speed.
+## Reference Files
 
-## Saccade Mode Optimization
+- `references/content-patterns.md` — Detailed patterns per content type with examples
+- `references/unicode-equation-format.md` — Unicode math formatting rules for equation transcriptions
+- `examples/preprocessing-workflow.md` — Example preprocessing a web-saved PDF
 
-The app supports **saccade mode** - a full-page display where a sliding highlight moves through the text. This mode benefits from specific formatting:
+## Completion Criteria
 
-### Markdown Headings
-
-Saccade mode detects and renders markdown-style headings with special formatting (centered, with blank lines above/below). When preprocessing, use markdown heading syntax:
-
-```
-# Chapter Title
-## Section Heading
-### Subsection
-```
-
-Headings are included in the reading sequence as chunks, providing natural pause points and context.
-
-### Line Width
-
-Saccade mode uses **80-character line width** (terminal/book standard). When preprocessing content for saccade mode, you can pre-wrap text at 80 characters. The app handles this automatically during display, but pre-formatting can help with content that has specific line break requirements.
-
-### Line Breaks and RSVP
-
-RSVP mode ignores line breaks and treats text as continuous (whitespace is collapsed). This means:
-- Content formatted for saccade mode (with 80-char line breaks) works fine in RSVP
-- Single line breaks within paragraphs become spaces
-- Paragraph breaks (blank lines) create pause markers in RSVP
-
-### Heading Format Examples
-
-**Input (raw chapter):**
-```
-CHAPTER V
-THE GRAND INQUISITOR
-
-"Even so," Ivan laughed again...
-```
-
-**Output (formatted for saccade):**
-```
-# Chapter V: The Grand Inquisitor
-
-"Even so," Ivan laughed again...
-```
-
-**Input (textbook section):**
-```
-5.2 Nash Equilibrium
-
-A Nash equilibrium is a strategy profile...
-```
-
-**Output (formatted for saccade):**
-```
-## Nash Equilibrium
-
-A Nash equilibrium is a strategy profile...
-```
-
-Remove redundant numbering when converting to markdown headings - the heading level itself provides hierarchy.
+- Expected chapter/section files exist and are non-empty.
+- File ordering and naming are stable and scan-friendly.
+- No obvious extraction artifacts remain.
+- Reader modes can parse chapter text cleanly.
+- Figures/equations are either resolved or intentionally preserved with markers.
+- If figures present: `images/` directory exists with one `.jpg` per `[FIGURE:id]` marker, IDs are globally unique (`chNN-N` format), and figures render in the Electron app (re-open from Library to verify — cached articles use stale content).
