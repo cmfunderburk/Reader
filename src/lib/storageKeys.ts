@@ -3,7 +3,6 @@ export const STORAGE_KEYS = {
   articles: 'speedread_articles',
   feeds: 'speedread_feeds',
   settings: 'speedread_settings',
-  passages: 'speedread_passages',
   sessionSnapshot: 'speedread_session_snapshot',
   drillState: 'speedread_drill_state',
   trainingSentenceMode: 'speedread_training_sentence',

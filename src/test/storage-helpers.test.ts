@@ -2,10 +2,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import {
   updateArticlePosition,
   updateArticlePredictionPosition,
-  loadPassages,
-  upsertPassage,
-  updatePassageReviewState,
-  touchPassageReview,
   loadSessionSnapshot,
   saveSessionSnapshot,
   clearSessionSnapshot,
@@ -28,7 +24,7 @@ import {
   loadPreferredComprehensionApiKey,
   savePreferredComprehensionApiKey,
 } from '../lib/storage';
-import type { Passage, ComprehensionAttempt } from '../types';
+import type { ComprehensionAttempt } from '../types';
 import {
   createTestArticle,
   seedArticles,
@@ -110,39 +106,9 @@ describe('storage-helpers with real storage functions', () => {
     expect(await getStoredArticles()).toHaveLength(1);
   });
 
-  it('upsertPassage + loadPassages round-trips with review updates', () => {
-    const now = Date.now();
-    const passage: Passage = {
-      id: 'p1',
-      articleId: 'a1',
-      articleTitle: 'Article 1',
-      sourceMode: 'guided',
-      captureKind: 'paragraph',
-      text: 'Captured passage',
-      createdAt: now,
-      updatedAt: now,
-      sourceChunkIndex: 12,
-      sourcePageIndex: 2,
-      sourceLineIndex: 4,
-      reviewState: 'new',
-      reviewCount: 0,
-    };
-
-    upsertPassage(passage);
-    updatePassageReviewState('p1', 'hard');
-    touchPassageReview('p1', 'recall');
-
-    const loaded = loadPassages();
-    expect(loaded).toHaveLength(1);
-    expect(loaded[0].reviewState).toBe('hard');
-    expect(loaded[0].reviewCount).toBe(1);
-    expect(loaded[0].lastReviewMode).toBe('recall');
-  });
-
   it('session snapshot persists and clears', () => {
     saveSessionSnapshot({
       reading: { articleId: 'a1', chunkIndex: 20, displayMode: 'guided' },
-      training: { passageId: 'p1', mode: 'prediction', startedAt: Date.now() },
       lastTransition: 'read-to-prediction',
       updatedAt: Date.now(),
     });

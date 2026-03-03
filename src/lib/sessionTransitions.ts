@@ -79,7 +79,6 @@ export function planCloseActiveExercise(
       chunkIndex: reading.chunkIndex,
       snapshot: {
         ...snapshot,
-        training: undefined,
         lastTransition: 'return-to-reading',
         updatedAt: now,
       },

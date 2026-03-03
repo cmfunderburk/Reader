@@ -229,43 +229,6 @@ describe('App integration smoke', () => {
     });
   });
 
-  it('holds R in generation mode to pause reveal and resumes on release', async () => {
-    const rsvp = mockRsvp as {
-      displayMode: string;
-      isPlaying: boolean;
-      pause: ReturnType<typeof vi.fn>;
-      play: ReturnType<typeof vi.fn>;
-    };
-    rsvp.displayMode = 'generation';
-    rsvp.isPlaying = true;
-
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.queryByTestId('home-screen')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'open-paced' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('content-browser')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'select-first' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('preview-screen')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'start-reading' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('active-reader')).not.toBeNull();
-    });
-
-    fireEvent.keyDown(window, { code: 'KeyR' });
-    expect(rsvp.pause).toHaveBeenCalled();
-
-    fireEvent.keyUp(window, { code: 'KeyR' });
-    expect(rsvp.play).toHaveBeenCalled();
-  });
-
   it('uses cached daily featured article without refetching', async () => {
     localStorage.setItem('speedread_daily_date', getTodayUTC());
     localStorage.setItem('speedread_daily_article_id', 'a1');
@@ -473,7 +436,6 @@ describe('App integration smoke', () => {
       chunkIndex: 5,
       displayMode: 'rsvp',
     });
-    expect(snapshot.training).toBeUndefined();
     expect(snapshot.lastTransition).toBe('return-to-reading');
     expect(typeof snapshot.updatedAt).toBe('number');
   });
@@ -570,96 +532,4 @@ describe('App integration smoke', () => {
     expect(lastComprehensionProps?.comprehension.sourceArticleIds).toEqual(['a', 'z']);
   });
 
-  it('captures a sentence passage from active reader workspace', async () => {
-    const rsvp = mockRsvp as {
-      article: Article | null;
-      displayMode: string;
-      chunks: Array<{
-        text: string;
-        wordCount: number;
-        orpIndex: number;
-        guided?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
-      }>;
-      currentChunk: {
-        text: string;
-        wordCount: number;
-        orpIndex: number;
-        guided?: { pageIndex: number; lineIndex: number; startChar: number; endChar: number };
-      } | null;
-      currentChunkIndex: number;
-      guidedPages: Array<{ lines: Array<{ type: string; text: string }> }>;
-    };
-    const article: Article = {
-      id: 'a1',
-      title: 'Article 1',
-      content: 'Alpha beta gamma.',
-      source: 'Test',
-      addedAt: 1,
-      readPosition: 0,
-      isRead: false,
-    };
-    rsvp.article = article;
-    rsvp.displayMode = 'guided';
-    rsvp.chunks = [
-      {
-        text: 'Alpha',
-        wordCount: 1,
-        orpIndex: 0,
-        guided: { pageIndex: 0, lineIndex: 0, startChar: 0, endChar: 5 },
-      },
-    ];
-    rsvp.currentChunk = rsvp.chunks[0];
-    rsvp.currentChunkIndex = 0;
-    rsvp.guidedPages = [
-      {
-        lines: [{ type: 'body', text: 'Alpha beta gamma.' }],
-      },
-    ];
-
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.queryByTestId('home-screen')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'open-paced' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('content-browser')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'select-first' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('preview-screen')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'start-reading' }));
-    await waitFor(() => {
-      expect(screen.queryByTestId('active-reader')).not.toBeNull();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: /^Passages/ }));
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: 'Save Sentence' })).not.toBeNull();
-    });
-    const captureBtn = screen.getByRole('button', { name: 'Save Sentence' });
-    expect((captureBtn as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(captureBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Saved sentence to passage queue/i)).not.toBeNull();
-    });
-
-    const savedPassages = JSON.parse(localStorage.getItem('speedread_passages') || '[]') as Array<{
-      articleId: string;
-      captureKind: string;
-      text: string;
-      sourceMode: string;
-    }>;
-    expect(savedPassages).toHaveLength(1);
-    expect(savedPassages[0]).toMatchObject({
-      articleId: 'a1',
-      captureKind: 'sentence',
-      sourceMode: 'guided',
-      text: 'Alpha beta gamma.',
-    });
-  });
 });

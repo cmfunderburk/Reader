@@ -1,9 +1,6 @@
 import type {
   Article,
   Feed,
-  Passage,
-  PassageReviewMode,
-  PassageReviewState,
   SessionSnapshot,
 } from '../types';
 import { STORAGE_KEYS } from './storageKeys';
@@ -64,80 +61,6 @@ export function loadFeeds(): Feed[] {
 export function saveFeeds(feeds: Feed[]): void {
   runStorageMigrations();
   localStorage.setItem(STORAGE_KEYS.feeds, JSON.stringify(feeds));
-}
-
-/**
- * Load saved passages from localStorage.
- */
-export function loadPassages(): Passage[] {
-  runStorageMigrations();
-  try {
-    const data = localStorage.getItem(STORAGE_KEYS.passages);
-    const parsed = data ? JSON.parse(data) as Passage[] : [];
-    return parsed
-      .map((passage) => ({
-        ...passage,
-        reviewState: normalizePassageReviewState(passage.reviewState),
-        reviewCount: Math.max(0, passage.reviewCount ?? 0),
-      }))
-      .sort((a, b) => b.updatedAt - a.updatedAt);
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Save passages to localStorage.
- */
-export function savePassages(passages: Passage[]): void {
-  runStorageMigrations();
-  localStorage.setItem(STORAGE_KEYS.passages, JSON.stringify(passages));
-}
-
-/**
- * Insert or update a single passage.
- */
-export function upsertPassage(passage: Passage): void {
-  const existing = loadPassages();
-  const idx = existing.findIndex((p) => p.id === passage.id);
-  if (idx === -1) {
-    existing.unshift(passage);
-  } else {
-    existing[idx] = passage;
-  }
-  savePassages(existing);
-}
-
-/**
- * Update a passage review state.
- */
-export function updatePassageReviewState(passageId: string, reviewState: PassageReviewState): void {
-  const passages = loadPassages();
-  const idx = passages.findIndex((p) => p.id === passageId);
-  if (idx === -1) return;
-  passages[idx] = {
-    ...passages[idx],
-    reviewState: normalizePassageReviewState(reviewState),
-    updatedAt: Date.now(),
-  };
-  savePassages(passages);
-}
-
-/**
- * Mark a passage review attempt for queue prioritization/analytics.
- */
-export function touchPassageReview(passageId: string, mode: PassageReviewMode): void {
-  const passages = loadPassages();
-  const idx = passages.findIndex((p) => p.id === passageId);
-  if (idx === -1) return;
-  passages[idx] = {
-    ...passages[idx],
-    reviewCount: passages[idx].reviewCount + 1,
-    lastReviewedAt: Date.now(),
-    lastReviewMode: mode,
-    updatedAt: Date.now(),
-  };
-  savePassages(passages);
 }
 
 /**
@@ -241,13 +164,3 @@ export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-function normalizePassageReviewState(state: PassageReviewState | string | undefined): PassageReviewState {
-  switch (state) {
-    case 'hard':
-    case 'easy':
-    case 'done':
-      return state;
-    default:
-      return 'new';
-  }
-}

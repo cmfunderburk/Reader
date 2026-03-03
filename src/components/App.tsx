@@ -33,10 +33,6 @@ import {
   saveSettings,
   loadDailyInfo,
   saveDailyInfo,
-  loadPassages,
-  upsertPassage,
-  updatePassageReviewState,
-  touchPassageReview,
   loadSessionSnapshot,
   saveSessionSnapshot,
   clearSessionSnapshot,
@@ -59,10 +55,6 @@ import type {
   GenerationDifficulty,
   GuidedPacerStyle,
   GuidedFocusTarget,
-  Passage,
-  PassageCaptureKind,
-  PassageReviewMode,
-  PassageReviewState,
 } from '../types';
 import { PREDICTION_LINE_WIDTHS } from '../types';
 import { measureTextMetrics } from '../lib/textMetrics';
@@ -90,21 +82,11 @@ import {
 } from '../lib/appViewSelectors';
 import type { ViewState } from '../lib/appViewState';
 import { planEscapeAction } from '../lib/appKeyboard';
-import { buildPassageReviewLaunchPlan } from '../lib/passageReviewLaunch';
 import {
   getFeaturedFetchErrorMessage,
   planFeaturedFetchResult,
   resolveDailyFeaturedArticle,
 } from '../lib/featuredArticleLaunch';
-import { buildPassageReviewQueue } from '../lib/passageQueue';
-import {
-  captureKindLabel,
-  clipPassagePreview,
-  normalizeCaptureLineText,
-  planLastLinesCapture,
-  planParagraphCapture,
-  planSentenceCapture,
-} from '../lib/passageCapture';
 import {
   appendFeed,
   mergeFeedArticles,
@@ -113,9 +95,6 @@ import {
 import { getDueCards } from '../lib/srsScheduling';
 import { clampWpm } from '../lib/wpm';
 import { resolveThemePreference } from '../lib/theme';
-
-const PASSAGE_CAPTURE_LAST_LINE_COUNT = 3;
-
 
 export function App() {
   const [displaySettings, setDisplaySettings] = useState<Settings>(() => loadSettings());
@@ -226,10 +205,6 @@ export function App() {
   const [dailyError, setDailyError] = useState<string | null>(null);
   const [randomStatus, setRandomStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const [randomError, setRandomError] = useState<string | null>(null);
-  const [passages, setPassages] = useState<Passage[]>(() => loadPassages());
-  const [captureNotice, setCaptureNotice] = useState<string | null>(null);
-  const [activePassageId, setActivePassageId] = useState<string | null>(null);
-  const [isPassageWorkspaceOpen, setIsPassageWorkspaceOpen] = useState(false);
   const [generationMaskSeed, setGenerationMaskSeed] = useState<number>(() => Date.now());
   const [generationRevealHeld, setGenerationRevealHeld] = useState(false);
   const comp = useComprehensionState({
@@ -284,9 +259,6 @@ export function App() {
 
   const previousReadingModeRef = useRef<DisplayMode>(rsvp.displayMode);
   const previousReadingArticleIdRef = useRef<string | null>(rsvp.article?.id ?? null);
-  const generationRevealHeldRef = useRef(false);
-  const generationResumeOnReleaseRef = useRef(false);
-  const isRsvpPlayingRef = useRef(rsvp.isPlaying);
 
   const getActivityWpm = useCallback((activity: Activity): number => {
     return settings.wpmByActivity[activity] ?? settings.defaultWpm;
@@ -403,10 +375,6 @@ export function App() {
   });
 
   useEffect(() => {
-    isRsvpPlayingRef.current = rsvp.isPlaying;
-  }, [rsvp.isPlaying]);
-
-  useEffect(() => {
     const previousMode = previousReadingModeRef.current;
     const previousArticleId = previousReadingArticleIdRef.current;
     const currentArticleId = rsvp.article?.id ?? null;
@@ -418,8 +386,6 @@ export function App() {
     }
 
     if (rsvp.displayMode !== 'generation') {
-      generationRevealHeldRef.current = false;
-      generationResumeOnReleaseRef.current = false;
       setGenerationRevealHeld(false);
     }
 
@@ -427,67 +393,9 @@ export function App() {
     previousReadingArticleIdRef.current = currentArticleId;
   }, [rsvp.article?.id, rsvp.displayMode]);
 
-  const currentDisplayMode = rsvp.displayMode;
-  const pausePlayback = rsvp.pause;
-  const playPlayback = rsvp.play;
-
-  useEffect(() => {
-    if (viewState.screen !== 'active-reader' || currentDisplayMode !== 'generation') {
-      return;
-    }
-
-    const isEditableTarget = (target: EventTarget | null): boolean => {
-      if (!(target instanceof HTMLElement)) return false;
-      return target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'KeyR' || event.repeat || isEditableTarget(event.target)) return;
-      event.preventDefault();
-      if (generationRevealHeldRef.current) return;
-
-      generationRevealHeldRef.current = true;
-      generationResumeOnReleaseRef.current = isRsvpPlayingRef.current;
-      setGenerationRevealHeld(true);
-      if (isRsvpPlayingRef.current) {
-        pausePlayback();
-      }
-    };
-
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (event.code !== 'KeyR') return;
-      if (!generationRevealHeldRef.current) return;
-
-      generationRevealHeldRef.current = false;
-      setGenerationRevealHeld(false);
-      if (generationResumeOnReleaseRef.current) {
-        generationResumeOnReleaseRef.current = false;
-        playPlayback();
-      }
-    };
-
-    const onBlur = () => {
-      if (!generationRevealHeldRef.current) return;
-      generationRevealHeldRef.current = false;
-      generationResumeOnReleaseRef.current = false;
-      setGenerationRevealHeld(false);
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', onBlur);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', onBlur);
-    };
-  }, [currentDisplayMode, pausePlayback, playPlayback, viewState.screen]);
-
-  useEffect(() => {
-    if (!captureNotice) return;
-    const timer = window.setTimeout(() => setCaptureNotice(null), 2200);
-    return () => window.clearTimeout(timer);
-  }, [captureNotice]);
+  const toggleGenerationReveal = useCallback(() => {
+    setGenerationRevealHeld(prev => !prev);
+  }, []);
 
   // --- Article / Feed handlers (unchanged) ---
 
@@ -614,181 +522,6 @@ export function App() {
     const newIndex = Math.floor((progress / 100) * rsvp.chunks.length);
     rsvp.goToIndex(newIndex);
   }, [rsvp]);
-
-  const flatGuidedLines = useMemo(() => {
-    const chunkIndexByLineKey = new Map<string, number>();
-    for (let i = 0; i < rsvp.chunks.length; i++) {
-      const sac = rsvp.chunks[i].guided;
-      if (!sac) continue;
-      const key = `${sac.pageIndex}:${sac.lineIndex}`;
-      if (!chunkIndexByLineKey.has(key)) {
-        chunkIndexByLineKey.set(key, i);
-      }
-    }
-
-    return rsvp.guidedPages.flatMap((page, pageIndex) =>
-      page.lines.map((line, lineIndex) => {
-        const key = `${pageIndex}:${lineIndex}`;
-        const chunkIndex = chunkIndexByLineKey.get(key);
-        return {
-          globalLineIndex: 0, // backfilled below
-          pageIndex,
-          lineIndex,
-          type: line.type,
-          text: line.text,
-          chunkIndex,
-        };
-      })
-    ).map((line, idx) => ({ ...line, globalLineIndex: idx }));
-  }, [rsvp.chunks, rsvp.guidedPages]);
-
-  const currentGuidedCaptureContext = useMemo(() => {
-    if (rsvp.displayMode !== 'guided' && rsvp.displayMode !== 'generation') return null;
-    if (!rsvp.article || !rsvp.currentChunk?.guided) return null;
-
-    const currentSac = rsvp.currentChunk.guided;
-    const globalLineIndex = flatGuidedLines.findIndex((line) =>
-      line.pageIndex === currentSac.pageIndex && line.lineIndex === currentSac.lineIndex
-    );
-    if (globalLineIndex < 0) return null;
-
-    const line = flatGuidedLines[globalLineIndex];
-    if (!line || line.type === 'blank' || normalizeCaptureLineText(line.text).length === 0) return null;
-
-    return {
-      article: rsvp.article,
-      displayMode: rsvp.displayMode,
-      pageIndex: currentSac.pageIndex,
-      lineIndex: currentSac.lineIndex,
-      globalLineIndex,
-      currentChunkIndex: rsvp.currentChunkIndex,
-    };
-  }, [flatGuidedLines, rsvp.article, rsvp.currentChunk, rsvp.currentChunkIndex, rsvp.displayMode]);
-
-  const capturePassageFromLines = useCallback((
-    captureKind: PassageCaptureKind,
-    selectedLines: Array<{
-      pageIndex: number;
-      lineIndex: number;
-      text: string;
-      type: string;
-      chunkIndex?: number;
-    }>,
-    textOverride?: string
-  ): Passage | null => {
-    const ctx = currentGuidedCaptureContext;
-    if (!ctx) return null;
-
-    const lines = selectedLines
-      .filter((line) => line.type !== 'blank')
-      .map((line) => ({
-        ...line,
-        text: normalizeCaptureLineText(line.text),
-      }))
-      .filter((line) => line.text.length > 0);
-    if (lines.length === 0 && !textOverride) return null;
-
-    const joinedText = captureKind === 'last-lines'
-      ? lines.map((line) => line.text).join('\n')
-      : lines.map((line) => line.text).join(' ');
-    const text = (textOverride ?? joinedText).trim();
-    if (!text) return null;
-
-    const now = Date.now();
-    const firstLine = lines[0];
-    const passage: Passage = {
-      id: generateId(),
-      articleId: ctx.article.id,
-      articleTitle: ctx.article.title,
-      sourceMode: ctx.displayMode,
-      captureKind,
-      text,
-      createdAt: now,
-      updatedAt: now,
-      sourceChunkIndex: firstLine?.chunkIndex ?? ctx.currentChunkIndex,
-      sourcePageIndex: firstLine?.pageIndex ?? ctx.pageIndex,
-      sourceLineIndex: firstLine?.lineIndex ?? ctx.lineIndex,
-      reviewState: 'new',
-      reviewCount: 0,
-    };
-
-    upsertPassage(passage);
-    setPassages((prev) => [passage, ...prev.filter((existing) => existing.id !== passage.id)]);
-    setCaptureNotice(`Saved ${captureKindLabel(captureKind)} to passage queue`);
-    return passage;
-  }, [currentGuidedCaptureContext]);
-
-  const handleCaptureSentence = useCallback(() => {
-    const ctx = currentGuidedCaptureContext;
-    if (!ctx) return;
-    const sentencePlan = planSentenceCapture(flatGuidedLines, ctx.globalLineIndex);
-    if (!sentencePlan) return;
-    capturePassageFromLines('sentence', sentencePlan.sentenceLines, sentencePlan.sentenceText);
-  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
-
-  const handleCaptureParagraph = useCallback(() => {
-    const ctx = currentGuidedCaptureContext;
-    if (!ctx) return;
-    const paragraphLines = planParagraphCapture(flatGuidedLines, ctx.globalLineIndex);
-    if (!paragraphLines) return;
-    capturePassageFromLines('paragraph', paragraphLines);
-  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
-
-  const handleCaptureLastLines = useCallback(() => {
-    const ctx = currentGuidedCaptureContext;
-    if (!ctx) return;
-    const selected = planLastLinesCapture(flatGuidedLines, ctx.globalLineIndex, PASSAGE_CAPTURE_LAST_LINE_COUNT);
-    capturePassageFromLines('last-lines', selected);
-  }, [capturePassageFromLines, currentGuidedCaptureContext, flatGuidedLines]);
-
-  const reviewQueue = useMemo(() => {
-    return buildPassageReviewQueue(passages);
-  }, [passages]);
-
-  // Auto-close removed: overlay now contains capture buttons, not just queue
-
-  useEffect(() => {
-    if (activePassageId && !reviewQueue.some((passage) => passage.id === activePassageId)) {
-      setActivePassageId(null);
-    }
-  }, [activePassageId, reviewQueue]);
-
-  const refreshPassagesFromStorage = useCallback(() => {
-    setPassages(loadPassages());
-  }, []);
-
-  const markPassageReviewState = useCallback((passageId: string, reviewState: PassageReviewState) => {
-    updatePassageReviewState(passageId, reviewState);
-    refreshPassagesFromStorage();
-  }, [refreshPassagesFromStorage]);
-
-  const startPassageReview = useCallback((passage: Passage, mode: PassageReviewMode) => {
-    const sourceArticle = articles.find((article) => article.id === passage.articleId);
-    const currentReading = rsvp.article ? {
-      articleId: rsvp.article.id,
-      chunkIndex: rsvp.currentChunkIndex,
-      displayMode: rsvp.displayMode,
-    } : undefined;
-    const launchPlan = buildPassageReviewLaunchPlan({
-      passage,
-      mode,
-      now: Date.now(),
-      currentReading,
-      sourceArticle,
-    });
-
-    saveSessionSnapshot(launchPlan.snapshot);
-
-    touchPassageReview(passage.id, mode);
-    setActivePassageId(passage.id);
-    refreshPassagesFromStorage();
-    setIsPassageWorkspaceOpen(false);
-    syncWpmForActivity('active-recall');
-
-    rsvp.pause();
-    rsvp.loadArticle(launchPlan.article, { displayMode: launchPlan.displayMode });
-    setViewState({ screen: 'active-exercise' });
-  }, [articles, refreshPassagesFromStorage, rsvp, setViewState, syncWpmForActivity]);
 
   // --- Navigation handlers ---
 
@@ -1096,6 +829,8 @@ export function App() {
       onGenerationDifficultyChange={handleGenerationDifficultyChange}
       generationSweepReveal={displaySettings.generationSweepReveal}
       onGenerationSweepRevealChange={handleGenerationSweepRevealChange}
+      generationReveal={generationRevealHeld}
+      onGenerationRevealToggle={toggleGenerationReveal}
     />
   );
 
@@ -1117,84 +852,6 @@ export function App() {
       )}
     </div>
   );
-
-  const renderPassageWorkspace = () => {
-    const canCapture = viewState.screen === 'active-reader'
-      && (rsvp.displayMode === 'guided' || rsvp.displayMode === 'generation')
-      && !rsvp.isPlaying
-      && !!currentGuidedCaptureContext;
-    const queueItems = reviewQueue;
-
-    return (
-      <div className="passage-workspace-anchor">
-        <button
-          className={`control-btn passage-workspace-toggle ${isPassageWorkspaceOpen ? 'control-btn-active' : ''}`}
-          onClick={() => setIsPassageWorkspaceOpen((open) => !open)}
-          title={queueItems.length === 0
-            ? 'Capture passages to enable queue review'
-            : isPassageWorkspaceOpen
-              ? 'Hide passage workspace'
-              : 'Show passage workspace'}
-          aria-expanded={isPassageWorkspaceOpen}
-          aria-controls="passage-workspace-panel"
-        >
-          Passages{queueItems.length > 0 ? ` (${queueItems.length})` : ''}
-        </button>
-
-        {captureNotice && (
-          <div className="passage-capture-notice-toast" role="status" aria-live="polite">
-            {captureNotice}
-          </div>
-        )}
-
-        {isPassageWorkspaceOpen && (
-          <div id="passage-workspace-panel" className="passage-workspace-panel-overlay">
-            <div className="passage-capture-actions">
-              <button className="control-btn" onClick={handleCaptureSentence} disabled={!canCapture}
-                title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save sentence at current focus'}>
-                Save Sentence
-              </button>
-              <button className="control-btn" onClick={handleCaptureParagraph} disabled={!canCapture}
-                title={!canCapture ? 'Pause Guided reading to capture passages' : 'Save current paragraph'}>
-                Save Paragraph
-              </button>
-              <button className="control-btn" onClick={handleCaptureLastLines} disabled={!canCapture}
-                title={!canCapture ? 'Pause Guided reading to capture passages' : `Save last ${PASSAGE_CAPTURE_LAST_LINE_COUNT} lines`}>
-                Save Last {PASSAGE_CAPTURE_LAST_LINE_COUNT}
-              </button>
-              <button className="control-btn"
-                onClick={() => { if (reviewQueue.length === 0) return; startPassageReview(reviewQueue[0], 'recall'); }}
-                disabled={reviewQueue.length === 0}
-                title="Start quick recall with the highest-priority queued passage">
-                Review Next
-              </button>
-            </div>
-
-            {queueItems.length > 0 && (
-              <div className="passage-queue-list">
-                {queueItems.map((passage) => (
-                  <article key={passage.id} className={`passage-queue-item ${activePassageId === passage.id ? 'active' : ''}`}>
-                    <div className="passage-queue-meta">
-                      <span>{passage.articleTitle}</span>
-                      <span>{passage.captureKind} • {passage.reviewState}</span>
-                    </div>
-                    <div className="passage-queue-text">{clipPassagePreview(passage.text)}</div>
-                    <div className="passage-queue-actions">
-                      <button className="control-btn" onClick={() => startPassageReview(passage, 'recall')}>Recall</button>
-                      <button className="control-btn" onClick={() => startPassageReview(passage, 'prediction')}>Predict</button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'hard')}>Hard</button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'easy')}>Easy</button>
-                      <button className="control-btn" onClick={() => markPassageReviewState(passage.id, 'done')}>Done</button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
 
   if (!articlesLoaded) return null;
 
@@ -1346,6 +1003,20 @@ export function App() {
                 generationMaskSeed={generationMaskSeed}
                 generationReveal={generationRevealHeld}
               />
+              {(rsvp.displayMode === 'guided' || rsvp.displayMode === 'generation') && (
+                <>
+                  <div
+                    className="page-tap-zone page-tap-zone-prev"
+                    onClick={rsvp.prevPage}
+                    aria-label="Previous page"
+                  />
+                  <div
+                    className="page-tap-zone page-tap-zone-next"
+                    onClick={rsvp.nextPage}
+                    aria-label="Next page"
+                  />
+                </>
+              )}
             </div>
             <ProgressBar progress={progress} onChange={handleProgressChange} />
             {renderArticleInfo()}
@@ -1357,7 +1028,6 @@ export function App() {
                 </button>
               </div>
             )}
-            {renderPassageWorkspace()}
           </>
         )}
 

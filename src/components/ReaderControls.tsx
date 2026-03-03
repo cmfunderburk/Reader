@@ -42,6 +42,8 @@ interface ReaderControlsProps {
   onGenerationDifficultyChange: (difficulty: GenerationDifficulty) => void;
   generationSweepReveal: boolean;
   onGenerationSweepRevealChange: (enabled: boolean) => void;
+  generationReveal: boolean;
+  onGenerationRevealToggle: () => void;
 }
 
 export function ReaderControls({
@@ -86,6 +88,8 @@ export function ReaderControls({
   onGenerationDifficultyChange,
   generationSweepReveal,
   onGenerationSweepRevealChange,
+  generationReveal,
+  onGenerationRevealToggle,
 }: ReaderControlsProps) {
   const isSelfPaced = displayMode === 'prediction' || displayMode === 'recall' || displayMode === 'training';
   const showChunks = !isSelfPaced && displayMode !== 'guided' && displayMode !== 'generation';
@@ -359,7 +363,12 @@ export function ReaderControls({
                 <option value="recall">Recall</option>
               </select>
             </label>
-            <span className="control-label">Hold R to reveal</span>
+            <button
+              className={`control-btn ${generationReveal ? 'control-btn-active' : ''}`}
+              onClick={onGenerationRevealToggle}
+            >
+              {generationReveal ? 'Hide' : 'Reveal'}
+            </button>
           </>
         )}
 

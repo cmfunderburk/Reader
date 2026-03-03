@@ -26,11 +26,10 @@ describe('sessionTransitions', () => {
       clearSnapshot: false,
     });
 
-    const trainingOnly: SessionSnapshot = {
-      training: { passageId: 'p1', mode: 'prediction', startedAt: 1 },
+    const noReading: SessionSnapshot = {
       updatedAt: 1,
     };
-    expect(planCloseActiveExercise(trainingOnly, [], 10)).toEqual({
+    expect(planCloseActiveExercise(noReading, [], 10)).toEqual({
       type: 'go-home',
       clearSnapshot: false,
     });
@@ -51,7 +50,6 @@ describe('sessionTransitions', () => {
     const article = makeArticle('a1');
     const snapshot: SessionSnapshot = {
       reading: { articleId: 'a1', chunkIndex: 12, displayMode: 'rsvp' },
-      training: { passageId: 'p1', mode: 'recall', startedAt: 1 },
       lastTransition: 'read-to-recall',
       updatedAt: 1,
     };
@@ -64,7 +62,6 @@ describe('sessionTransitions', () => {
         chunkIndex: 12,
         snapshot: {
           reading: { articleId: 'a1', chunkIndex: 12, displayMode: 'rsvp' },
-          training: undefined,
           lastTransition: 'return-to-reading',
           updatedAt: 123,
         },
@@ -87,7 +84,6 @@ describe('sessionTransitions', () => {
         chunkIndex: 7,
         snapshot: {
           reading: { articleId: 'a2', chunkIndex: 7, displayMode: 'prediction' },
-          training: undefined,
           lastTransition: 'return-to-reading',
           updatedAt: 55,
         },
@@ -110,7 +106,6 @@ describe('sessionTransitions', () => {
         chunkIndex: 4,
         snapshot: {
           reading: { articleId: 'a3', chunkIndex: 4, displayMode: 'generation' },
-          training: undefined,
           lastTransition: 'return-to-reading',
           updatedAt: 77,
         },
